@@ -356,11 +356,7 @@ int main(int argc, char** argv) {
 
   // init engines
   std::unordered_map<std::string, std::shared_ptr<nv::Net>> nets;
-  for( auto engine: cfg["nets"]) {
-    if (engine["name"] == "head") {
-      continue;  // headは後で初期化
-    }
-    
+  for( auto engine: cfg["nets"]) {    
     std::string eng_name = engine["name"];
     std::string eng_file = engine["file"];
     std::string eng_pth = cfg_dir.string() + "/" + eng_file;
@@ -390,7 +386,7 @@ int main(int argc, char** argv) {
   printf("[INFO] warm_up=%d\n", warm_up);
   for( int iw=0; iw < warm_up; iw++ ) {
     nets["backbone"]->Enqueue(stream);
-    nets["head_no_prev"]->Enqueue(stream);
+    nets["head"]->Enqueue(stream);
     cudaStreamSynchronize(stream);
   }
 
@@ -417,34 +413,12 @@ int main(int argc, char** argv) {
         std::cerr << "Error processing image: " << e.what() << std::endl;
         return -1;
     }
-    if (is_first_frame) {
-        nets["head_no_prev"]->bindings["img_metas.0[shift]"]->load(frame_dir + "img_metas.0[shift].bin");
-        nets["head_no_prev"]->bindings["img_metas.0[lidar2img]"]->load(frame_dir + "img_metas.0[lidar2img].bin");
-        nets["head_no_prev"]->bindings["img_metas.0[can_bus]"]->load(frame_dir + "img_metas.0[can_bus].bin");
-        nets["head_no_prev"]->Enqueue(stream);
-        
-        // prev_bevを保存
-        auto bev_embed = nets["head_no_prev"]->bindings["out.bev_embed"];
-        saved_prev_bev = std::make_shared<nv::Tensor>("prev_bev", bev_embed->dim, bev_embed->dtype);
-        cudaMemcpyAsync(saved_prev_bev->ptr, bev_embed->ptr, bev_embed->nbytes(), 
-                      cudaMemcpyDeviceToDevice, stream);
-        
-        // head_no_prevを解放
-        releaseNetwork(nets, "head_no_prev");
-        cudaStreamSynchronize(stream);  // メモリ解放を確実に
-        
-        // headをロード
-        loadHeadEngine(nets, cfg, cfg_dir.string(), runtime.get(), stream);
-        
-        is_first_frame = false;
-    }
-    else {
-        nets["head"]->bindings["prev_bev"] = saved_prev_bev;
-        nets["head"]->bindings["img_metas.0[shift]"]->load(frame_dir + "img_metas.0[shift].bin");
-        nets["head"]->bindings["img_metas.0[lidar2img]"]->load(frame_dir + "img_metas.0[lidar2img].bin");
-        nets["head"]->bindings["img_metas.0[can_bus]"]->load(frame_dir + "img_metas.0[can_bus].bin");
-        nets["head"]->Enqueue(stream);
-    }
+
+    nets["head"]->bindings["prev_bev"]->load(frame_dir + "prev_bev.bin");
+    nets["head"]->bindings["img_metas.0[shift]"]->load(frame_dir + "img_metas.0[shift].bin");
+    nets["head"]->bindings["img_metas.0[lidar2img]"]->load(frame_dir + "img_metas.0[lidar2img].bin");
+    nets["head"]->bindings["img_metas.0[can_bus]"]->load(frame_dir + "img_metas.0[can_bus].bin");
+    nets["head"]->Enqueue(stream);
 
     nets["backbone"]->Enqueue(stream);
     cudaStreamSynchronize(stream);
