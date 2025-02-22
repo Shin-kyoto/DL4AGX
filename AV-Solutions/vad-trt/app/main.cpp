@@ -418,9 +418,9 @@ int main(int argc, char** argv) {
     nets["head"]->bindings["img_metas.0[shift]"]->load(frame_dir + "img_metas.0[shift].bin");
     nets["head"]->bindings["img_metas.0[lidar2img]"]->load(frame_dir + "img_metas.0[lidar2img].bin");
     nets["head"]->bindings["img_metas.0[can_bus]"]->load(frame_dir + "img_metas.0[can_bus].bin");
-    nets["head"]->Enqueue(stream);
 
     nets["backbone"]->Enqueue(stream);
+    nets["head"]->Enqueue(stream);
     cudaStreamSynchronize(stream);
 
     std::string viz_dir = cfg["viz"];
