@@ -24,6 +24,15 @@ real_w = point_cloud_range[3] - point_cloud_range[0]
 real_h = point_cloud_range[4] - point_cloud_range[1]
 grid_length = [real_h / bev_h_, real_w / bev_w_]
 
+# NEW_WIDTH = 1920
+# NEW_HIGHT = 1280
+ORIGINAL_WIDTH = 1600
+ORIGINAL_HIGHT = 960
+NEW_WIDTH = 640
+NEW_HIGHT = 384
+IMAGE_SCALE_HIGHT = NEW_HIGHT / ORIGINAL_HIGHT # 384/960=0.4
+IMAGE_SCALE_WIDTH = NEW_WIDTH / ORIGINAL_WIDTH # 640/1600=0.4
+
 def calculate_shift(delta_x, delta_y, patch_angle_rad, grid_length=grid_length, bev_h=bev_h_, bev_w=bev_w_):
     ego_angle = np.array(patch_angle_rad / np.pi * 180)
 
@@ -145,7 +154,9 @@ def convert_bin_to_kinematic_state(can_bus_data: np.ndarray, timestamp: Time, fr
     
     return odom_msg
 
-def convert_bin_to_tf_static(lidar2img_data: dict[int, np.ndarray], timestamp: Time) -> TFMessage:
+def convert_bin_to_tf_static(lidar2img_data: dict[int, np.ndarray], timestamp: Time, 
+                             scale_width: float = IMAGE_SCALE_WIDTH, 
+                             scale_height: float = IMAGE_SCALE_HIGHT) -> TFMessage:
     """
     lidar2imgデータからTFメッセージへの変換
     
@@ -206,8 +217,8 @@ def convert_bin_to_tf_static(lidar2img_data: dict[int, np.ndarray], timestamp: T
     
     # スケーリングを元に戻すための逆スケールファクター
     inv_scale_factor = np.eye(4)
-    inv_scale_factor[0, 0] = 1.0 / 0.4  # x軸のスケールを元に戻す
-    inv_scale_factor[1, 1] = 1.0 / 0.4  # y軸のスケールを元に戻す
+    inv_scale_factor[0, 0] = 1.0 / scale_width  # x軸のスケールを元に戻す
+    inv_scale_factor[1, 1] = 1.0 / scale_height # y軸のスケールを元に戻す
 
     # 各カメラの変換を処理
     for vad_camera_id, lidar2img in lidar2img_data.items():
@@ -701,7 +712,9 @@ def reconstruct_can_bus_from_rosbag(bag_file: str, init_time: float, cycle_time_
     
     return result
 
-def reconstruct_lidar2img_from_rosbag(bag_file: str, init_time: float, cycle_time_ms: float, scale: float = 0.4) -> dict[int, dict[int, np.ndarray]]:
+def reconstruct_lidar2img_from_rosbag(bag_file: str, init_time: float, cycle_time_ms: float, 
+                                     scale_width: float = IMAGE_SCALE_WIDTH, 
+                                     scale_height: float = IMAGE_SCALE_HIGHT) -> dict[int, dict[int, np.ndarray]]:
     """
     ROSバッグからlidar2imgデータを再構築する
 
@@ -772,8 +785,8 @@ def reconstruct_lidar2img_from_rosbag(bag_file: str, init_time: float, cycle_tim
     
     # スケールファクターを作成（TensorRTのbinファイルはscale倍されている）
     scale_factor = np.eye(4)
-    scale_factor[0, 0] = scale
-    scale_factor[1, 1] = scale
+    scale_factor[0, 0] = scale_width
+    scale_factor[1, 1] = scale_height
 
     # tf_staticメッセージを読み込む
     while reader.has_next():
