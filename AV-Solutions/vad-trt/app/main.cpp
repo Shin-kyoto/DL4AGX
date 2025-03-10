@@ -665,7 +665,7 @@ std::optional<int> extract_autoware_camera_id(
 }
 
 std::unordered_map<int, std::vector<float>> 
-load_lidar2img_from_rosbag(const std::string& bag_path, int32_t n_frames, float scale) {
+load_lidar2img_from_rosbag(const std::string& bag_path, int32_t n_frames, float scale_width, float scale_height) {
     std::unordered_map<int, std::vector<float>> result;
     
     // VADカメラIDからAutowareカメラIDへのマッピング
@@ -804,10 +804,11 @@ load_lidar2img_from_rosbag(const std::string& bag_path, int32_t n_frames, float 
 
                         // スケーリングを適用
                         Eigen::Matrix4f scale_matrix = Eigen::Matrix4f::Identity();
-                        scale_matrix(0, 0) = scale;
-                        scale_matrix(1, 1) = scale;
+                        scale_matrix(0, 0) = scale_width;
+                        scale_matrix(1, 1) = scale_height;
+                        
                         lidar2img = scale_matrix * lidar2img;
-
+                        
                         // 結果を格納
                         std::vector<float> lidar2img_flat(16);
                         int32_t k = 0;
@@ -982,13 +983,15 @@ int main(int argc, char** argv) {
 
   auto subscribed_image_dict = load_image_from_rosbag("/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/rosbag/output_bag/", n_frames);
   auto [subscribed_can_bus_dict, subscribed_shift_dict] = load_can_bus_shift_from_rosbag("/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/rosbag/output_bag/", n_frames);
-  auto subscribed_lidar2img_dict = load_lidar2img_from_rosbag("/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/rosbag/output_bag/", n_frames, 0.4f);
+  int32_t input_image_width = cfg["input_image_width"];
+  int32_t input_image_height = cfg["input_image_hight"];
+  auto subscribed_lidar2img_dict = load_lidar2img_from_rosbag("/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/rosbag/output_bag/", n_frames, 640.0f / static_cast<float>(input_image_width), 384.0f / static_cast<float>(input_image_height));
   // img.binと値を比較
   for (int frame_id = 1; frame_id < n_frames; frame_id++) {
     std::string frame_dir = data_dir + std::to_string(frame_id) + "/";
     
     try {
-        // リファレンスデータとの比較を追加
+        // // リファレンスデータとの比較を追加
         // compare_with_reference(
         //     subscribed_image_dict[frame_id],
         //     frame_dir + "img.bin"
@@ -996,7 +999,7 @@ int main(int argc, char** argv) {
 
         // compare_with_reference_lidar2img(
         //     subscribed_lidar2img_dict[frame_id],
-        //     file_path1
+        //     frame_dir + "img_metas.0[lidar2img].bin"
         // );
         
         // 画像処理と推論
