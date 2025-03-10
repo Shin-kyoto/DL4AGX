@@ -24,14 +24,17 @@ real_w = point_cloud_range[3] - point_cloud_range[0]
 real_h = point_cloud_range[4] - point_cloud_range[1]
 grid_length = [real_h / bev_h_, real_w / bev_w_]
 
-# NEW_WIDTH = 1920
-# NEW_HIGHT = 1280
 ORIGINAL_WIDTH = 1600
 ORIGINAL_HIGHT = 960
-NEW_WIDTH = 640
-NEW_HIGHT = 384
-IMAGE_SCALE_HIGHT = NEW_HIGHT / ORIGINAL_HIGHT # 384/960=0.4
-IMAGE_SCALE_WIDTH = NEW_WIDTH / ORIGINAL_WIDTH # 640/1600=0.4
+BIN_WIDTH = 640
+BIN_HIGHT = 384
+NEW_WIDTH = 1920
+NEW_HIGHT = 1280
+IMAGE_SCALE_WIDTH = BIN_WIDTH / ORIGINAL_WIDTH # 640/1600=0.4
+IMAGE_SCALE_HIGHT = BIN_HIGHT / ORIGINAL_HIGHT # 384/960=0.4
+
+NEW_IMAGE_SCALE_WIDTH = NEW_WIDTH / ORIGINAL_WIDTH # 1280/1600=1.2
+NEW_IMAGE_SCALE_HIGHT = NEW_HIGHT / ORIGINAL_HIGHT # 1920/960=1.3....
 
 def calculate_shift(delta_x, delta_y, patch_angle_rad, grid_length=grid_length, bev_h=bev_h_, bev_w=bev_w_):
     ego_angle = np.array(patch_angle_rad / np.pi * 180)
