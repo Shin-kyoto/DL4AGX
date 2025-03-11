@@ -34,6 +34,8 @@
 
 #include <stb/stb_image.h>
 #include <stb/stb_image_write.h>
+#define STB_IMAGE_RESIZE_IMPLEMENTATION
+#include <stb/stb_image_resize.h>
 
 #include <rclcpp/rclcpp.hpp>
 #include <tf2_ros/buffer.h>
@@ -334,15 +336,17 @@ std::unordered_map<int, std::vector<std::vector<float>>> load_image_from_rosbag(
         {5, 5}   // BACK_RIGHT
     };
     
+    // 目標の画像サイズを定義
+    const int32_t target_width = 640;
+    const int32_t target_height = 384;
+    
     try {
         rosbag2_storage::StorageOptions storage_options;
         storage_options.uri = bag_path;
         storage_options.storage_id = "sqlite3";
-
         rosbag2_cpp::ConverterOptions converter_options;
         converter_options.input_serialization_format = "cdr";
         converter_options.output_serialization_format = "cdr";
-
         rosbag2_cpp::readers::SequentialReader reader;
         reader.open(storage_options, converter_options);
         
@@ -365,10 +369,46 @@ std::unordered_map<int, std::vector<std::vector<float>>> load_image_from_rosbag(
                     int32_t width, height, channels;
                     unsigned char* image_data = stbi_load_from_memory(
                         msg->data.data(), static_cast<int>(msg->data.size()),
-                        &height, &width, &channels, STBI_rgb); // RGBとして読み込む
+                        &width, &height, &channels, STBI_rgb); // RGBとして読み込む
+                    
                     if (image_data == nullptr) {
                         std::cerr << "Failed to load image data" << std::endl;
                         continue;
+                    }
+                    
+                    // サイズが目標と違う場合はリサイズする
+                    unsigned char* resized_data = nullptr;
+                    if (width != target_width || height != target_height) {
+                        // RCLCPP_INFO(rclcpp::get_logger("load_image_from_rosbag"),
+                        //     "カメラ %d の画像をリサイズします: %dx%d から %dx%d へ",
+                        //     autoware_idx, width, height, target_width, target_height);
+                        
+                        // stb_image_resizeを使用してリサイズ
+                        resized_data = (unsigned char*)malloc(target_width * target_height * channels);
+                        if (!resized_data) {
+                            std::cerr << "リサイズ用のメモリ確保に失敗しました" << std::endl;
+                            stbi_image_free(image_data);
+                            continue;
+                        }
+                        
+                        // stb_image_resizeを使ってリサイズ
+                        int resize_result = stbir_resize_uint8(
+                            image_data, width, height, 0,
+                            resized_data, target_width, target_height, 0,
+                            channels);
+                            
+                        if (!resize_result) {
+                            std::cerr << "画像のリサイズに失敗しました" << std::endl;
+                            free(resized_data);
+                            stbi_image_free(image_data);
+                            continue;
+                        }
+                        
+                        // 元のデータを解放し、リサイズしたデータを使用
+                        stbi_image_free(image_data);
+                        image_data = resized_data;
+                        width = target_width;
+                        height = target_height;
                     }
                     
                     // 正規化のパラメータ
@@ -386,6 +426,13 @@ std::unordered_map<int, std::vector<std::vector<float>>> load_image_from_rosbag(
                                 normalized_image_data[dst_idx] = (pixel_value - mean[c]) / std[c];
                             }
                         }
+                    }
+                    
+                    // 画像データを解放
+                    if (image_data == resized_data) {
+                        free(resized_data);
+                    } else {
+                        stbi_image_free(image_data);
                     }
                     
                     // 正規化された画像データを保存
