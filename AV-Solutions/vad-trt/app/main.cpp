@@ -792,7 +792,7 @@ load_lidar2img_from_rosbag(const std::string& bag_path, int32_t n_frames, float 
         while (reader.has_next()) {
             auto bag_message = reader.read_next();
             
-            if (bag_message->topic_name.find("/camera_info") != std::string::npos) {
+            if (bag_message->topic_name.find("/camera_info") != std::string::npos && bag_message->topic_name != "/sensing/camera/camera6/camera_info") {
                 // AutowareカメラIDを抽出
                 std::optional<int> autoware_camera_id = extract_autoware_camera_id(bag_message->topic_name, vad_to_autoware_camera);
 
@@ -1011,6 +1011,9 @@ int main(int argc, char** argv) {
   std::ifstream f(config);
   json cfg = json::parse(f);
 
+  std::string rosbag_path = cfg.value("rosbag_path", "path_to_rosbag");
+  printf("[INFO] rosbag_path=%s\n", rosbag_path.c_str());
+
   std::vector<void*> plugins;
   for( std::string plugin_name: cfg["plugins"]) {
     std::string plugin_dir = cfg_dir.string() + "/" + plugin_name;
@@ -1075,11 +1078,11 @@ int main(int argc, char** argv) {
   std::vector<float> lidar2img;
   bool is_first_frame = true;
 
-  auto subscribed_image_dict = load_image_from_rosbag("/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/rosbag/output_bag/", n_frames);
-  auto [subscribed_can_bus_dict, subscribed_shift_dict] = load_can_bus_shift_from_rosbag("/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/rosbag/output_bag/", n_frames);
+  auto subscribed_image_dict = load_image_from_rosbag(rosbag_path, n_frames);
+  auto [subscribed_can_bus_dict, subscribed_shift_dict] = load_can_bus_shift_from_rosbag(rosbag_path, n_frames);
   int32_t input_image_width = cfg["input_image_width"];
   int32_t input_image_height = cfg["input_image_hight"];
-  auto subscribed_lidar2img_dict = load_lidar2img_from_rosbag("/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/rosbag/output_bag/", n_frames, 640.0f / static_cast<float>(input_image_width), 384.0f / static_cast<float>(input_image_height));
+  auto subscribed_lidar2img_dict = load_lidar2img_from_rosbag(rosbag_path, n_frames, 640.0f / static_cast<float>(input_image_width), 384.0f / static_cast<float>(input_image_height));
   // img.binと値を比較
   for (int frame_id = 1; frame_id < n_frames; frame_id++) {
     std::string frame_dir = data_dir + std::to_string(frame_id) + "/";
