@@ -532,7 +532,7 @@ def convert_bin_to_tf_static(lidar2img_data: dict[int, np.ndarray], timestamp: T
         transform_stamped = TransformStamped()
         transform_stamped.header.stamp = timestamp
         transform_stamped.header.frame_id = "base_link"  # LiDARのフレーム
-        transform_stamped.child_frame_id = f"camera{autoware_camera_id}/optical_link"  # カメラのフレーム
+        transform_stamped.child_frame_id = f"camera{autoware_camera_id}/camera_optical_link"  # カメラのフレーム
         
         # 平行移動の設定
         transform_stamped.transform.translation.x = float(translation[0])

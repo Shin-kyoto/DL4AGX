@@ -785,7 +785,7 @@ load_can_bus_shift_from_rosbag(const std::string& bag_path, int32_t n_frames) {
         }
         
     } catch (const std::exception& e) {
-        std::cerr << "ROSバッグの読み込み中にエラーが発生: " << e.what() << std::endl;
+        std::cerr << "[can_bus] rosbagの読み込み中にエラーが発生: " << e.what() << std::endl;
         throw;
     }
     
@@ -896,7 +896,7 @@ load_lidar2img_from_rosbag(const std::string& bag_path, int32_t n_frames, float 
                     std::string child_frame_id = transform.child_frame_id;
                     
                     if (child_frame_id.find("camera") != std::string::npos && 
-                        child_frame_id.find("/optical_link") != std::string::npos) {
+                        child_frame_id.find("/camera_optical_link") != std::string::npos) {
                         // Autowareカメラ名からカメラIDを抽出
                         int32_t autoware_camera_id = std::stoi(child_frame_id.substr(
                             child_frame_id.find("camera") + 6, 1));
@@ -1001,7 +1001,7 @@ load_lidar2img_from_rosbag(const std::string& bag_path, int32_t n_frames, float 
         }
 
     } catch (const std::exception& e) {
-        std::cerr << "ROSバッグの読み込み中にエラーが発生: " << e.what() << std::endl;
+        std::cerr << "[lidar2img] rosbagの読み込み中にエラーが発生: " << e.what() << std::endl;
         throw;
     }
 
@@ -1259,9 +1259,10 @@ int main(int argc, char** argv) {
 
     nv::VisualizeFrame frame;
 
-    std::ifstream cmd_file(frame_dir + "cmd.bin", std::ios::binary);    
-    cmd_file.read((char*)(&frame.cmd), sizeof(int));
-    cmd_file.close();
+    // std::ifstream cmd_file(frame_dir + "cmd.bin", std::ios::binary);    
+    // cmd_file.read((char*)(&frame.cmd), sizeof(int));
+    // cmd_file.close();
+frame.cmd = 0;
 
     frame.img_metas_lidar2img = nets["head"]->bindings["img_metas.0[lidar2img]"]->cpu<float>();
 
