@@ -88,12 +88,12 @@ class RosbagProcessor(Node):
             try:
                 # lookupTransform を呼び出して、指定したフレーム間の変換を取得
                 transform = self.tf_buffer.lookup_transform(
-                    self.parent_frame,
                     child_frame,
+                    self.parent_frame,
                     rclpy.time.Time()
                 )
                 
-                self.get_logger().info(f'Found transform from {self.parent_frame} to {child_frame}')
+                self.get_logger().info(f'Found transform from {child_frame} to {self.parent_frame}')
                 self.get_logger().info(f'Translation: [{transform.transform.translation.x}, {transform.transform.translation.y}, {transform.transform.translation.z}]')
                 self.get_logger().info(f'Rotation: [{transform.transform.rotation.x}, {transform.transform.rotation.y}, {transform.transform.rotation.z}, {transform.transform.rotation.w}]')
                 
@@ -195,7 +195,7 @@ class RosbagProcessor(Node):
                 
                 # 変換をメッセージに追加
                 self.tf_static_msg.transforms.append(transform)
-                self.get_logger().info(f'Added transform from {self.parent_frame} to {child_frame}')
+                self.get_logger().info(f'Added transform from {child_frame} to {self.parent_frame}')
             
             self.get_logger().info(f'Updated /tf_static message has {len(self.tf_static_msg.transforms)} transforms')
             
@@ -297,7 +297,7 @@ class RosbagProcessor(Node):
 
 def main():
     parser = argparse.ArgumentParser(description='Process rosbag: copy all topics and add camera transforms to tf_static')
-    parser.add_argument('--rosbag', default="/home/autoware/rosbags/simpl_vs_autoware/6c9de6ec-1328-4fbc-93a1-51407dcdf81e_2", help='Path to the input rosbag')
+    parser.add_argument('--rosbag', default="/home/autoware/rosbags/simpl_vs_autoware/6c9de6ec-1328-4fbc-93a1-51407dcdf81e", help='Path to the input rosbag')
     parser.add_argument('--use_pdb', action='store_true', help='Enable pdb debugger for inspecting tf_static message')
     parser.add_argument('--interval', type=int, default=100, help='Interval between tf_static messages in milliseconds')
     parser.add_argument('--count', type=int, default=600, help='Number of tf_static messages to generate')
