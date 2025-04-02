@@ -98,7 +98,7 @@ def main():
                             print(rotation_ns2sensor)
 
                             # translation_ns2sensorの計算
-                            translation_ns2sensor = -np.dot(rotation_ns2sensor, translation_sensor2ns) # なぜか，-1がないと合う
+                            translation_ns2sensor = -1 * np.dot(translation_sensor2ns, rotation_ns2sensor)
                             print("translation_ns2sensor:")
                             print(translation_ns2sensor)
 
