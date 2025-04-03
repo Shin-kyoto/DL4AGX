@@ -23,9 +23,24 @@ from tf2_ros import Buffer, TransformListener
 # sensor_msgs 関連のインポート
 from sensor_msgs.msg import CameraInfo
 
-def get_lidar2cam(translation_aw2sensor, rotation_sensor2aw):
+def get_lidar2cam(transform):
+    # pyquaternionを使用して回転行列に変換
+    q = Quaternion(w=transform.transform.rotation.w,
+                x=transform.transform.rotation.x,
+                y=transform.transform.rotation.y,
+                z=transform.transform.rotation.z)
+    rotation_sensor2aw = q.rotation_matrix
+    print("回転行列:")
+    print(rotation_sensor2aw)
+
+    # 平行移動をnumpy配列に変換
+    translation = np.array([
+        transform.transform.translation.x,
+        transform.transform.translation.y,
+        transform.transform.translation.z
+    ])
     # -1 translation * rotation_matrix を計算
-    translation_sensor2aw = -1 * translation_aw2sensor @ rotation_sensor2aw
+    translation_sensor2aw = -1 * translation @ rotation_sensor2aw
     print("translation_sensor2aw:")
     print(translation_sensor2aw)
 
@@ -104,23 +119,9 @@ def main():
                                 print(f"変換が見つかりました: parent: {parent_frame} -> target: {target_frame}")
                                 print(f"平行移動: [{transform.transform.translation.x}, {transform.transform.translation.y}, {transform.transform.translation.z}]")
                                 print(f"回転: [{transform.transform.rotation.x}, {transform.transform.rotation.y}, {transform.transform.rotation.z}, {transform.transform.rotation.w}]")
-                                # pyquaternionを使用して回転行列に変換
-                                q = Quaternion(w=transform.transform.rotation.w,
-                                            x=transform.transform.rotation.x,
-                                            y=transform.transform.rotation.y,
-                                            z=transform.transform.rotation.z)
-                                rotation_sensor2aw = q.rotation_matrix
-                                print("回転行列:")
-                                print(rotation_sensor2aw)
 
-                                # 平行移動をnumpy配列に変換
-                                translation_aw2sensor = np.array([
-                                    transform.transform.translation.x,
-                                    transform.transform.translation.y,
-                                    transform.transform.translation.z
-                                ])
                                 
-                                lidar2cam_rt = get_lidar2cam(translation_aw2sensor=translation_aw2sensor, rotation_sensor2aw=rotation_sensor2aw)
+                                lidar2cam_rt = get_lidar2cam(transform)
                                 print("lidar2cam_rt.T:")
                                 print(lidar2cam_rt.T)
                                 lidar2cam_rts[parent_frame.split("/")[0]] = lidar2cam_rt
