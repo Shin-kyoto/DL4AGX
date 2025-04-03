@@ -25,23 +25,23 @@ from sensor_msgs.msg import CameraInfo
 
 def get_lidar2cam(translation_aw2sensor, rotation_sensor2aw):
     # -1 translation * rotation_matrix を計算
-    translation_sensor2aw = -1 * np.dot(translation_aw2sensor, rotation_sensor2aw)
+    translation_sensor2aw = -1 * translation_aw2sensor @ rotation_sensor2aw
     print("translation_sensor2aw:")
     print(translation_sensor2aw)
 
     # rotation_aw2nsを用いた変換
     rotation_aw2ns = np.array([[0.0, 1.0, 0.0],[-1.0, 0.0, 0.0],[0.0, 0.0, 1.0],])
-    translation_sensor2ns = np.dot(translation_sensor2aw, rotation_aw2ns)
+    translation_sensor2ns = translation_sensor2aw @ rotation_aw2ns
     print("translation_sensor2ns:")
     print(translation_sensor2ns)
 
     # rotation_ns2sensorの計算
-    rotation_ns2sensor = np.dot(rotation_sensor2aw, rotation_aw2ns).T
+    rotation_ns2sensor = (rotation_sensor2aw @ rotation_aw2ns).T
     print("rotation_ns2sensor:")
     print(rotation_ns2sensor)
 
     # translation_ns2sensorの計算
-    translation_ns2sensor = -1 * np.dot(translation_sensor2ns, rotation_ns2sensor)
+    translation_ns2sensor = -1 * translation_sensor2ns @ rotation_ns2sensor
     print("translation_ns2sensor:")
     print(translation_ns2sensor)
 
@@ -87,7 +87,7 @@ def main():
                 
         # ROSバッグからメッセージを読み込む
         while reader.has_next() and parent_frames:
-            (topic, data, timestamp) = reader.read_next()
+            (topic, data, _) = reader.read_next()
             
             # tf_staticトピックを処理
             if topic == '/tf_static' and set([camera_name for camera_name in lidar2cam_rts.keys()]) != set(cameras):
