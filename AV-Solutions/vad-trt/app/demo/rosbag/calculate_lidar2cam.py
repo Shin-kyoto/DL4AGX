@@ -23,7 +23,7 @@ from tf2_ros import Buffer, TransformListener
 # sensor_msgs 関連のインポート
 from sensor_msgs.msg import CameraInfo
 
-def get_lidar2cam(transform):
+def calculate_lidar2cam(transform):
     # pyquaternionを使用して回転行列に変換
     q = Quaternion(w=transform.transform.rotation.w,
                 x=transform.transform.rotation.x,
@@ -121,7 +121,7 @@ def main():
                                 print(f"回転: [{transform.transform.rotation.x}, {transform.transform.rotation.y}, {transform.transform.rotation.z}, {transform.transform.rotation.w}]")
 
                                 
-                                lidar2cam_rt = get_lidar2cam(transform)
+                                lidar2cam_rt = calculate_lidar2cam(transform)
                                 print("lidar2cam_rt.T:")
                                 print(lidar2cam_rt.T)
                                 lidar2cam_rts[parent_frame.split("/")[0]] = lidar2cam_rt
