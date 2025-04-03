@@ -83,13 +83,108 @@ std::pair<float, float> aw2ns_xy(float aw_x, float aw_y) {
     return {ns_x, ns_y};
 }
 
-// Convert a quaternion from Autoware to nuScenes coordinate system
-Eigen::Quaternionf aw2ns_quaternion(const Eigen::Quaternionf& q_aw) {
-    // Create a -90-degree rotation around Z-axis (Autoware -> nuScenes)
-    Eigen::Quaternionf q_rotation(Eigen::AngleAxisf(-M_PI/2, Eigen::Vector3f::UnitZ()));
+Eigen::Matrix4f calculate_lidar2cam(const geometry_msgs::msg::TransformStamped& transform) {
+    // Quaternionを使用して回転行列に変換
+    Eigen::Quaternionf q(
+        transform.transform.rotation.w,
+        transform.transform.rotation.x,
+        transform.transform.rotation.y,
+        transform.transform.rotation.z
+    );
+    Eigen::Matrix3f rotation_sensor2aw = q.toRotationMatrix();
+    std::cout << "回転行列:" << std::endl;
+    std::cout << rotation_sensor2aw << std::endl;
     
-    // Apply the rotation
-    return q_rotation * q_aw;
+    // 平行移動をEigen::Vector3fに変換
+    Eigen::Vector3f translation(
+        transform.transform.translation.x,
+        transform.transform.translation.y,
+        transform.transform.translation.z
+    );
+    
+    // -1 * translation * rotation_matrix を計算
+    Eigen::Vector3f translation_sensor2aw = -1 * (translation.transpose() * rotation_sensor2aw).transpose();
+    std::cout << "translation_sensor2aw:" << std::endl;
+    std::cout << translation_sensor2aw << std::endl;
+    
+    // rotation_aw2nsを用いた変換
+    Eigen::Matrix3f rotation_aw2ns;
+    rotation_aw2ns << 0.0, 1.0, 0.0,
+                     -1.0, 0.0, 0.0,
+                      0.0, 0.0, 1.0;
+    
+    Eigen::Vector3f translation_sensor2ns = (translation_sensor2aw.transpose() * rotation_aw2ns).transpose();
+    std::cout << "translation_sensor2ns:" << std::endl;
+    std::cout << translation_sensor2ns << std::endl;
+    
+    // rotation_ns2sensorの計算
+    Eigen::Matrix3f rotation_ns2sensor = (rotation_sensor2aw * rotation_aw2ns).transpose();
+    std::cout << "rotation_ns2sensor:" << std::endl;
+    std::cout << rotation_ns2sensor << std::endl;
+    
+    // translation_ns2sensorの計算
+    Eigen::Vector3f translation_ns2sensor = -1 * (translation_sensor2ns.transpose() * rotation_ns2sensor).transpose();
+    std::cout << "translation_ns2sensor:" << std::endl;
+    std::cout << translation_ns2sensor << std::endl;
+    
+    // lidar2cam_rtの構築
+    Eigen::Matrix4f lidar2cam_rt = Eigen::Matrix4f::Identity();
+    lidar2cam_rt.block<3,3>(0,0) = rotation_ns2sensor.transpose();
+    lidar2cam_rt.block<1,3>(3,0) = translation_ns2sensor;
+    
+    return lidar2cam_rt;
+}
+
+/**
+ * @brief LiDAR座標系（nuScenes）からカメラ座標系（Autoware）への変換を計算する
+ * 
+ * @param aw_translation aw_lidar座標系でのaw_lidarからcameraまでの距離ベクトル
+ * @param q_aw aw_lidar座標系からcamera座標系への回転クオータニオン
+ * @param camera_to_nslidar camera座標系でのcameraからns_lidar原点までのベクトルを格納する参照
+ * @return Eigen::Quaternionf ns_lidar座標系からcamera座標系への回転クオータニオン
+ */
+Eigen::Quaternionf calculate_coordinate_transforms(
+    const Eigen::Vector3f& aw_translation,
+    const Eigen::Quaternionf& q_aw,
+    Eigen::Vector3f& camera_to_nslidar) {
+    
+    // ns_lidarからaw_lidarへの回転クオータニオン（z軸周りに-90度の回転）
+    const float angle = -M_PI / 2.0f;  // -90度をラジアンで
+    Eigen::Quaternionf q_ns_to_aw(
+        std::cos(angle / 2.0f),  // w
+        0.0f,                   // x
+        0.0f,                   // y
+        std::sin(angle / 2.0f)   // z
+    );
+    
+    // ns_lidar座標系からcamera座標系への回転クオータニオン（q_ns）の計算
+    Eigen::Quaternionf q_ns = q_aw * q_ns_to_aw;
+    
+    // aw_lidar座標系でのcameraからaw_lidarへのベクトル（-aw_translation）
+    Eigen::Vector3f camera_to_aw = -aw_translation;
+    
+    // camera座標系でのcameraからns_lidarへのベクトル（求めるA）
+    // cameraからaw_lidarへの回転の逆変換を適用
+    Eigen::Quaternionf q_camera_to_aw = q_aw.conjugate();
+    camera_to_nslidar = q_camera_to_aw * camera_to_aw;
+    
+    return q_ns;
+}
+
+Eigen::Quaternionf nslidar2cam_rotation(const Eigen::Quaternionf& q_aw) {
+    // ns_lidarからaw_lidarへの回転クオータニオン（z軸周りに-90度の回転）
+    const float angle = -M_PI / 2.0f;  // -90度をラジアンで
+    Eigen::Quaternionf q_ns_to_aw(
+        std::cos(angle / 2.0f),  // w
+        0.0f,                   // x
+        0.0f,                   // y
+        std::sin(angle / 2.0f)   // z
+    );
+    
+    // ns_lidar座標系からcamera座標系への回転クオータニオン（q_ns）の計算
+    Eigen::Quaternionf q_ns = q_aw * q_ns_to_aw;
+    
+    return q_ns;
 }
 
 unsigned char* convert_normalized_to_rgb(const std::vector<float>& normalized_data) {
@@ -688,7 +783,7 @@ load_can_bus_shift_from_rosbag(const std::string& bag_path, int32_t n_frames) {
                     msg->pose.pose.orientation.z
                 );
                 
-                Eigen::Quaternionf q_ns = aw2ns_quaternion(q_aw);
+                Eigen::Quaternionf q_ns = nslidar2cam_rotation(q_aw);
                 
                 current_frame.rotation.clear();
                 current_frame.rotation.push_back(q_ns.x());
@@ -893,13 +988,13 @@ load_lidar2img_from_rosbag(const std::string& bag_path, int32_t n_frames, float 
 
                 // 各カメラのTF変換を処理
                 for (const auto& transform : msg->transforms) {
-                    std::string child_frame_id = transform.child_frame_id;
+                    std::string header_frame_id = transform.header.frame_id;
                     
-                    if (child_frame_id.find("camera") != std::string::npos && 
-                        child_frame_id.find("/camera_optical_link") != std::string::npos) {
+                    if (header_frame_id.find("camera") != std::string::npos && 
+                        header_frame_id.find("/camera_optical_link") != std::string::npos) {
                         // Autowareカメラ名からカメラIDを抽出
-                        int32_t autoware_camera_id = std::stoi(child_frame_id.substr(
-                            child_frame_id.find("camera") + 6, 1));
+                        int32_t autoware_camera_id = std::stoi(header_frame_id.substr(
+                            header_frame_id.find("camera") + 6, 1));
 
                         // VADカメラIDに変換
                         if (autoware_to_vad_camera.find(autoware_camera_id) == autoware_to_vad_camera.end()) {
@@ -913,34 +1008,18 @@ load_lidar2img_from_rosbag(const std::string& bag_path, int32_t n_frames, float 
                             continue;
                         }
 
-                        // 変換行列の構築
-                        Eigen::Vector3f aw_translation(
-                            transform.transform.translation.x,
-                            transform.transform.translation.y,
-                            transform.transform.translation.z
-                        );
-                        
-                        // Apply Autoware to nuScenes coordinate transformation to translation
-                        auto [ns_x, ns_y] = aw2ns_xy(aw_translation[0], aw_translation[1]);
-                        Eigen::Vector3f ns_translation(ns_x, ns_y, aw_translation[2]);
-
-                        Eigen::Quaternionf q_aw(
-                            transform.transform.rotation.w,
-                            transform.transform.rotation.x,
-                            transform.transform.rotation.y,
-                            transform.transform.rotation.z
-                        );
-                        
-                        // Apply Autoware to nuScenes coordinate transformation to quaternion
-                        Eigen::Quaternionf q_ns = aw2ns_quaternion(q_aw);
-
-                        // lidar2cam_rtを構築 (nuScenes座標系)
-                        Eigen::Matrix4f lidar2cam_rt = Eigen::Matrix4f::Identity();
-                        lidar2cam_rt.block<3,3>(0,0) = q_ns.toRotationMatrix();
-                        lidar2cam_rt.block<3,1>(0,3) = ns_translation;
+                        Eigen::Matrix4f lidar2cam_rt = calculate_lidar2cam(transform);
 
                         // lidar2cam_rt.Tを計算
                         Eigen::Matrix4f lidar2cam_rt_T = lidar2cam_rt.transpose();
+                        std::cout << "  lidar2cam_rt.T: " << std::endl;
+                        for (int i = 0; i < 4; ++i) {
+                            std::cout << "    ";
+                            for (int j = 0; j < 4; ++j) {
+                                std::cout << lidar2cam_rt_T(i, j) << " ";
+                            }
+                            std::cout << std::endl;
+                        }
 
                         // viewpadを作成
                         Eigen::Matrix4f viewpad = Eigen::Matrix4f::Zero();
@@ -948,7 +1027,15 @@ load_lidar2img_from_rosbag(const std::string& bag_path, int32_t n_frames, float 
                         viewpad(3,3) = 1.0f;
 
                         // lidar2img = viewpad @ lidar2cam_rt.T を計算
-                        Eigen::Matrix4f lidar2img = viewpad * lidar2cam_rt_T;
+                        Eigen::Matrix4f lidar2img = viewpad * lidar2cam_rt;
+                        std::cout << "  lidar2img: " << std::endl;
+                        for (int i = 0; i < 4; ++i) {
+                            std::cout << "    ";
+                            for (int j = 0; j < 4; ++j) {
+                                std::cout << lidar2img(i, j) << " ";
+                            }
+                            std::cout << std::endl;
+                        }
 
                         // スケーリングを適用
                         Eigen::Matrix4f scale_matrix = Eigen::Matrix4f::Identity();
@@ -956,7 +1043,17 @@ load_lidar2img_from_rosbag(const std::string& bag_path, int32_t n_frames, float 
                         scale_matrix(1, 1) = scale_height;
                         
                         lidar2img = scale_matrix * lidar2img;
-                        
+                        std::cout << "  lidar2img_scaled: " << std::endl;
+                        for (int i = 0; i < 4; ++i) {
+                            std::cout << "    ";
+                            for (int j = 0; j < 4; ++j) {
+                                std::cout << lidar2img(i, j) << " ";
+                            }
+                            std::cout << std::endl;
+                        }
+                        // throw std::runtime_error("デバッグのために意図的にエラーを発生させました");
+
+
                         // 結果を格納
                         std::vector<float> lidar2img_flat(16);
                         int32_t k = 0;
@@ -968,6 +1065,27 @@ load_lidar2img_from_rosbag(const std::string& bag_path, int32_t n_frames, float 
 
                         // lidar2imgの計算後、VADカメラIDの位置に格納
                         if (vad_camera_id >= 0 && vad_camera_id < 6) {
+                            if (current_frame_id == 2) {
+                                std::cout << "Frame 2 - Camera " << vad_camera_id << ":" << std::endl;
+
+                                std::cout << "  lidar2cam_rt: " << std::endl;
+                                for (int i = 0; i < 4; ++i) {
+                                    std::cout << "    ";
+                                    for (int j = 0; j < 4; ++j) {
+                                        std::cout << lidar2cam_rt(i, j) << " ";
+                                    }
+                                    std::cout << std::endl;
+                                }
+
+                                std::cout << "  lidar2img: " << std::endl;
+                                for (int i = 0; i < 4; ++i) {
+                                    std::cout << "    ";
+                                    for (int j = 0; j < 4; ++j) {
+                                        std::cout << lidar2img(i, j) << " ";
+                                    }
+                                    std::cout << std::endl;
+                                }
+                            }
                             std::copy(lidar2img_flat.begin(), 
                                     lidar2img_flat.end(), 
                                     frame_lidar2img.begin() + vad_camera_id * 16);
@@ -1262,7 +1380,7 @@ int main(int argc, char** argv) {
     // std::ifstream cmd_file(frame_dir + "cmd.bin", std::ios::binary);    
     // cmd_file.read((char*)(&frame.cmd), sizeof(int));
     // cmd_file.close();
-frame.cmd = 0;
+    frame.cmd = 0;
 
     frame.img_metas_lidar2img = nets["head"]->bindings["img_metas.0[lidar2img]"]->cpu<float>();
 
@@ -1319,6 +1437,23 @@ frame.cmd = 0;
         ret[10] = max_score;
         frame.det.push_back(ret);
       }    
+    }
+    if (frame_id == 2) {
+      std::cout << "Frame 2 data: " << std::endl;
+
+      std::cout << "  Lidar2img data: [";
+      const auto& lidar2img_data = subscribed_lidar2img_dict[frame_id];
+      for (size_t i = 0; i < lidar2img_data.size(); ++i) {
+        std::cout << lidar2img_data[i] << (i == lidar2img_data.size() - 1 ? "" : ", ");
+      }
+      std::cout << "]" << std::endl;
+
+      std::cout << "  Planning data: [";
+      const auto& planning_data = frame.planning;
+      for (size_t i = 0; i < planning_data.size(); ++i) {
+        std::cout << planning_data[i] << (i == planning_data.size() - 1 ? "" : ", ");
+      }
+      std::cout << "]" << std::endl;
     }
     node->publishDetectedObjects(frame.det);
     nv::visualize(
