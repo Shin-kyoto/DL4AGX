@@ -1,4 +1,6 @@
 internal/
+viz/
+viz_aw/
 app/demo/vad_app
 app/demo/analyze
 app/demo/onnx_files.desktop

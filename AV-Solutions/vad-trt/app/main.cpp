@@ -130,7 +130,7 @@ Eigen::Matrix4f calculate_lidar2cam(const geometry_msgs::msg::TransformStamped& 
     // lidar2cam_rtの構築
     Eigen::Matrix4f lidar2cam_rt = Eigen::Matrix4f::Identity();
     lidar2cam_rt.block<3,3>(0,0) = rotation_ns2sensor.transpose();
-    lidar2cam_rt.block<1,3>(3,0) = translation_ns2sensor;
+    lidar2cam_rt.block<3,1>(0,3) = translation_ns2sensor;
     
     return lidar2cam_rt;
 }
