@@ -18,6 +18,15 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <memory>
+#include <functional>
+#include <unordered_map>
+#include <cuda_runtime.h>
+#include <NvInfer.h>
+#include <nlohmann/json.hpp>
+#include "net.h"
+
+using json = nlohmann::json;
 
 namespace autoware::tensorrt_vad
 {
@@ -82,7 +91,11 @@ class VadModel
 {
 public:
   // コンストラクタ
-  VadModel();
+  VadModel(
+    const std::string& plugin_dir,
+    const json& cfg,
+    const std::string& cfg_dir,
+    int32_t warm_up_num);
 
   // デストラクタ
   ~VadModel();
@@ -93,12 +106,36 @@ public:
   // メイン推論API
   [[nodiscard]] std::optional<VadOutputData> infer(const VadInputData & input);
 
+  // メンバ変数
+  std::unique_ptr<nvinfer1::IRuntime, std::function<void(nvinfer1::IRuntime*)>> runtime_;
+  cudaStream_t stream_;
+  std::unordered_map<std::string, std::shared_ptr<nv::Net>> nets_;
+  bool initialized_;
+
+  // 前回のBEV特徴量保存用
+  std::shared_ptr<nv::Tensor> saved_prev_bev_;
+  bool is_first_frame_;
+
+  // 設定情報の保存
+  json cfg_;
+  std::string cfg_dir_;
+
 private:
-  // TODO(Shin-kyoto): TensorRTエンジン関連のメンバ変数を追加
-  // nvinfer1::IRuntime* runtime_{nullptr};
-  // nvinfer1::ICudaEngine* engine_{nullptr};
-  // nvinfer1::IExecutionContext* context_{nullptr};
-  // cudaStream_t stream_{nullptr};
+  // メンバ関数
+  std::unique_ptr<nvinfer1::IRuntime, std::function<void(nvinfer1::IRuntime*)>> create_runtime();
+  bool load_plugin(const std::string& plugin_dir);
+  std::unordered_map<std::string, std::shared_ptr<nv::Net>> init_engines(
+    const json& engines_cfg,
+    const std::string& cfg_dir);
+  void warm_up(int32_t warm_up_num);
+  
+  // infer関数で使用するヘルパー関数
+  void load_inputs(const VadInputData& vad_input, const std::string& head_name);
+  void enqueue(const std::string& head_name);
+  std::shared_ptr<nv::Tensor> save_prev_bev(const std::string& head_name);
+  void release_network(const std::string& network_name);
+  void load_head(const json& cfg, const std::string& cfg_dir);
+  VadOutputData postprocess(const std::string& head_name, int32_t cmd);
 };
 
 }  // namespace autoware::tensorrt_vad
