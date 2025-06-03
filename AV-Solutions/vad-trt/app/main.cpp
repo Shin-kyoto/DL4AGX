@@ -280,6 +280,81 @@ void warm_up(int32_t warm_up_num, std::unordered_map<std::string, std::shared_pt
   }
 }
 
+// VadModelのコンストラクタで使用
+std::unordered_map<std::string, std::shared_ptr<nv::Net>> init_engines(
+    const json& engines_cfg,
+    const std::string& cfg_dir,
+    std::unique_ptr<nvinfer1::IRuntime, std::function<void(nvinfer1::IRuntime*)>>& runtime,
+    cudaStream_t stream) {
+    
+    std::unordered_map<std::string, std::shared_ptr<nv::Net>> nets;
+    
+    for (auto engine : engines_cfg) {
+        if (engine["name"] == "head") {
+            continue;  // headは後で初期化
+        }
+        
+        std::string eng_name = engine["name"];
+        std::string eng_file = engine["file"];
+        std::string eng_pth = cfg_dir + "/" + eng_file;
+        printf("-> engine: %s\n", eng_name.c_str());
+        
+        std::unordered_map<std::string, std::shared_ptr<nv::Tensor>> ext;
+        // reuse memory
+        auto inputs = engine["inputs"];
+        for (auto it = inputs.begin(); it != inputs.end(); ++it) {
+            std::string k = it.key();
+            auto ext_map = it.value();      
+            std::string ext_net = ext_map["net"];
+            std::string ext_name = ext_map["name"];
+            printf("%s <- %s[%s]\n", k.c_str(), ext_net.c_str(), ext_name.c_str());
+            ext[k] = nets[ext_net]->bindings[ext_name];
+        }
+
+        nets[eng_name] = std::make_shared<nv::Net>(eng_pth, runtime.get(), ext);
+
+        bool use_graph = engine["use_graph"];
+        if (use_graph) {
+            nets[eng_name]->EnableCudaGraph(stream);
+        }
+    }
+    
+    return nets;
+}
+
+// VadModel初期化関数
+bool VadModel_init(
+    Logger& logger,
+    const std::string& plugin_dir,
+    const json& cfg,
+    const std::string& cfg_dir,
+    int32_t warm_up_num,
+    std::unique_ptr<nvinfer1::IRuntime, std::function<void(nvinfer1::IRuntime*)>>& runtime,
+    cudaStream_t& stream,
+    std::unordered_map<std::string, std::shared_ptr<nv::Net>>& nets) {
+    
+    runtime = create_runtime(logger);
+    
+    if (!load_plugin(plugin_dir)) {
+        return false;
+    }
+    
+    cudaStreamCreate(&stream);
+    
+    // init engines
+    nets = init_engines(
+        cfg["nets"],
+        cfg_dir,
+        runtime,
+        stream
+    );
+    
+    printf("[INFO] warm_up=%d\n", warm_up_num);
+    warm_up(warm_up_num, nets, stream);
+    
+    return true;
+}
+
 class EventTimer {
 public:
   EventTimer() {
@@ -1026,48 +1101,6 @@ autoware::tensorrt_vad::VadOutputData postprocess(const std::vector<float>& ego_
     return autoware::tensorrt_vad::VadOutputData{planning};
 }
 
-// VadModelのコンストラクタで使用
-std::unordered_map<std::string, std::shared_ptr<nv::Net>> init_engines(
-    const json& engines_cfg,
-    const std::string& cfg_dir,
-    std::unique_ptr<nvinfer1::IRuntime, std::function<void(nvinfer1::IRuntime*)>>& runtime,
-    cudaStream_t stream) {
-    
-    std::unordered_map<std::string, std::shared_ptr<nv::Net>> nets;
-    
-    for (auto engine : engines_cfg) {
-        if (engine["name"] == "head") {
-            continue;  // headは後で初期化
-        }
-        
-        std::string eng_name = engine["name"];
-        std::string eng_file = engine["file"];
-        std::string eng_pth = cfg_dir + "/" + eng_file;
-        printf("-> engine: %s\n", eng_name.c_str());
-        
-        std::unordered_map<std::string, std::shared_ptr<nv::Tensor>> ext;
-        // reuse memory
-        auto inputs = engine["inputs"];
-        for (auto it = inputs.begin(); it != inputs.end(); ++it) {
-            std::string k = it.key();
-            auto ext_map = it.value();      
-            std::string ext_net = ext_map["net"];
-            std::string ext_name = ext_map["name"];
-            printf("%s <- %s[%s]\n", k.c_str(), ext_net.c_str(), ext_name.c_str());
-            ext[k] = nets[ext_net]->bindings[ext_name];
-        }
-
-        nets[eng_name] = std::make_shared<nv::Net>(eng_pth, runtime.get(), ext);
-
-        bool use_graph = engine["use_graph"];
-        if (use_graph) {
-            nets[eng_name]->EnableCudaGraph(stream);
-        }
-    }
-    
-    return nets;
-}
-
 int main(int argc, char** argv) {
   // ROSの初期化
   rclcpp::init(argc, argv);
@@ -1078,7 +1111,6 @@ int main(int argc, char** argv) {
 
   Logger logger;
 
-  std::unique_ptr<nvinfer1::IRuntime, std::function<void(nvinfer1::IRuntime*)>> runtime = create_runtime(logger);
 
   const std::string config = argv[1];
   fs::path cfg_pth = config;
@@ -1090,24 +1122,16 @@ int main(int argc, char** argv) {
   json cfg = json::parse(f);
 
   std::string plugin_dir = cfg_dir.string() + "/" + cfg["plugins"][0].get<std::string>();
-  if (!load_plugin(plugin_dir)) {
+
+  int32_t warm_up_num = cfg["warm_up"];
+
+  std::unique_ptr<nvinfer1::IRuntime, std::function<void(nvinfer1::IRuntime*)>> runtime;
+  cudaStream_t stream;
+  std::unordered_map<std::string, std::shared_ptr<nv::Net>> nets;
+
+  if (!VadModel_init(logger, plugin_dir, cfg, cfg_dir.string(), warm_up_num, runtime, stream, nets)) {
     return -1;
   }
-
-  cudaStream_t stream;
-  cudaStreamCreate(&stream);
-
-  // init engines
-  std::unordered_map<std::string, std::shared_ptr<nv::Net>> nets = init_engines(
-      cfg["nets"],
-      cfg_dir.string(),
-      runtime,
-      stream
-  );
-  
-  int32_t warm_up_num = cfg["warm_up"];
-  printf("[INFO] warm_up=%d\n", warm_up_num);
-  warm_up(warm_up_num, nets, stream);
 
   EventTimer timer;
   std::string data_dir = cfg_dir.string() + "/data/";
