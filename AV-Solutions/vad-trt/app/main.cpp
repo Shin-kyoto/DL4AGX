@@ -1053,7 +1053,7 @@ int main(int argc, char** argv) {
     std::string frame_dir = data_dir + std::to_string(frame_id) + "/";
     
     // 画像をconcatenate
-    auto image_data = processImageForInference(subscribed_image_dict[frame_id]);        
+    auto image_data = processImageForInference(subscribed_image_dict[frame_id]);
     autoware::tensorrt_vad::VadInputData vad_input_data{
         image_data,    // camera_images_
         subscribed_shift_dict[frame_id],    // shift_
@@ -1068,10 +1068,10 @@ int main(int argc, char** argv) {
         std::cerr << "Inference failed for frame " << frame_id << std::endl;
         continue;
     }
-    
-    auto vad_output_data = inference_result.value();
-    
+
     cudaStreamSynchronize(vad_model.stream_);
+
+    auto vad_output_data = inference_result.value();    
 
     std::string viz_dir = cfg["viz"];
     viz_dir = cfg_dir.string() + "/" + viz_dir;
@@ -1093,7 +1093,7 @@ int main(int argc, char** argv) {
 
     frame.img_metas_lidar2img = vad_model.nets_["head"]->bindings["img_metas.0[lidar2img]"]->cpu<float>();
 
-    // pred -> frame.planning (VadModelのinfer関数から既に結果を取得済み)
+    // pred -> frame.planning
     frame.planning = vad_output_data.predicted_trajectory_;
     node->publishTrajectory(frame.planning);
     printf("publish trajectory");

@@ -23,4 +23,3 @@
             "input_feature": "mlvl_feats.0"
             "net": "backbone"
             "name": "out.0"
-          
