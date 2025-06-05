@@ -1053,7 +1053,7 @@ int main(int argc, char** argv) {
     std::string frame_dir = data_dir + std::to_string(frame_id) + "/";
     
     // 画像をconcatenate
-    auto image_data = processImageForInference(subscribed_image_dict[frame_id]);
+    auto image_data = processImageForInference(subscribed_image_dict[frame_id]);    
     autoware::tensorrt_vad::VadInputData vad_input_data{
         image_data,    // camera_images_
         subscribed_shift_dict[frame_id],    // shift_
