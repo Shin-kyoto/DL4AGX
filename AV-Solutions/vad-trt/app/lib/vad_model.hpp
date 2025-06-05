@@ -68,6 +68,23 @@ struct VadOutputData
   // int32_t selected_command_index_{2};
 };
 
+// config for Net class
+struct NetConfig
+{
+  std::string name;
+  std::string engine_file;
+  bool use_graph;
+  std::map<std::string, std::map<std::string, std::string>> inputs;
+};
+
+// config for VadModel class
+struct VadConfig
+{
+  std::string plugins_path;
+  int32_t warm_up_num;
+  std::vector<NetConfig> nets_config;
+};
+
 class NetworkParam
 {
 public:
@@ -91,11 +108,7 @@ class VadModel
 {
 public:
   // コンストラクタ
-  VadModel(
-    const std::string& plugin_dir,
-    const json& cfg,
-    const std::string& cfg_dir,
-    int32_t warm_up_num);
+  VadModel(const VadConfig& config);
 
   // デストラクタ
   ~VadModel();
@@ -117,16 +130,14 @@ public:
   bool is_first_frame_;
 
   // 設定情報の保存
-  json cfg_;
-  std::string cfg_dir_;
+  VadConfig config_;
 
 private:
   // メンバ関数
   std::unique_ptr<nvinfer1::IRuntime, std::function<void(nvinfer1::IRuntime*)>> create_runtime();
   bool load_plugin(const std::string& plugin_dir);
   std::unordered_map<std::string, std::shared_ptr<nv::Net>> init_engines(
-    const json& engines_cfg,
-    const std::string& cfg_dir);
+    const std::vector<NetConfig>& nets_config);
   void warm_up(int32_t warm_up_num);
   
   // infer関数で使用するヘルパー関数
@@ -134,7 +145,7 @@ private:
   void enqueue(const std::string& head_name);
   std::shared_ptr<nv::Tensor> save_prev_bev(const std::string& head_name);
   void release_network(const std::string& network_name);
-  void load_head(const json& cfg, const std::string& cfg_dir);
+  void load_head();
   VadOutputData postprocess(const std::string& head_name, int32_t cmd);
 };
 

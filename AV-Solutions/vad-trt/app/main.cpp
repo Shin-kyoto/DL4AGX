@@ -95,8 +95,8 @@ Eigen::Quaternionf aw2ns_quaternion(const Eigen::Quaternionf& q_aw) {
 class VADNode : public rclcpp::Node 
 {
 public:
-    VADNode() 
-        : Node("vad_node") 
+    VADNode(const std::vector<std::string>& yaml_config_paths) 
+        : Node("vad_node", createNodeOptions(yaml_config_paths))
     {
         // Publishers
         trajectory_publisher_ = this->create_publisher<autoware_planning_msgs::msg::Trajectory>(
@@ -122,7 +122,15 @@ public:
             );
         }
 
+        // VadConfigを読み込み
+        loadVadConfig();
+
         RCLCPP_INFO(this->get_logger(), "VAD Node has been initialized");
+    }
+
+    // VadConfigを取得する関数
+    const autoware::tensorrt_vad::VadConfig& getVadConfig() const {
+        return vad_config_;
     }
 
     void publishTrajectory(const std::vector<float>& planning) 
@@ -197,6 +205,70 @@ private:
     rclcpp::Publisher<autoware_planning_msgs::msg::Trajectory>::SharedPtr trajectory_publisher_;
     rclcpp::Publisher<autoware_perception_msgs::msg::DetectedObjects>::SharedPtr objects_publisher_;
     std::vector<rclcpp::Subscription<sensor_msgs::msg::CompressedImage>::SharedPtr> camera_subscribers_;
+    
+    // VadConfig
+    autoware::tensorrt_vad::VadConfig vad_config_;
+
+    // yamlファイルのパスからNodeOptionsを作成する静的関数
+    static rclcpp::NodeOptions createNodeOptions(const std::vector<std::string>& yaml_config_paths) {
+        rclcpp::NodeOptions node_options;
+        std::vector<std::string> ros_args = {"--ros-args"};
+        for (const auto& yaml_path : yaml_config_paths) {
+            ros_args.push_back("--params-file");
+            ros_args.push_back(yaml_path);
+        }
+        node_options.arguments(ros_args);
+        return node_options;
+    }
+
+    void loadVadConfig() {
+        // このノード自体からパラメータを読み込み
+        vad_config_.plugins_path = this->declare_parameter<std::string>("model_params.plugins_path", "");
+        vad_config_.warm_up_num = this->declare_parameter<int>("model_params.warm_up_num", 20);
+        
+        // ネットワーク設定の読み込み
+        loadNetConfigs();
+    }
+    
+    void loadNetConfigs() {
+        // 階層構造でネットワーク設定を読み込み
+        
+        // backbone設定
+        autoware::tensorrt_vad::NetConfig backbone_config;
+        backbone_config.name = this->declare_parameter<std::string>("model_params.nets.backbone.name", "backbone");
+        backbone_config.engine_file = this->declare_parameter<std::string>("model_params.nets.backbone.engine_file", "");
+        backbone_config.use_graph = this->declare_parameter<bool>("model_params.nets.backbone.use_graph", true);
+        
+        // head設定
+        autoware::tensorrt_vad::NetConfig head_config;
+        head_config.name = this->declare_parameter<std::string>("model_params.nets.head.name", "head");
+        head_config.engine_file = this->declare_parameter<std::string>("model_params.nets.head.engine_file", "");
+        head_config.use_graph = this->declare_parameter<bool>("model_params.nets.head.use_graph", true);
+        
+        // head inputsの読み込み
+        std::string input_feature = this->declare_parameter<std::string>("model_params.nets.head.inputs.input_feature", "mlvl_feats.0");
+        std::string net_param = this->declare_parameter<std::string>("model_params.nets.head.inputs.net", "backbone");
+        std::string name_param = this->declare_parameter<std::string>("model_params.nets.head.inputs.name", "out.0");
+        head_config.inputs[input_feature]["net"] = net_param;
+        head_config.inputs[input_feature]["name"] = name_param;
+        
+        // head_no_prev設定
+        autoware::tensorrt_vad::NetConfig head_no_prev_config;
+        head_no_prev_config.name = this->declare_parameter<std::string>("model_params.nets.head_no_prev.name", "head_no_prev");
+        head_no_prev_config.engine_file = this->declare_parameter<std::string>("model_params.nets.head_no_prev.engine_file", "");
+        head_no_prev_config.use_graph = this->declare_parameter<bool>("model_params.nets.head_no_prev.use_graph", true);
+        
+        // head_no_prev inputsの読み込み
+        std::string input_feature_no_prev = this->declare_parameter<std::string>("model_params.nets.head_no_prev.inputs.input_feature", "mlvl_feats.0");
+        std::string net_param_no_prev = this->declare_parameter<std::string>("model_params.nets.head_no_prev.inputs.net", "backbone");
+        std::string name_param_no_prev = this->declare_parameter<std::string>("model_params.nets.head_no_prev.inputs.name", "out.0");
+        head_no_prev_config.inputs[input_feature_no_prev]["net"] = net_param_no_prev;
+        head_no_prev_config.inputs[input_feature_no_prev]["name"] = name_param_no_prev;
+        
+        vad_config_.nets_config.push_back(backbone_config);
+        vad_config_.nets_config.push_back(head_config);
+        vad_config_.nets_config.push_back(head_no_prev_config);
+    }
 
     void onImageReceived(const sensor_msgs::msg::CompressedImage::SharedPtr msg, int32_t camera_index)
     {
@@ -937,7 +1009,6 @@ void compare_with_reference_lidar2img(
 int main(int argc, char** argv) {
   // ROSの初期化
   rclcpp::init(argc, argv);
-  auto node = std::make_shared<VADNode>();
   
   printf("nvinfer: %d.%d.%d\n", NV_TENSORRT_MAJOR, NV_TENSORRT_MINOR, NV_TENSORRT_PATCH);
   cudaSetDevice(0);
@@ -951,11 +1022,20 @@ int main(int argc, char** argv) {
   std::ifstream f(config);
   json cfg = json::parse(f);
 
-  std::string plugin_dir = cfg_dir.string() + "/" + cfg["plugins"][0].get<std::string>();
-  int32_t warm_up_num = cfg["warm_up"];
+  // jsonからyamlパスを読み込み
+  std::vector<std::string> yaml_config_paths;
+  for (const auto& yaml_path : cfg["yaml_config_paths"]) {
+    yaml_config_paths.push_back(yaml_path.get<std::string>());
+  }
+  
+  // VADNodeを作成（yamlパスを渡す）
+  auto node = std::make_shared<VADNode>(yaml_config_paths);
+
+  // VADNodeからVadConfigを取得
+  const auto& vad_config = node->getVadConfig();
 
   // VadModelを初期化
-  autoware::tensorrt_vad::VadModel vad_model(plugin_dir, cfg, cfg_dir.string(), warm_up_num);
+  autoware::tensorrt_vad::VadModel vad_model(vad_config);
 
   EventTimer timer;
   std::string data_dir = cfg_dir.string() + "/data/";

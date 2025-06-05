@@ -37,26 +37,23 @@ public:
 
 // VadModelクラスの実装
 VadModel::VadModel(
-    const std::string& plugin_dir,
-    const json& cfg,
-    const std::string& cfg_dir,
-    int32_t warm_up_num)
-    : initialized_(false), stream_(nullptr), is_first_frame_(true), cfg_(cfg), cfg_dir_(cfg_dir)
+    const VadConfig& config)
+    : initialized_(false), stream_(nullptr), is_first_frame_(true), config_(config)
 {
     // 初期化を実行
     runtime_ = create_runtime();
     
-    if (!load_plugin(plugin_dir)) {
+    if (!load_plugin(config.plugins_path)) {
         std::cerr << "Failed to load plugin" << std::endl;
         return;
     }
     
     cudaStreamCreate(&stream_);
     
-    nets_ = init_engines(cfg["nets"], cfg_dir);
+    nets_ = init_engines(config.nets_config);
     
-    printf("[INFO] warm_up=%d\n", warm_up_num);
-    warm_up(warm_up_num);
+    printf("[INFO] warm_up=%d\n", config.warm_up_num);
+    warm_up(config.warm_up_num);
     
     initialized_ = true;
 }
@@ -94,37 +91,33 @@ bool VadModel::load_plugin(const std::string& plugin_dir) {
 }
 
 std::unordered_map<std::string, std::shared_ptr<nv::Net>> VadModel::init_engines(
-    const json& engines_cfg,
-    const std::string& cfg_dir) {
+    const std::vector<NetConfig>& nets_config) {
     
     std::unordered_map<std::string, std::shared_ptr<nv::Net>> nets;
     
-    for (auto engine : engines_cfg) {
-        if (engine["name"] == "head") {
+    for (const auto& engine : nets_config) {
+        if (engine.name == "head") {
             continue;  // headは後で初期化
         }
         
-        std::string eng_name = engine["name"];
-        std::string eng_file = engine["file"];
-        std::string eng_pth = cfg_dir + "/" + eng_file;
+        std::string eng_name = engine.name;
+        std::string eng_file = engine.engine_file;
         printf("-> engine: %s\n", eng_name.c_str());
         
         std::unordered_map<std::string, std::shared_ptr<nv::Tensor>> ext;
         // reuse memory
-        auto inputs = engine["inputs"];
-        for (auto it = inputs.begin(); it != inputs.end(); ++it) {
-            std::string k = it.key();
-            auto ext_map = it.value();      
-            std::string ext_net = ext_map["net"];
-            std::string ext_name = ext_map["name"];
+        for (const auto& input_pair : engine.inputs) {
+            const std::string& k = input_pair.first;
+            const auto& ext_map = input_pair.second;      
+            std::string ext_net = ext_map.at("net");
+            std::string ext_name = ext_map.at("name");
             printf("%s <- %s[%s]\n", k.c_str(), ext_net.c_str(), ext_name.c_str());
             ext[k] = nets[ext_net]->bindings[ext_name];
         }
 
-        nets[eng_name] = std::make_shared<nv::Net>(eng_pth, runtime_.get(), ext);
+        nets[eng_name] = std::make_shared<nv::Net>(eng_file, runtime_.get(), ext);
 
-        bool use_graph = engine["use_graph"];
-        if (use_graph) {
+        if (engine.use_graph) {
             nets[eng_name]->EnableCudaGraph(stream_);
         }
     }
@@ -163,7 +156,7 @@ std::optional<VadOutputData> VadModel::infer(const VadInputData & vad_input) {
     // 最初のフレームなら以下の処理を行う
     if (is_first_frame_) {
         release_network("head_no_prev");
-        load_head(cfg_, cfg_dir_);
+        load_head();
         is_first_frame_ = false;
     }
     
@@ -207,29 +200,31 @@ void VadModel::release_network(const std::string& network_name) {
     }
 }
 
-void VadModel::load_head(const json& cfg, const std::string& cfg_dir) {
-    auto head_engine = std::find_if(cfg["nets"].begin(), cfg["nets"].end(),
-        [](const json& engine) { return engine["name"] == "head"; });
+void VadModel::load_head() {
+    auto head_engine = std::find_if(config_.nets_config.begin(), config_.nets_config.end(),
+        [](const NetConfig& engine) { return engine.name == "head"; });
     
-    std::string eng_file = (*head_engine)["file"];
-    std::string eng_pth = cfg_dir + "/" + eng_file;
-    printf("-> loading head engine: %s\n", eng_pth.c_str());
+    if (head_engine == config_.nets_config.end()) {
+        std::cerr << "Head engine configuration not found" << std::endl;
+        return;
+    }
+    
+    std::string eng_file = head_engine->engine_file;
+    printf("-> loading head engine: %s\n", eng_file.c_str());
     
     std::unordered_map<std::string, std::shared_ptr<nv::Tensor>> ext;
-    auto inputs = (*head_engine)["inputs"];
-    for (auto it = inputs.begin(); it != inputs.end(); ++it) {
-        std::string k = it.key();
-        auto ext_map = it.value();      
-        std::string ext_net = ext_map["net"];
-        std::string ext_name = ext_map["name"];
+    for (const auto& input_pair : head_engine->inputs) {
+        const std::string& k = input_pair.first;
+        const auto& ext_map = input_pair.second;      
+        std::string ext_net = ext_map.at("net");
+        std::string ext_name = ext_map.at("name");
         printf("%s <- %s[%s]\n", k.c_str(), ext_net.c_str(), ext_name.c_str());
         ext[k] = nets_[ext_net]->bindings[ext_name];
     }
 
-    nets_["head"] = std::make_shared<nv::Net>(eng_pth, runtime_.get(), ext);
+    nets_["head"] = std::make_shared<nv::Net>(eng_file, runtime_.get(), ext);
 
-    bool use_graph = (*head_engine)["use_graph"];
-    if (use_graph) {
+    if (head_engine->use_graph) {
         nets_["head"]->EnableCudaGraph(stream_);
     }
 }
