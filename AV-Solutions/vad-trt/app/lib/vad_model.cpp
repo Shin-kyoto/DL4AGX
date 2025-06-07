@@ -104,7 +104,7 @@ std::unordered_map<std::string, std::shared_ptr<nv::Net>> VadModel::init_engines
         std::string eng_file = engine.engine_file;
         printf("-> engine: %s\n", eng_name.c_str());
         
-        std::unordered_map<std::string, std::shared_ptr<nv::Tensor>> ext;
+        std::unordered_map<std::string, std::shared_ptr<nv::Tensor>> external_bindings;
         // reuse memory
         for (const auto& input_pair : engine.inputs) {
             const std::string& k = input_pair.first;
@@ -112,10 +112,10 @@ std::unordered_map<std::string, std::shared_ptr<nv::Net>> VadModel::init_engines
             std::string ext_net = ext_map.at("net");
             std::string ext_name = ext_map.at("name");
             printf("%s <- %s[%s]\n", k.c_str(), ext_net.c_str(), ext_name.c_str());
-            ext[k] = nets[ext_net]->bindings[ext_name];
+            external_bindings[k] = nets[ext_net]->bindings[ext_name];
         }
 
-        nets[eng_name] = std::make_shared<nv::Net>(eng_file, runtime_.get(), ext);
+        nets[eng_name] = std::make_shared<nv::Net>(eng_file, runtime_.get(), external_bindings);
 
         if (engine.use_graph) {
             nets[eng_name]->EnableCudaGraph(stream_);
@@ -200,6 +200,15 @@ void VadModel::release_network(const std::string& network_name) {
     }
 }
 
+/**
+ * @brief headネットワークを初期化し、backboneの出力テンソルを再利用する
+ * 
+ * external_bindingsを使用する理由:
+ * - backboneのoutputをheadのinputに使いたい
+ * - backboneのoutputのtensorのアドレスを、headのinputのptrに渡す
+ * 
+ * backbone.output → head.input (ptr共有)
+ */
 void VadModel::load_head() {
     auto head_engine = std::find_if(config_.nets_config.begin(), config_.nets_config.end(),
         [](const NetConfig& engine) { return engine.name == "head"; });
@@ -212,17 +221,17 @@ void VadModel::load_head() {
     std::string eng_file = head_engine->engine_file;
     printf("-> loading head engine: %s\n", eng_file.c_str());
     
-    std::unordered_map<std::string, std::shared_ptr<nv::Tensor>> ext;
+    std::unordered_map<std::string, std::shared_ptr<nv::Tensor>> external_bindings;
     for (const auto& input_pair : head_engine->inputs) {
         const std::string& k = input_pair.first;
         const auto& ext_map = input_pair.second;      
         std::string ext_net = ext_map.at("net");
         std::string ext_name = ext_map.at("name");
         printf("%s <- %s[%s]\n", k.c_str(), ext_net.c_str(), ext_name.c_str());
-        ext[k] = nets_[ext_net]->bindings[ext_name];
+        external_bindings[k] = nets_[ext_net]->bindings[ext_name];
     }
 
-    nets_["head"] = std::make_shared<nv::Net>(eng_file, runtime_.get(), ext);
+    nets_["head"] = std::make_shared<nv::Net>(eng_file, runtime_.get(), external_bindings);
 
     if (head_engine->use_graph) {
         nets_["head"]->EnableCudaGraph(stream_);
