@@ -100,9 +100,9 @@ std::unordered_map<std::string, std::shared_ptr<nv::Net>> VadModel::init_engines
             continue;  // headは後で初期化
         }
         
-        std::string eng_name = engine.name;
-        std::string eng_file = engine.engine_file;
-        printf("-> engine: %s\n", eng_name.c_str());
+        std::string engine_name = engine.name;
+        std::string engine_file_path = engine.engine_file;
+        printf("-> engine: %s\n", engine_name.c_str());
         
         std::unordered_map<std::string, std::shared_ptr<nv::Tensor>> external_bindings;
         // reuse memory
@@ -115,10 +115,10 @@ std::unordered_map<std::string, std::shared_ptr<nv::Net>> VadModel::init_engines
             external_bindings[k] = nets[ext_net]->bindings[ext_name];
         }
 
-        nets[eng_name] = std::make_shared<nv::Net>(eng_file, runtime_.get(), external_bindings);
+        nets[engine_name] = std::make_shared<nv::Net>(engine_file_path, runtime_.get(), external_bindings);
 
         if (engine.use_graph) {
-            nets[eng_name]->EnableCudaGraph(stream_);
+            nets[engine_name]->EnableCudaGraph(stream_);
         }
     }
     
@@ -218,8 +218,8 @@ void VadModel::load_head() {
         return;
     }
     
-    std::string eng_file = head_engine->engine_file;
-    printf("-> loading head engine: %s\n", eng_file.c_str());
+    std::string engine_file_path = head_engine->engine_file;
+    printf("-> loading head engine: %s\n", engine_file_path.c_str());
     
     std::unordered_map<std::string, std::shared_ptr<nv::Tensor>> external_bindings;
     for (const auto& input_pair : head_engine->inputs) {
@@ -231,7 +231,7 @@ void VadModel::load_head() {
         external_bindings[k] = nets_[ext_net]->bindings[ext_name];
     }
 
-    nets_["head"] = std::make_shared<nv::Net>(eng_file, runtime_.get(), external_bindings);
+    nets_["head"] = std::make_shared<nv::Net>(engine_file_path, runtime_.get(), external_bindings);
 
     if (head_engine->use_graph) {
         nets_["head"]->EnableCudaGraph(stream_);
