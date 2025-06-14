@@ -20,31 +20,49 @@
 #include <iostream>
 #include <dlfcn.h>
 #include <NvInferRuntime.h>
+#include <sstream>
 
 namespace autoware::tensorrt_vad
 {
 
+// シンプルなロガー実装（内部使用）
+class SimpleVadLogger : public VadLogger {
+public:
+    void log(LogLevel level, const std::string& message) override {
+        // 何もしない（サイレント）、または必要に応じて実装
+        // RosVadLoggerがデフォルトとして推奨される
+    }
+};
+
 // Loggerクラス（VadModel内で使用）
 class Logger : public nvinfer1::ILogger {
+private:
+    std::shared_ptr<VadLogger> custom_logger_;
+
 public:
+    Logger(std::shared_ptr<VadLogger> logger) : custom_logger_(logger) {}
+    
     void log(nvinfer1::ILogger::Severity severity, const char* msg) noexcept override {
         // Only print error messages
-        if (severity == nvinfer1::ILogger::Severity::kERROR) {
-            std::cerr << msg << std::endl;
+        if (severity == nvinfer1::ILogger::Severity::kERROR && custom_logger_) {
+            custom_logger_->error(std::string(msg));
         }
     }
 };
 
 // VadModelクラスの実装
-VadModel::VadModel(
-    const VadConfig& config)
+VadModel::VadModel(const VadConfig& config)
     : initialized_(false), stream_(nullptr), is_first_frame_(true), config_(config)
 {
+    // シンプルなロガーをデフォルトとして使用（サイレント）
+    // 実際の使用ではRosVadLoggerを推奨
+    logger_ = std::make_shared<SimpleVadLogger>();
+    
     // 初期化を実行
     runtime_ = create_runtime();
     
     if (!load_plugin(config.plugins_path)) {
-        std::cerr << "Failed to load plugin" << std::endl;
+        log_error("Failed to load plugin");
         return;
     }
     
@@ -52,7 +70,28 @@ VadModel::VadModel(
     
     nets_ = init_engines(config.nets_config);
     
-    printf("[INFO] warm_up=%d\n", config.warm_up_num);
+    log_info("warm_up=" + std::to_string(config.warm_up_num));
+    warm_up(config.warm_up_num);
+    
+    initialized_ = true;
+}
+
+VadModel::VadModel(const VadConfig& config, std::shared_ptr<VadLogger> logger)
+    : initialized_(false), stream_(nullptr), is_first_frame_(true), config_(config), logger_(logger)
+{
+    // 初期化を実行
+    runtime_ = create_runtime();
+    
+    if (!load_plugin(config.plugins_path)) {
+        log_error("Failed to load plugin");
+        return;
+    }
+    
+    cudaStreamCreate(&stream_);
+    
+    nets_ = init_engines(config.nets_config);
+    
+    log_info("warm_up=" + std::to_string(config.warm_up_num));
     warm_up(config.warm_up_num);
     
     initialized_ = true;
@@ -71,20 +110,41 @@ VadModel::~VadModel()
     initialized_ = false;
 }
 
+void VadModel::set_logger(std::shared_ptr<VadLogger> logger) {
+    logger_ = logger;
+}
+
+// ロガーヘルパー関数の実装
+void VadModel::log_debug(const std::string& message) {
+    if (logger_) logger_->debug(message);
+}
+
+void VadModel::log_info(const std::string& message) {
+    if (logger_) logger_->info(message);
+}
+
+void VadModel::log_warn(const std::string& message) {
+    if (logger_) logger_->warn(message);
+}
+
+void VadModel::log_error(const std::string& message) {
+    if (logger_) logger_->error(message);
+}
+
 std::unique_ptr<nvinfer1::IRuntime, std::function<void(nvinfer1::IRuntime*)>> VadModel::create_runtime() {
-    static Logger logger;  // staticで宣言してライフタイムを保証
+    static std::unique_ptr<Logger> logger_instance = std::make_unique<Logger>(logger_);
     auto runtime_deleter = [](nvinfer1::IRuntime *runtime) {};
     std::unique_ptr<nvinfer1::IRuntime, decltype(runtime_deleter)> runtime{
-        nvinfer1::createInferRuntime(logger), runtime_deleter};
+        nvinfer1::createInferRuntime(*logger_instance), runtime_deleter};
     return runtime;
 }
 
 bool VadModel::load_plugin(const std::string& plugin_dir) {
     void* h_ = dlopen(plugin_dir.c_str(), RTLD_NOW);
-    printf("[INFO] loading plugin from: %s\n", plugin_dir.c_str());
+    log_info("loading plugin from: " + plugin_dir);
     if (!h_) {
         const char* error = dlerror();
-        std::cerr << "Failed to load library: " << error << std::endl;
+        log_error("Failed to load library: " + std::string(error ? error : "unknown error"));
         return false;
     }
     return true;
@@ -102,7 +162,7 @@ std::unordered_map<std::string, std::shared_ptr<nv::Net>> VadModel::init_engines
         
         std::string engine_name = engine.name;
         std::string engine_file_path = engine.engine_file;
-        printf("-> engine: %s\n", engine_name.c_str());
+        log_info("-> engine: " + engine_name);
         
         std::unordered_map<std::string, std::shared_ptr<nv::Tensor>> external_bindings;
         // reuse memory
@@ -111,7 +171,7 @@ std::unordered_map<std::string, std::shared_ptr<nv::Net>> VadModel::init_engines
             const auto& ext_map = input_pair.second;      
             std::string ext_net = ext_map.at("net");
             std::string ext_name = ext_map.at("name");
-            printf("%s <- %s[%s]\n", k.c_str(), ext_net.c_str(), ext_name.c_str());
+            log_info(k + " <- " + ext_net + "[" + ext_name + "]");
             external_bindings[k] = nets[ext_net]->bindings[ext_name];
         }
 
@@ -214,12 +274,12 @@ void VadModel::load_head() {
         [](const NetConfig& engine) { return engine.name == "head"; });
     
     if (head_engine == config_.nets_config.end()) {
-        std::cerr << "Head engine configuration not found" << std::endl;
+        log_error("Head engine configuration not found");
         return;
     }
     
     std::string engine_file_path = head_engine->engine_file;
-    printf("-> loading head engine: %s\n", engine_file_path.c_str());
+    log_info("-> loading head engine: " + engine_file_path);
     
     std::unordered_map<std::string, std::shared_ptr<nv::Tensor>> external_bindings;
     for (const auto& input_pair : head_engine->inputs) {
@@ -227,7 +287,7 @@ void VadModel::load_head() {
         const auto& ext_map = input_pair.second;      
         std::string ext_net = ext_map.at("net");
         std::string ext_name = ext_map.at("name");
-        printf("%s <- %s[%s]\n", k.c_str(), ext_net.c_str(), ext_name.c_str());
+        log_info(k + " <- " + ext_net + "[" + ext_name + "]");
         external_bindings[k] = nets_[ext_net]->bindings[ext_name];
     }
 

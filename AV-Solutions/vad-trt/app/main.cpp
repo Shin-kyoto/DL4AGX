@@ -66,6 +66,7 @@ namespace fs = std::filesystem;
 
 #include "visualize.hpp"  
 #include "vad_model.hpp"
+#include "ros_vad_logger.hpp"
 
 #include <rclcpp/rclcpp.hpp>
 #include <autoware_planning_msgs/msg/trajectory.hpp>
@@ -1035,7 +1036,8 @@ int main(int argc, char** argv) {
   const auto& vad_config = node->getVadConfig();
 
   // VadModelを初期化
-  autoware::tensorrt_vad::VadModel vad_model(vad_config);
+  auto ros_logger = std::make_shared<autoware::tensorrt_vad::RosVadLogger>(node);
+  autoware::tensorrt_vad::VadModel vad_model(vad_config, ros_logger);
 
   EventTimer timer;
   std::string data_dir = cfg_dir.string() + "/data/";

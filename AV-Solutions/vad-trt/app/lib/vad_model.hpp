@@ -31,6 +31,27 @@ using json = nlohmann::json;
 namespace autoware::tensorrt_vad
 {
 
+// ログレベル定義
+enum class LogLevel {
+  DEBUG,
+  INFO,
+  WARN,
+  ERROR
+};
+
+// ロガーインターフェース
+class VadLogger {
+public:
+  virtual ~VadLogger() = default;
+  virtual void log(LogLevel level, const std::string& message) = 0;
+  
+  // 便利なメソッド
+  void debug(const std::string& message) { log(LogLevel::DEBUG, message); }
+  void info(const std::string& message) { log(LogLevel::INFO, message); }
+  void warn(const std::string& message) { log(LogLevel::WARN, message); }
+  void error(const std::string& message) { log(LogLevel::ERROR, message); }
+};
+
 // VAD推論の入力データ構造
 struct VadInputData
 {
@@ -104,17 +125,25 @@ private:
 };
 
 // VADモデルクラス - CUDA/TensorRTを用いた推論を担当
+// 注意: デフォルトはサイレントロガーです。実際の使用ではRosVadLoggerの使用を推奨します。
+// 例: VadModel model(config, std::make_shared<RosVadLogger>(node));
 class VadModel
 {
 public:
-  // コンストラクタ
+  // コンストラクタ（サイレントロガーを使用）
   VadModel(const VadConfig& config);
+
+  // ロガー付きコンストラクタ（推奨）
+  VadModel(const VadConfig& config, std::shared_ptr<VadLogger> logger);
 
   // デストラクタ
   ~VadModel();
 
   // モデルの初期化
   [[nodiscard]] bool initialize(const std::string & model_path);
+
+  // ロガーの設定
+  void set_logger(std::shared_ptr<VadLogger> logger);
 
   // メイン推論API
   [[nodiscard]] std::optional<VadOutputData> infer(const VadInputData & input);
@@ -132,6 +161,9 @@ public:
   // 設定情報の保存
   VadConfig config_;
 
+  // ロガーインスタンス
+  std::shared_ptr<VadLogger> logger_;
+
 private:
   // メンバ関数
   std::unique_ptr<nvinfer1::IRuntime, std::function<void(nvinfer1::IRuntime*)>> create_runtime();
@@ -147,6 +179,12 @@ private:
   void release_network(const std::string& network_name);
   void load_head();
   VadOutputData postprocess(const std::string& head_name, int32_t cmd);
+  
+  // ロガーヘルパー関数
+  void log_debug(const std::string& message);
+  void log_info(const std::string& message);
+  void log_warn(const std::string& message);
+  void log_error(const std::string& message);
 };
 
 }  // namespace autoware::tensorrt_vad
