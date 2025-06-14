@@ -93,6 +93,60 @@ Eigen::Quaternionf aw2ns_quaternion(const Eigen::Quaternionf& q_aw) {
     return q_rotation * q_aw;
 }
 
+unsigned char* convert_normalized_to_rgb(const std::vector<float>& normalized_data) {
+    const int src_width = 640;
+    const int src_height = 384;
+    const int dst_width = 1600;
+    const int dst_height = 960;
+
+    // 正規化の逆変換用パラメータ
+    float mean[3] = {103.530f, 116.280f, 123.675f};
+    float std[3] = {1.0f, 1.0f, 1.0f};
+    
+    // まず元の正規化データから一時的なRGB画像を作成
+    const int channels = 3;
+    unsigned char* temp_rgb = new unsigned char[src_width * src_height * channels];
+    
+    // CHW形式（正規化）からHWC形式（RGB）に変換
+    for (int h = 0; h < src_height; ++h) {
+        for (int w = 0; w < src_width; ++w) {
+            for (int c = 0; c < channels; ++c) {
+                // CHW形式でのソースインデックス
+                int src_idx = c * src_height * src_width + h * src_width + w;
+                
+                // HWC形式（RGB）でのデスティネーションインデックス
+                int dst_idx = (h * src_width + w) * channels + (2 - c);  // BGRからRGBに変換
+                
+                // 正規化を逆にして、unsigned charに変換
+                float pixel_value = normalized_data[src_idx] * std[c] + mean[c];
+                temp_rgb[dst_idx] = static_cast<unsigned char>(std::max(0.0f, std::min(255.0f, pixel_value)));
+            }
+        }
+    }
+    
+    // 拡大後のRGB画像用にメモリを確保
+    unsigned char* rgb_data = new unsigned char[dst_width * dst_height * channels];
+    
+    // stbir_resize_uint8を使用してリサイズ
+    int resize_result = stbir_resize_uint8(
+        temp_rgb, src_width, src_height, 0,
+        rgb_data, dst_width, dst_height, 0,
+        channels
+    );
+    
+    // 一時メモリを解放
+    delete[] temp_rgb;
+    
+    // リサイズ失敗の場合のエラーハンドリング
+    if (!resize_result) {
+        std::cerr << "画像のリサイズに失敗しました" << std::endl;
+        delete[] rgb_data;
+        return nullptr;
+    }
+    
+    return rgb_data;
+}
+
 class VADNode : public rclcpp::Node 
 {
 public:
@@ -1079,11 +1133,12 @@ int main(int argc, char** argv) {
     viz_dir = cfg_dir.string() + "/" + viz_dir;
 
     std::vector<unsigned char*> images;
-    for( std::string image_name: cfg["images"]) {    
-      std::string image_pth = data_dir + std::to_string(frame_id) + "/" + image_name;
-      
-      int32_t width, height, channels;
-      images.push_back(stbi_load(image_pth.c_str(), &width, &height, &channels, 0));
+    
+    // 各カメラからの画像をRGBに変換
+    for (int cam_idx = 0; cam_idx < 6; ++cam_idx) {
+        const auto& normalized_img = subscribed_image_dict[frame_id][cam_idx];
+        unsigned char* rgb_img = convert_normalized_to_rgb(normalized_img);
+        images.push_back(rgb_img);
     }
     std::string font_path = cfg_dir.string() + "/" + cfg["font_path"].get<std::string>();
 
