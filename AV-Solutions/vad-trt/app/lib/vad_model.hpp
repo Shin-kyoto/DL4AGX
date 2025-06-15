@@ -142,9 +142,6 @@ public:
   // モデルの初期化
   [[nodiscard]] bool initialize(const std::string & model_path);
 
-  // ロガーの設定
-  void set_logger(std::shared_ptr<VadLogger> logger);
-
   // メイン推論API
   [[nodiscard]] std::optional<VadOutputData> infer(const VadInputData & input);
 
@@ -179,12 +176,6 @@ private:
   void release_network(const std::string& network_name);
   void load_head();
   VadOutputData postprocess(const std::string& head_name, int32_t cmd);
-  
-  // ロガーヘルパー関数
-  void log_debug(const std::string& message);
-  void log_info(const std::string& message);
-  void log_warn(const std::string& message);
-  void log_error(const std::string& message);
 };
 
 }  // namespace autoware::tensorrt_vad

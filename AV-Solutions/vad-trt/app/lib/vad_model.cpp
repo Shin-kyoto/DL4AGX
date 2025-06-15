@@ -62,7 +62,7 @@ VadModel::VadModel(const VadConfig& config)
     runtime_ = create_runtime();
     
     if (!load_plugin(config.plugins_path)) {
-        log_error("Failed to load plugin");
+        logger_->error("Failed to load plugin");
         return;
     }
     
@@ -70,7 +70,7 @@ VadModel::VadModel(const VadConfig& config)
     
     nets_ = init_engines(config.nets_config);
     
-    log_info("warm_up=" + std::to_string(config.warm_up_num));
+    logger_->info("warm_up=" + std::to_string(config.warm_up_num));
     warm_up(config.warm_up_num);
     
     initialized_ = true;
@@ -83,7 +83,7 @@ VadModel::VadModel(const VadConfig& config, std::shared_ptr<VadLogger> logger)
     runtime_ = create_runtime();
     
     if (!load_plugin(config.plugins_path)) {
-        log_error("Failed to load plugin");
+        logger_->error("Failed to load plugin");
         return;
     }
     
@@ -91,7 +91,7 @@ VadModel::VadModel(const VadConfig& config, std::shared_ptr<VadLogger> logger)
     
     nets_ = init_engines(config.nets_config);
     
-    log_info("warm_up=" + std::to_string(config.warm_up_num));
+    logger_->info("warm_up=" + std::to_string(config.warm_up_num));
     warm_up(config.warm_up_num);
     
     initialized_ = true;
@@ -110,27 +110,6 @@ VadModel::~VadModel()
     initialized_ = false;
 }
 
-void VadModel::set_logger(std::shared_ptr<VadLogger> logger) {
-    logger_ = logger;
-}
-
-// ロガーヘルパー関数の実装
-void VadModel::log_debug(const std::string& message) {
-    if (logger_) logger_->debug(message);
-}
-
-void VadModel::log_info(const std::string& message) {
-    if (logger_) logger_->info(message);
-}
-
-void VadModel::log_warn(const std::string& message) {
-    if (logger_) logger_->warn(message);
-}
-
-void VadModel::log_error(const std::string& message) {
-    if (logger_) logger_->error(message);
-}
-
 std::unique_ptr<nvinfer1::IRuntime, std::function<void(nvinfer1::IRuntime*)>> VadModel::create_runtime() {
     static std::unique_ptr<Logger> logger_instance = std::make_unique<Logger>(logger_);
     auto runtime_deleter = [](nvinfer1::IRuntime *runtime) {};
@@ -141,10 +120,10 @@ std::unique_ptr<nvinfer1::IRuntime, std::function<void(nvinfer1::IRuntime*)>> Va
 
 bool VadModel::load_plugin(const std::string& plugin_dir) {
     void* h_ = dlopen(plugin_dir.c_str(), RTLD_NOW);
-    log_info("loading plugin from: " + plugin_dir);
+    logger_->info("loading plugin from: " + plugin_dir);
     if (!h_) {
         const char* error = dlerror();
-        log_error("Failed to load library: " + std::string(error ? error : "unknown error"));
+        logger_->error("Failed to load library: " + std::string(error ? error : "unknown error"));
         return false;
     }
     return true;
@@ -162,7 +141,7 @@ std::unordered_map<std::string, std::shared_ptr<nv::Net>> VadModel::init_engines
         
         std::string engine_name = engine.name;
         std::string engine_file_path = engine.engine_file;
-        log_info("-> engine: " + engine_name);
+        logger_->info("-> engine: " + engine_name);
         
         std::unordered_map<std::string, std::shared_ptr<nv::Tensor>> external_bindings;
         // reuse memory
@@ -171,7 +150,7 @@ std::unordered_map<std::string, std::shared_ptr<nv::Net>> VadModel::init_engines
             const auto& ext_map = input_pair.second;      
             std::string ext_net = ext_map.at("net");
             std::string ext_name = ext_map.at("name");
-            log_info(k + " <- " + ext_net + "[" + ext_name + "]");
+            logger_->info(k + " <- " + ext_net + "[" + ext_name + "]");
             external_bindings[k] = nets[ext_net]->bindings[ext_name];
         }
 
@@ -274,12 +253,12 @@ void VadModel::load_head() {
         [](const NetConfig& engine) { return engine.name == "head"; });
     
     if (head_engine == config_.nets_config.end()) {
-        log_error("Head engine configuration not found");
+        logger_->error("Head engine configuration not found");
         return;
     }
     
     std::string engine_file_path = head_engine->engine_file;
-    log_info("-> loading head engine: " + engine_file_path);
+    logger_->info("-> loading head engine: " + engine_file_path);
     
     std::unordered_map<std::string, std::shared_ptr<nv::Tensor>> external_bindings;
     for (const auto& input_pair : head_engine->inputs) {
@@ -287,7 +266,7 @@ void VadModel::load_head() {
         const auto& ext_map = input_pair.second;      
         std::string ext_net = ext_map.at("net");
         std::string ext_name = ext_map.at("name");
-        log_info(k + " <- " + ext_net + "[" + ext_name + "]");
+        logger_->info(k + " <- " + ext_net + "[" + ext_name + "]");
         external_bindings[k] = nets_[ext_net]->bindings[ext_name];
     }
 
