@@ -60,4 +60,4 @@ public:
 
 }  // namespace autoware::tensorrt_vad
 
-#endif  // AUTOWARE_TENSORRT_VAD_ROS_VAD_LOGGER_HPP_ 
+#endif  // AUTOWARE_TENSORRT_VAD_ROS_VAD_LOGGER_HPP_
