@@ -22,10 +22,7 @@ namespace autoware::tensorrt_vad
 {
 
 /**
- * @brief ROS2用のVadLogger実装（推奨デフォルト）
- * 
- * VadModelのデフォルトはサイレントロガーですが、実際の使用では
- * このRosVadLoggerの使用を強く推奨します。
+ * @brief ROS2用のVadLogger実装
  * 
  * 使用例:
  * auto ros_logger = std::make_shared<RosVadLogger>(node);

@@ -23,10 +23,7 @@
 #include <unordered_map>
 #include <cuda_runtime.h>
 #include <NvInfer.h>
-#include <nlohmann/json.hpp>
 #include "net.h"
-
-using json = nlohmann::json;
 
 namespace autoware::tensorrt_vad
 {
@@ -52,15 +49,6 @@ public:
   void error(const std::string& message) { log(LogLevel::ERROR, message); }
 };
 
-// シンプルなロガー実装（内部使用）
-class SimpleVadLogger : public VadLogger {
-public:
-    void log(LogLevel level, const std::string& message) override {
-        // 何もしない（サイレント）、または必要に応じて実装
-        // RosVadLoggerがデフォルトとして推奨される
-    }
-};
-
 // Loggerクラス（VadModel内で使用）
 class Logger : public nvinfer1::ILogger {
 private:
@@ -82,10 +70,6 @@ struct VadInputData
 {
   // カメラ画像データ（複数カメラ対応）
   std::vector<float> camera_images_;
-
-  // 前回のBEV特徴量（時系列処理用）
-  // nets["head_no_prev"]->bindings["out.bev_embed"]
-  // std::vector<float> prev_bev_{};
 
   // シフト情報（img_metas.0[shift]）
   std::vector<float> shift_;
@@ -154,10 +138,10 @@ template<typename LoggerType>
 class VadModel
 {
 public:
-  // loggerはVadLoggerを継承したclassのみ受け取る
   VadModel(const VadConfig& config, std::shared_ptr<LoggerType> logger)
     : initialized_(false), stream_(nullptr), is_first_frame_(true), config_(config), logger_(std::move(logger))
   {
+    // loggerはVadLoggerを継承したclassのみ受け取る
     static_assert(std::is_base_of_v<VadLogger, LoggerType>, 
       "LoggerType must be VadLogger or derive from VadLogger.");    
     // 初期化を実行
@@ -213,7 +197,7 @@ public:
     // VadOutputDataに出力を変換
     VadOutputData output = postprocess(head_name, vad_input.command_);
 
-    // 最初のフレームなら以下の処理を行う
+    // 最初のフレームなら"head_no_prev"をリリースして"head"をload
     if (is_first_frame_) {
       release_network("head_no_prev");
       load_head();
