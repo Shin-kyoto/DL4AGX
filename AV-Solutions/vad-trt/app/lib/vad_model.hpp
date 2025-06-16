@@ -150,41 +150,16 @@ private:
 };
 
 // VADモデルクラス - CUDA/TensorRTを用いた推論を担当
-// 注意: デフォルトはサイレントロガーです。実際の使用ではRosVadLoggerの使用を推奨します。
-// 例: VadModel model(config, std::make_shared<RosVadLogger>(node));
+template<typename LoggerType>
 class VadModel
 {
 public:
-  // コンストラクタ（サイレントロガーを使用）
-  VadModel(const VadConfig& config)
-    : initialized_(false), stream_(nullptr), is_first_frame_(true), config_(config)
+  // loggerはVadLoggerを継承したclassのみ受け取る
+  VadModel(const VadConfig& config, std::shared_ptr<LoggerType> logger)
+    : initialized_(false), stream_(nullptr), is_first_frame_(true), config_(config), logger_(std::move(logger))
   {
-    // シンプルなロガーをデフォルトとして使用（サイレント）
-    // 実際の使用ではRosVadLoggerを推奨
-    logger_ = std::make_shared<SimpleVadLogger>();
-    
-    // 初期化を実行
-    runtime_ = create_runtime();
-    
-    if (!load_plugin(config.plugins_path)) {
-      logger_->error("Failed to load plugin");
-      return;
-    }
-    
-    cudaStreamCreate(&stream_);
-    
-    nets_ = init_engines(config.nets_config);
-    
-    logger_->info("warm_up=" + std::to_string(config.warm_up_num));
-    warm_up(config.warm_up_num);
-    
-    initialized_ = true;
-  }
-
-  // ロガー付きコンストラクタ（推奨）
-  VadModel(const VadConfig& config, std::shared_ptr<VadLogger> logger)
-    : initialized_(false), stream_(nullptr), is_first_frame_(true), config_(config), logger_(logger)
-  {
+    static_assert(std::is_base_of_v<VadLogger, LoggerType>, 
+      "LoggerType must be VadLogger or derive from VadLogger.");    
     // 初期化を実行
     runtime_ = create_runtime();
     
