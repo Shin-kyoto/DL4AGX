@@ -41,24 +41,20 @@ public:
     explicit RosVadLogger(const rclcpp::Logger& logger) 
         : logger_(logger) {}
 
-    void log(LogLevel level, const std::string& message) override {
-        switch (level) {
-            case LogLevel::DEBUG:
-                RCLCPP_DEBUG(logger_, "%s", message.c_str());
-                break;
-            case LogLevel::INFO:
-                RCLCPP_INFO(logger_, "%s", message.c_str());
-                break;
-            case LogLevel::WARN:
-                RCLCPP_WARN(logger_, "%s", message.c_str());
-                break;
-            case LogLevel::ERROR:
-                RCLCPP_ERROR(logger_, "%s", message.c_str());
-                break;
-            default:
-                RCLCPP_INFO(logger_, "[UNKNOWN] %s", message.c_str());
-                break;
-        }
+    void debug(const std::string& message) override {
+        RCLCPP_DEBUG(logger_, "%s", message.c_str());
+    }
+
+    void info(const std::string& message) override {
+        RCLCPP_INFO(logger_, "%s", message.c_str());
+    }
+
+    void warn(const std::string& message) override {
+        RCLCPP_WARN(logger_, "%s", message.c_str());
+    }
+
+    void error(const std::string& message) override {
+        RCLCPP_ERROR(logger_, "%s", message.c_str());
     }
 };
 

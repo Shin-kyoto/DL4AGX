@@ -28,25 +28,16 @@
 namespace autoware::tensorrt_vad
 {
 
-// ログレベル定義
-enum class LogLevel {
-  DEBUG,
-  INFO,
-  WARN,
-  ERROR
-};
-
 // ロガーインターフェース
 class VadLogger {
 public:
   virtual ~VadLogger() = default;
-  virtual void log(LogLevel level, const std::string& message) = 0;
   
-  // 便利なメソッド
-  void debug(const std::string& message) { log(LogLevel::DEBUG, message); }
-  void info(const std::string& message) { log(LogLevel::INFO, message); }
-  void warn(const std::string& message) { log(LogLevel::WARN, message); }
-  void error(const std::string& message) { log(LogLevel::ERROR, message); }
+  // 各ログレベルのメソッドを純粋仮想関数として定義
+  virtual void debug(const std::string& message) = 0;
+  virtual void info(const std::string& message) = 0;
+  virtual void warn(const std::string& message) = 0;
+  virtual void error(const std::string& message) = 0;
 };
 
 // Loggerクラス（VadModel内で使用）
