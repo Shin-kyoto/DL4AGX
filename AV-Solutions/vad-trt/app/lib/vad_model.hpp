@@ -23,7 +23,6 @@
 #include <unordered_map>
 #include <cuda_runtime.h>
 #include <NvInfer.h>
-#include <NvOnnxParser.h>
 #include <dlfcn.h>
 #include "net.h"
 
