@@ -61,7 +61,6 @@ public:
 // VAD推論の入力データ構造
 struct VadInputData
 {
-
   // カメラ画像データ（複数カメラ対応）
   std::vector<float> camera_images_;
 
