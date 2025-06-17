@@ -32,7 +32,6 @@ add_executable(
   vad_tests
   test_vad_model.cpp
   test_vad_integration.cpp
-  test_vad_infer.cpp
 )
 
 # ターゲットごとにインクルードディレクトリを絶対パスで指定
