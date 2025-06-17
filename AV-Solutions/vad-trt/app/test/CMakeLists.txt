@@ -9,15 +9,6 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# In-source buildを禁止
-if(${CMAKE_SOURCE_DIR} STREQUAL ${CMAKE_BINARY_DIR})
-    message(FATAL_ERROR "In-source builds are not allowed. Please create a separate build directory and run cmake from there.\\n"
-                        "Recommended commands:\\n"
-                        "  mkdir build\\n"
-                        "  cd build\\n"
-                        "  cmake ..")
-endif()
-
 # CUDAとTensorRTの最小限の設定
 find_package(CUDA REQUIRED)
 
