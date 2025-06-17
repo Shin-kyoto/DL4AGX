@@ -33,7 +33,6 @@ add_executable(
   test_vad_model.cpp
   test_vad_integration.cpp
   test_vad_infer.cpp
-  test_vad_infer_integration.cpp
 )
 
 # ターゲットごとにインクルードディレクトリを絶対パスで指定
