@@ -83,24 +83,7 @@ TEST_F(VadModelTest, VadOutputDataStructure)
     EXPECT_EQ(output_data.predicted_trajectory_.size(), 12);
 }
 
-// 3. ロガー機能のモックテスト
-TEST_F(VadModelTest, LoggerFunctionality)
-{
-    // 期待される呼び出しを設定
-    EXPECT_CALL(*mock_logger_, info(::testing::A<const std::string&>())).Times(1);
-    EXPECT_CALL(*mock_logger_, warn(::testing::A<const std::string&>())).Times(1);
-    EXPECT_CALL(*mock_logger_, error(::testing::A<const std::string&>())).Times(1);
-
-    // VadLoggerのメソッドを呼び出す
-    mock_logger_->info("Test info message");
-    mock_logger_->warn("Test warn message");
-    mock_logger_->error("Test error message");
-
-    // モックの検証はスコープを抜ける際に自動的に行われる
-}
-
-
-// 4. VadConfig構造体の検証
+// 3. VadConfig構造体の検証
 TEST_F(VadModelTest, VadConfigStructure)
 {
     EXPECT_EQ(config_.plugins_path, "/tmp/test_plugin.so");
@@ -114,7 +97,7 @@ TEST_F(VadModelTest, VadConfigStructure)
     EXPECT_FALSE(net_conf.use_graph);
 }
 
-// 5. NetworkParamクラスの基本的な振る舞いをテスト
+// 4. NetworkParamクラスの基本的な振る舞いをテスト
 TEST_F(VadModelTest, NetworkParamClass)
 {
     std::string onnx_path = "model.onnx";
