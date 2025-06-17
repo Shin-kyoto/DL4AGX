@@ -69,16 +69,13 @@ TEST_F(VadModelTest, VadOutputDataStructure)
 
     // デフォルトのサイズを確認
     EXPECT_EQ(output_data.predicted_trajectory_.size(), 0);
-    // EXPECT_EQ(output_data.object_predictions_.size(), 0); // 無効化されているため削除
 
     // 値を代入して確認
     output_data.predicted_trajectory_ = {
         1.0, 0.1, 2.0, 0.2, 3.0, 0.3, 4.0, 0.4, 5.0, 0.5, 6.0, 0.6
     };
-    // output_data.object_predictions_.resize(10); // 無効化されているため削除
 
     EXPECT_EQ(output_data.predicted_trajectory_.size(), 12);
-    // EXPECT_EQ(output_data.object_predictions_.size(), 10); // 無効化されているため削除
 }
 
 // 3. ロガー機能のモックテスト
