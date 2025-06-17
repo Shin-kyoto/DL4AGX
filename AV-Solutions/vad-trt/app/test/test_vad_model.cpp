@@ -44,21 +44,26 @@ TEST_F(VadModelTest, VadInputDataStructure)
 {
     VadInputData input_data;
 
-    // デフォルトのサイズと値を確認
-    EXPECT_EQ(input_data.camera_images_.size(), 0); // コンストラクタでは初期化しないので0のまま
-    EXPECT_EQ(input_data.shift_.size(), 3);
-    EXPECT_EQ(input_data.lidar2img_.size(), 96); // 6 * 4 * 4
-    EXPECT_EQ(input_data.can_bus_.size(), 18);
-    EXPECT_EQ(input_data.command_, 2); // デフォルトコンストラクタで2に設定
+    // デフォルトコンストラクタでは各ベクターは空のはず
+    EXPECT_EQ(input_data.camera_images_.size(), 0);
+    EXPECT_EQ(input_data.shift_.size(), 0);
+    EXPECT_EQ(input_data.lidar2img_.size(), 0);
+    EXPECT_EQ(input_data.can_bus_.size(), 0);
+    EXPECT_EQ(input_data.command_, 2); // commandのデフォルト値は2
 
     // 値を代入して確認
     const size_t correct_image_size = 6 * 3 * 256 * 704;
     input_data.camera_images_.resize(correct_image_size);
     input_data.shift_ = {1.0f, 2.0f, 3.0f};
+    input_data.lidar2img_.resize(96);
+    input_data.can_bus_.resize(18);
     input_data.command_ = 1;
 
     EXPECT_EQ(input_data.camera_images_.size(), correct_image_size);
+    EXPECT_EQ(input_data.shift_.size(), 3);
     EXPECT_FLOAT_EQ(input_data.shift_[1], 2.0f);
+    EXPECT_EQ(input_data.lidar2img_.size(), 96);
+    EXPECT_EQ(input_data.can_bus_.size(), 18);
     EXPECT_EQ(input_data.command_, 1);
 }
 

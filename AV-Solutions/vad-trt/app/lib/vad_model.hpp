@@ -61,15 +61,6 @@ public:
 // VAD推論の入力データ構造
 struct VadInputData
 {
-  // デフォルトコンストラクタで各メンバーを初期化
-  VadInputData()
-    : shift_(3, 0.0f),                // x, y, yaw を0で初期化
-      lidar2img_(6 * 4 * 4, 0.0f),    // 6つの4x4行列を0で初期化
-      can_bus_(18, 0.0f),             // 18要素を0で初期化
-      command_(2)                     // デフォルトコマンドを2 (straight) に設定
-  {
-    // camera_images_はサイズが大きいため、必要に応じて呼び出し側でリサイズ
-  }
 
   // カメラ画像データ（複数カメラ対応）
   std::vector<float> camera_images_;
