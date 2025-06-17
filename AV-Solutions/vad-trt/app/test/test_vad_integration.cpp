@@ -71,4 +71,4 @@ TEST_F(VadIntegrationTest, ModelInitializationWithRealEngines)
     ASSERT_TRUE(model->initialized_) << "Model should be marked as initialized.";
 }
 
-}  // namespace autoware::tensorrt_vad 
+}  // namespace autoware::tensorrt_vad

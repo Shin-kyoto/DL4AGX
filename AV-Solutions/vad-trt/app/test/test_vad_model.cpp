@@ -123,4 +123,4 @@ TEST_F(VadModelTest, NetworkParamClass)
     EXPECT_EQ(param.trt_precision(), trt_precision);
 }
 
-}  // namespace autoware::tensorrt_vad 
+}  // namespace autoware::tensorrt_vad

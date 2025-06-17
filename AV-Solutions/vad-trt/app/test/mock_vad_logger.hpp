@@ -28,4 +28,4 @@ public:
 
 }  // namespace autoware::tensorrt_vad
 
-#endif  // MOCK_VAD_LOGGER_HPP_ 
+#endif  // MOCK_VAD_LOGGER_HPP_

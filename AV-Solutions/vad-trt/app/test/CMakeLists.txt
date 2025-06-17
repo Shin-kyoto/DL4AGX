@@ -136,4 +136,4 @@ add_custom_target(test_help
 
 # テスト実行設定
 enable_testing()
-add_test(NAME VadModelTests COMMAND vad_tests) 
+add_test(NAME VadModelTests COMMAND vad_tests)
