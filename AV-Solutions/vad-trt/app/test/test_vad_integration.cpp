@@ -19,8 +19,7 @@ protected:
     {
         mock_logger_ = std::make_shared<MockVadLogger>();
 
-        // ユーザーの指示通り、demoのparam.yamlで使われている実際のモデルパスを使用して設定
-        // これにより、ダミーファイルではなく、本物のエンジンとプラグインでテストを実行
+        // ダミーファイルではなく、本物のエンジンとプラグインでテストを実行
         const std::string workspace_root = "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app";
 
         config_.plugins_path = workspace_root + "/demo/libplugins.so";
