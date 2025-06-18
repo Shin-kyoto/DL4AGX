@@ -10,8 +10,8 @@
 #include "mock_vad_logger.hpp"
 #include "vad_model.hpp"
 
-namespace autoware::tensorrt_vad
-{
+namespace autoware::tensorrt_vad {
+namespace test {
 
 // テスト用の設定構造体
 struct TestConfig {
@@ -33,15 +33,12 @@ struct TestConfig {
     } expected_output;
 };
 
-// 設定ファイルからVadConfigとTestConfigを読み込むヘルパー関数
-std::pair<VadConfig, TestConfig> loadConfigFromYaml(const std::string& config_path) {
-    VadConfig vad_config;
-    TestConfig test_config;
-    
+std::pair<VadConfig, TestConfig> load_config_from_yaml(const std::string& config_path) {
     try {
         YAML::Node yaml_config = YAML::LoadFile(config_path);
         const auto& test_config_node = yaml_config["test_config"];
         
+        VadConfig vad_config;
         vad_config.plugins_path = test_config_node["plugins_path"].as<std::string>();
         vad_config.warm_up_num = test_config_node["warm_up_num"].as<int>();
         
@@ -65,7 +62,7 @@ std::pair<VadConfig, TestConfig> loadConfigFromYaml(const std::string& config_pa
             vad_config.nets_config.push_back(net_config);
         }
 
-        // テストデータの設定を読み込む
+        TestConfig test_config;
         const auto& test_data = test_config_node["test_data"];
         const auto& input_data = test_data["input_data"];
         test_config.input_data.bev_embed.src_path = input_data["bev_embed"]["src_path"].as<std::string>();
@@ -76,30 +73,30 @@ std::pair<VadConfig, TestConfig> loadConfigFromYaml(const std::string& config_pa
         test_config.input_data.can_bus = input_data["can_bus"].as<std::vector<float>>();
         test_config.input_data.command = input_data["command"].as<int>();
 
-        // 期待される出力データを読み込む
         const auto& expected_output = test_data["expected_output"];
         test_config.expected_output.trajectory = expected_output["trajectory"].as<std::vector<float>>();
 
+        return {vad_config, test_config};
     } catch (const YAML::Exception& e) {
         throw std::runtime_error("Failed to load config from YAML: " + std::string(e.what()));
     }
-    
-    return {vad_config, test_config};
 }
+
+}  // namespace test
 
 // 統合テスト用のフィクスチャ
 class VadIntegrationTest : public ::testing::Test {
 protected:
     void SetUp() override {
         mock_logger_ = std::make_shared<MockVadLogger>();
-        auto [vad_config, test_config] = loadConfigFromYaml("../test_config.yaml");
+        auto [vad_config, test_config] = test::load_config_from_yaml("../test_config.yaml");
         config_ = vad_config;
         test_config_ = test_config;
     }
 
     std::shared_ptr<MockVadLogger> mock_logger_;
     VadConfig config_;
-    TestConfig test_config_;
+    test::TestConfig test_config_;
 };
 
 // VadModelの初期化が、実際のエンジンファイルを用いて成功することを確認するテスト
@@ -126,7 +123,7 @@ class VadInferIntegrationTest : public ::testing::Test {
 protected:
     void SetUp() override {
         logger_ = std::make_shared<MockVadLogger>();
-        auto [vad_config, test_config] = loadConfigFromYaml("../test_config.yaml");
+        auto [vad_config, test_config] = test::load_config_from_yaml("../test_config.yaml");
         config_ = vad_config;
         test_config_ = test_config;
         
@@ -233,7 +230,7 @@ protected:
 
     std::shared_ptr<MockVadLogger> logger_;
     VadConfig config_;
-    TestConfig test_config_;
+    test::TestConfig test_config_;
     bool integration_test_enabled_ = false;
 };
 
