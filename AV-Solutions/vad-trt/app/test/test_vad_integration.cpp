@@ -6,11 +6,50 @@
 #include <fstream>
 #include <stdexcept>
 #include <dlfcn.h>
+#include <yaml-cpp/yaml.h>
 #include "mock_vad_logger.hpp"
 #include "vad_model.hpp"
 
 namespace autoware::tensorrt_vad
 {
+
+// 設定ファイルからVadConfigを読み込むヘルパー関数
+VadConfig loadConfigFromYaml(const std::string& config_path) {
+    VadConfig config;
+    
+    try {
+        YAML::Node yaml_config = YAML::LoadFile(config_path);
+        const auto& test_config = yaml_config["test_config"];
+        
+        config.plugins_path = test_config["plugins_path"].as<std::string>();
+        config.warm_up_num = test_config["warm_up_num"].as<int>();
+        
+        const auto& nets = test_config["nets"];
+        for (const auto& net : nets) {
+            NetConfig net_config;
+            net_config.name = net.second["name"].as<std::string>();
+            net_config.engine_file = net.second["engine_file"].as<std::string>();
+            net_config.use_graph = net.second["use_graph"].as<bool>();
+            
+            if (net.second["inputs"]) {
+                const auto& inputs = net.second["inputs"];
+                for (const auto& input : inputs) {
+                    std::map<std::string, std::string> input_map;
+                    for (const auto& param : input.second) {
+                        input_map[param.first.as<std::string>()] = param.second.as<std::string>();
+                    }
+                    net_config.inputs[input.first.as<std::string>()] = input_map;
+                }
+            }
+            
+            config.nets_config.push_back(net_config);
+        }
+    } catch (const YAML::Exception& e) {
+        throw std::runtime_error("Failed to load config from YAML: " + std::string(e.what()));
+    }
+    
+    return config;
+}
 
 // 統合テスト用のフィクスチャ
 class VadIntegrationTest : public ::testing::Test {
@@ -18,35 +57,7 @@ protected:
     void SetUp() override
     {
         mock_logger_ = std::make_shared<MockVadLogger>();
-
-        // ダミーファイルではなく、本物のエンジンとプラグインでテストを実行
-        const std::string workspace_root = "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app";
-
-        config_.plugins_path = workspace_root + "/demo/libplugins.so";
-        config_.warm_up_num = 0; // テストなのでウォームアップは不要
-
-        // 初期化に必要なネットワーク設定
-        NetConfig backbone_config;
-        backbone_config.name = "backbone";
-        backbone_config.engine_file = "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/engines/vadv1.extract_img_feat.fp16.engine";
-        backbone_config.use_graph = true;
-        
-        NetConfig head_no_prev_config;
-        head_no_prev_config.name = "head_no_prev";
-        head_no_prev_config.engine_file = "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/engines/vadv1.pts_bbox_head.forward.engine";
-        head_no_prev_config.use_graph = true;
-        // head_no_prevはbackboneの出力に依存するため、入力のマッピング情報を追加
-        // このキー("img_feats")と値("out.img_feats")はモデルの実装に依存する
-        head_no_prev_config.inputs["img_feats"] = {{"net", "backbone"}, {"name", "out.img_feats"}};
-
-        // `head`は最初の`infer`呼び出し時に遅延ロードされるが、設定自体はコンストラクタに渡す必要がある
-        NetConfig head_config;
-        head_config.name = "head";
-        head_config.engine_file = "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/engines/vadv1_prev.pts_bbox_head.forward.engine";
-        head_config.use_graph = true;
-        head_config.inputs["img_feats"] = {{"net", "backbone"}, {"name", "out.img_feats"}};
-
-        config_.nets_config = {backbone_config, head_no_prev_config, head_config};
+        config_ = loadConfigFromYaml("../test_config.yaml");
     }
 
     std::shared_ptr<MockVadLogger> mock_logger_;
@@ -77,21 +88,14 @@ class VadInferIntegrationTest : public ::testing::Test {
 protected:
     void SetUp() override {
         logger_ = std::make_shared<MockVadLogger>();
-        
-        // ソースコードとビルド成果物があるワークスペース
-        const std::string workspace_root = "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX_ns_rosbag/DL4AGX/AV-Solutions/vad-trt/app";
-        // エンジンファイルやプラグインがあるアセットディレクトリ
-        const std::string asset_root = "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app";
-
-        engine_dir_ = asset_root + "/demo/engines";
-        plugin_path_ = asset_root + "/demo/libplugins.so";
+        config_ = loadConfigFromYaml("../test_config.yaml");
         
         // 前提条件のチェック
         bool engines_exist = 
-            std::filesystem::exists(engine_dir_ + "/vadv1.extract_img_feat.fp16.engine") &&
-            std::filesystem::exists(engine_dir_ + "/vadv1_prev.pts_bbox_head.forward.engine") &&
-            std::filesystem::exists(engine_dir_ + "/vadv1.pts_bbox_head.forward.engine");
-        bool plugin_exists = std::filesystem::exists(plugin_path_);
+            std::filesystem::exists(config_.nets_config[0].engine_file) &&
+            std::filesystem::exists(config_.nets_config[1].engine_file) &&
+            std::filesystem::exists(config_.nets_config[2].engine_file);
+        bool plugin_exists = std::filesystem::exists(config_.plugins_path);
         
         int device_count = 0;
         cudaError_t cuda_status = cudaGetDeviceCount(&device_count);
@@ -104,7 +108,7 @@ protected:
         }
 
         // bev_embedはビルドディレクトリからコピーする
-        const std::string src_bev_path = workspace_root + "/build/bev_embed_frame1.bin";
+        const std::string src_bev_path = "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX_ns_rosbag/DL4AGX/AV-Solutions/vad-trt/app/build/bev_embed_frame1.bin";
         const std::string dst_bev_path = "bev_embed_frame1.bin";
         if (std::filesystem::exists(src_bev_path)) {
             std::filesystem::copy(src_bev_path, dst_bev_path, std::filesystem::copy_options::overwrite_existing);
@@ -115,25 +119,25 @@ protected:
 
     VadConfig createRealConfig() {
         VadConfig config;
-        config.plugins_path = plugin_path_;
-        config.warm_up_num = 3;
+        config.plugins_path = config_.plugins_path;
+        config.warm_up_num = config_.warm_up_num;
         
         NetConfig backbone_config;
-        backbone_config.name = "backbone";
-        backbone_config.engine_file = engine_dir_ + "/vadv1.extract_img_feat.fp16.engine";
-        backbone_config.use_graph = true;
+        backbone_config.name = config_.nets_config[0].name;
+        backbone_config.engine_file = config_.nets_config[0].engine_file;
+        backbone_config.use_graph = config_.nets_config[0].use_graph;
         
         NetConfig head_no_prev_config;
-        head_no_prev_config.name = "head_no_prev";
-        head_no_prev_config.engine_file = engine_dir_ + "/vadv1.pts_bbox_head.forward.engine";
-        head_no_prev_config.use_graph = false;
-        head_no_prev_config.inputs["img_feats"] = {{"net", "backbone"}, {"name", "out.img_feats"}};
+        head_no_prev_config.name = config_.nets_config[1].name;
+        head_no_prev_config.engine_file = config_.nets_config[1].engine_file;
+        head_no_prev_config.use_graph = config_.nets_config[1].use_graph;
+        head_no_prev_config.inputs["img_feats"] = config_.nets_config[1].inputs["img_feats"];
         
         NetConfig head_config;
-        head_config.name = "head";
-        head_config.engine_file = engine_dir_ + "/vadv1_prev.pts_bbox_head.forward.engine";
-        head_config.use_graph = false;
-        head_config.inputs["img_feats"] = {{"net", "backbone"}, {"name", "out.img_feats"}};
+        head_config.name = config_.nets_config[2].name;
+        head_config.engine_file = config_.nets_config[2].engine_file;
+        head_config.use_graph = config_.nets_config[2].use_graph;
+        head_config.inputs["img_feats"] = config_.nets_config[2].inputs["img_feats"];
         
         config.nets_config = {backbone_config, head_no_prev_config, head_config};
         return config;
@@ -222,8 +226,7 @@ protected:
     }
 
     std::shared_ptr<MockVadLogger> logger_;
-    std::string engine_dir_;
-    std::string plugin_path_;
+    VadConfig config_;
     bool integration_test_enabled_ = false;
 };
 

@@ -1,0 +1,27 @@
+test_config:
+  # プラグインとエンジンのパス設定
+  plugins_path: "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/libplugins.so"
+  warm_up_num: 0  # テストなのでウォームアップは不要
+  
+  # エンジンの設定
+  nets:
+    backbone:
+      name: "backbone"
+      engine_file: "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/engines/vadv1.extract_img_feat.fp16.engine"
+      use_graph: true
+    head:
+      name: "head"
+      engine_file: "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/engines/vadv1_prev.pts_bbox_head.forward.engine"
+      use_graph: true
+      inputs:
+        img_feats:
+          net: "backbone"
+          name: "out.img_feats"
+    head_no_prev:
+      name: "head_no_prev"
+      engine_file: "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/engines/vadv1.pts_bbox_head.forward.engine"
+      use_graph: true
+      inputs:
+        img_feats:
+          net: "backbone"
+          name: "out.img_feats" 

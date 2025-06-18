@@ -12,6 +12,9 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 # CUDAとTensorRTの最小限の設定
 find_package(CUDA REQUIRED)
 
+# YAML-CPPの設定
+find_package(yaml-cpp REQUIRED)
+
 # TensorRTのパスをシステムパスに直接設定
 # findコマンドの結果から、ライブラリは標準のシステムディレクトリにインストールされていることが判明
 set(TENSORRT_INCLUDE_DIRS /usr/include/x86_64-linux-gnu)
@@ -31,6 +34,7 @@ target_include_directories(vad_tests PRIVATE
     ${LIB_DIR}
     ${CUDA_INCLUDE_DIRS}
     ${TENSORRT_INCLUDE_DIRS}
+    ${YAML_CPP_INCLUDE_DIR}
 )
 
 # ターゲットごとにリンクディレクトリを指定
@@ -87,6 +91,7 @@ target_link_libraries(vad_tests PRIVATE
     nvinfer
     nvonnxparser
     nvinfer_plugin
+    yaml-cpp
 )
 
 # GoogleTestの自動検出を有効化
