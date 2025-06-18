@@ -23,16 +23,14 @@ struct TestConfig {
         struct {
             std::string path;
         } camera_images;
-        struct {
-            std::vector<float> shift;
-            std::vector<float> lidar2img;
-            std::vector<float> can_bus;
-            int command;
-        } input_data;
-        struct {
-            std::vector<float> trajectory;
-        } expected_output;
-    } test_data;
+        std::vector<float> shift;
+        std::vector<float> lidar2img;
+        std::vector<float> can_bus;
+        int command;
+    } input_data;
+    struct {
+        std::vector<float> trajectory;
+    } expected_output;
 };
 
 // 設定ファイルからVadConfigとTestConfigを読み込むヘルパー関数
@@ -69,20 +67,18 @@ std::pair<VadConfig, TestConfig> loadConfigFromYaml(const std::string& config_pa
 
         // テストデータの設定を読み込む
         const auto& test_data = test_config_node["test_data"];
-        test_config.test_data.bev_embed.src_path = test_data["bev_embed"]["src_path"].as<std::string>();
-        test_config.test_data.bev_embed.dst_path = test_data["bev_embed"]["dst_path"].as<std::string>();
-        test_config.test_data.camera_images.path = test_data["camera_images"]["path"].as<std::string>();
-
-        // 入力データを読み込む
         const auto& input_data = test_data["input_data"];
-        test_config.test_data.input_data.shift = input_data["shift"].as<std::vector<float>>();
-        test_config.test_data.input_data.lidar2img = input_data["lidar2img"].as<std::vector<float>>();
-        test_config.test_data.input_data.can_bus = input_data["can_bus"].as<std::vector<float>>();
-        test_config.test_data.input_data.command = input_data["command"].as<int>();
+        test_config.input_data.bev_embed.src_path = input_data["bev_embed"]["src_path"].as<std::string>();
+        test_config.input_data.bev_embed.dst_path = input_data["bev_embed"]["dst_path"].as<std::string>();
+        test_config.input_data.camera_images.path = input_data["camera_images"]["path"].as<std::string>();
+        test_config.input_data.shift = input_data["shift"].as<std::vector<float>>();
+        test_config.input_data.lidar2img = input_data["lidar2img"].as<std::vector<float>>();
+        test_config.input_data.can_bus = input_data["can_bus"].as<std::vector<float>>();
+        test_config.input_data.command = input_data["command"].as<int>();
 
         // 期待される出力データを読み込む
         const auto& expected_output = test_data["expected_output"];
-        test_config.test_data.expected_output.trajectory = expected_output["trajectory"].as<std::vector<float>>();
+        test_config.expected_output.trajectory = expected_output["trajectory"].as<std::vector<float>>();
 
     } catch (const YAML::Exception& e) {
         throw std::runtime_error("Failed to load config from YAML: " + std::string(e.what()));
@@ -152,8 +148,8 @@ protected:
         }
 
         // bev_embedはビルドディレクトリからコピーする
-        const std::string src_bev_path = test_config_.test_data.bev_embed.src_path;
-        const std::string dst_bev_path = test_config_.test_data.bev_embed.dst_path;
+        const std::string src_bev_path = test_config_.input_data.bev_embed.src_path;
+        const std::string dst_bev_path = test_config_.input_data.bev_embed.dst_path;
         if (std::filesystem::exists(src_bev_path)) {
             std::filesystem::copy(src_bev_path, dst_bev_path, std::filesystem::copy_options::overwrite_existing);
         } else {
@@ -206,9 +202,9 @@ protected:
     VadInputData createFrame2InputData() {
         VadInputData input_data;
         
-        std::ifstream file(test_config_.test_data.camera_images.path, std::ios::binary | std::ios::ate);
+        std::ifstream file(test_config_.input_data.camera_images.path, std::ios::binary | std::ios::ate);
         if (!file.is_open()) {
-            throw std::runtime_error("Failed to open image data file: " + test_config_.test_data.camera_images.path);
+            throw std::runtime_error("Failed to open image data file: " + test_config_.input_data.camera_images.path);
         }
 
         std::streamsize size = file.tellg();
@@ -224,13 +220,13 @@ protected:
         
         input_data.camera_images_.resize(expected_elements);
         if (!file.read(reinterpret_cast<char*>(input_data.camera_images_.data()), size)) {
-            throw std::runtime_error("Failed to read image data from file: " + test_config_.test_data.camera_images.path);
+            throw std::runtime_error("Failed to read image data from file: " + test_config_.input_data.camera_images.path);
         }
         
-        input_data.shift_ = test_config_.test_data.input_data.shift;
-        input_data.lidar2img_ = test_config_.test_data.input_data.lidar2img;
-        input_data.can_bus_ = test_config_.test_data.input_data.can_bus;
-        input_data.command_ = test_config_.test_data.input_data.command;
+        input_data.shift_ = test_config_.input_data.shift;
+        input_data.lidar2img_ = test_config_.input_data.lidar2img;
+        input_data.can_bus_ = test_config_.input_data.can_bus;
+        input_data.command_ = test_config_.input_data.command;
         
         return input_data;
     }
@@ -249,7 +245,6 @@ TEST_F(VadInferIntegrationTest, ModelInitialization) {
     ASSERT_NO_THROW({
         model = std::make_unique<VadModel<MockVadLogger>>(config, logger_);
     }) << "Model initialization failed. Check paths and permissions.";
-    
 }
 
 // 2. 実際のinfer実行テスト
@@ -267,10 +262,10 @@ TEST_F(VadInferIntegrationTest, RealInferExecution) {
 
     auto result = model->infer(input_data_frame2);
     ASSERT_TRUE(result.has_value()) << "Inference failed to return a result.";
-    EXPECT_EQ(result->predicted_trajectory_.size(), test_config_.test_data.expected_output.trajectory.size());
+    EXPECT_EQ(result->predicted_trajectory_.size(), test_config_.expected_output.trajectory.size());
     
-    for (size_t i = 0; i < test_config_.test_data.expected_output.trajectory.size(); ++i) {
-        EXPECT_NEAR(result->predicted_trajectory_[i], test_config_.test_data.expected_output.trajectory[i], 1e-5)
+    for (size_t i = 0; i < test_config_.expected_output.trajectory.size(); ++i) {
+        EXPECT_NEAR(result->predicted_trajectory_[i], test_config_.expected_output.trajectory[i], 1e-5)
             << "Mismatch at index " << i;
     }
 }
