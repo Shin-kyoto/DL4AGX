@@ -13,18 +13,32 @@
 namespace autoware::tensorrt_vad
 {
 
-// 設定ファイルからVadConfigを読み込むヘルパー関数
-VadConfig loadConfigFromYaml(const std::string& config_path) {
-    VadConfig config;
+// テスト用の設定構造体
+struct TestConfig {
+    struct {
+        struct {
+            std::string src_path;
+            std::string dst_path;
+        } bev_embed;
+        struct {
+            std::string path;
+        } camera_images;
+    } test_data;
+};
+
+// 設定ファイルからVadConfigとTestConfigを読み込むヘルパー関数
+std::pair<VadConfig, TestConfig> loadConfigFromYaml(const std::string& config_path) {
+    VadConfig vad_config;
+    TestConfig test_config;
     
     try {
         YAML::Node yaml_config = YAML::LoadFile(config_path);
-        const auto& test_config = yaml_config["test_config"];
+        const auto& test_config_node = yaml_config["test_config"];
         
-        config.plugins_path = test_config["plugins_path"].as<std::string>();
-        config.warm_up_num = test_config["warm_up_num"].as<int>();
+        vad_config.plugins_path = test_config_node["plugins_path"].as<std::string>();
+        vad_config.warm_up_num = test_config_node["warm_up_num"].as<int>();
         
-        const auto& nets = test_config["nets"];
+        const auto& nets = test_config_node["nets"];
         for (const auto& net : nets) {
             NetConfig net_config;
             net_config.name = net.second["name"].as<std::string>();
@@ -41,27 +55,35 @@ VadConfig loadConfigFromYaml(const std::string& config_path) {
                     net_config.inputs[input.first.as<std::string>()] = input_map;
                 }
             }
-            
-            config.nets_config.push_back(net_config);
+            vad_config.nets_config.push_back(net_config);
         }
+
+        // テストデータの設定を読み込む
+        const auto& test_data = test_config_node["test_data"];
+        test_config.test_data.bev_embed.src_path = test_data["bev_embed"]["src_path"].as<std::string>();
+        test_config.test_data.bev_embed.dst_path = test_data["bev_embed"]["dst_path"].as<std::string>();
+        test_config.test_data.camera_images.path = test_data["camera_images"]["path"].as<std::string>();
+
     } catch (const YAML::Exception& e) {
         throw std::runtime_error("Failed to load config from YAML: " + std::string(e.what()));
     }
     
-    return config;
+    return {vad_config, test_config};
 }
 
 // 統合テスト用のフィクスチャ
 class VadIntegrationTest : public ::testing::Test {
 protected:
-    void SetUp() override
-    {
+    void SetUp() override {
         mock_logger_ = std::make_shared<MockVadLogger>();
-        config_ = loadConfigFromYaml("../test_config.yaml");
+        auto [vad_config, test_config] = loadConfigFromYaml("../test_config.yaml");
+        config_ = vad_config;
+        test_config_ = test_config;
     }
 
     std::shared_ptr<MockVadLogger> mock_logger_;
     VadConfig config_;
+    TestConfig test_config_;
 };
 
 // VadModelの初期化が、実際のエンジンファイルを用いて成功することを確認するテスト
@@ -88,7 +110,9 @@ class VadInferIntegrationTest : public ::testing::Test {
 protected:
     void SetUp() override {
         logger_ = std::make_shared<MockVadLogger>();
-        config_ = loadConfigFromYaml("../test_config.yaml");
+        auto [vad_config, test_config] = loadConfigFromYaml("../test_config.yaml");
+        config_ = vad_config;
+        test_config_ = test_config;
         
         // 前提条件のチェック
         bool engines_exist = 
@@ -108,8 +132,8 @@ protected:
         }
 
         // bev_embedはビルドディレクトリからコピーする
-        const std::string src_bev_path = "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX_ns_rosbag/DL4AGX/AV-Solutions/vad-trt/app/build/bev_embed_frame1.bin";
-        const std::string dst_bev_path = "bev_embed_frame1.bin";
+        const std::string src_bev_path = test_config_.test_data.bev_embed.src_path;
+        const std::string dst_bev_path = test_config_.test_data.bev_embed.dst_path;
         if (std::filesystem::exists(src_bev_path)) {
             std::filesystem::copy(src_bev_path, dst_bev_path, std::filesystem::copy_options::overwrite_existing);
         } else {
@@ -159,12 +183,12 @@ protected:
         return data;
     }
 
-    VadInputData createFrame2InputData(const std::string& image_path) {
+    VadInputData createFrame2InputData() {
         VadInputData input_data;
         
-        std::ifstream file(image_path, std::ios::binary | std::ios::ate);
+        std::ifstream file(test_config_.test_data.camera_images.path, std::ios::binary | std::ios::ate);
         if (!file.is_open()) {
-            throw std::runtime_error("Failed to open image data file: " + image_path);
+            throw std::runtime_error("Failed to open image data file: " + test_config_.test_data.camera_images.path);
         }
 
         std::streamsize size = file.tellg();
@@ -180,7 +204,7 @@ protected:
         
         input_data.camera_images_.resize(expected_elements);
         if (!file.read(reinterpret_cast<char*>(input_data.camera_images_.data()), size)) {
-            throw std::runtime_error("Failed to read image data from file: " + image_path);
+            throw std::runtime_error("Failed to read image data from file: " + test_config_.test_data.camera_images.path);
         }
         
         input_data.shift_ = {0.00224774843081832f, -0.00130402739159763f, 0.0f};
@@ -227,6 +251,7 @@ protected:
 
     std::shared_ptr<MockVadLogger> logger_;
     VadConfig config_;
+    TestConfig test_config_;
     bool integration_test_enabled_ = false;
 };
 
@@ -247,15 +272,12 @@ TEST_F(VadInferIntegrationTest, RealInferExecution) {
     
     auto prev_bev_data = loadBevEmbedFromFile("bev_embed_frame1.bin");
     
-    const std::string workspace_root = "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX_ns_rosbag/DL4AGX/AV-Solutions/vad-trt/app";
-    const std::string image_path = workspace_root + "/demo/camera_images_frame2.bin";
-
-    auto dummy_input = createFrame2InputData(image_path);
+    auto dummy_input = createFrame2InputData();
     model->infer(dummy_input); 
     
     model->is_first_frame_ = false;
 
-    VadInputData input_data_frame2 = createFrame2InputData(image_path);
+    VadInputData input_data_frame2 = createFrame2InputData();
 
     auto result = model->infer(input_data_frame2);
     ASSERT_TRUE(result.has_value()) << "Inference failed to return a result.";
