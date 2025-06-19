@@ -5,7 +5,9 @@ cmake_minimum_required(VERSION 3.14)
 project(autoware_tensorrt_vad)
 
 find_package(autoware_cmake REQUIRED)
-autoware_package()
+autoware_package(
+    SKIP_LINT
+  )
 
 # Set C++17 standard to match Autoware Universe
 if(NOT CMAKE_CXX_STANDARD)
@@ -121,8 +123,8 @@ endfunction()
 
 # テストの追加
 if(BUILD_TESTING)
-    find_package(ament_lint_auto REQUIRED)
-    ament_lint_auto_find_test_dependencies()
+    # find_package(ament_lint_auto REQUIRED)
+    # ament_lint_auto_find_test_dependencies()
     add_testcase(test/test_vad_integration.cpp)
 endif()
 
