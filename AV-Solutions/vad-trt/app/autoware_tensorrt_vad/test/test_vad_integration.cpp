@@ -89,7 +89,7 @@ class VadIntegrationTest : public ::testing::Test {
 protected:
     void SetUp() override {
         mock_logger_ = std::make_shared<MockVadLogger>();
-        auto [vad_config, test_config] = test::load_config_from_yaml("../test_config.yaml");
+        auto [vad_config, test_config] = test::load_config_from_yaml("../../install/autoware_tensorrt_vad/share/autoware_tensorrt_vad/test/test_config.yaml");
         config_ = vad_config;
         test_config_ = test_config;
     }
@@ -123,7 +123,7 @@ class VadInferIntegrationTest : public ::testing::Test {
 protected:
     void SetUp() override {
         logger_ = std::make_shared<MockVadLogger>();
-        auto [vad_config, test_config] = test::load_config_from_yaml("../test_config.yaml");
+        auto [vad_config, test_config] = test::load_config_from_yaml("../../install/autoware_tensorrt_vad/share/autoware_tensorrt_vad/test/test_config.yaml");
         config_ = vad_config;
         test_config_ = test_config;
         
