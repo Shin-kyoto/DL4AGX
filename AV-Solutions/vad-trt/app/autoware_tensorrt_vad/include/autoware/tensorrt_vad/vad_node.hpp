@@ -35,8 +35,6 @@
 // #include <cuda_runtime.h>
 // #include <NvInfer.h>
 // #include <stb/stb_image.h>
-// #include <sensor_msgs/msg/image.hpp>
-// #include <autoware_perception_msgs/msg/detected_objects.hpp>
 
 namespace autoware::tensorrt_vad
 {
