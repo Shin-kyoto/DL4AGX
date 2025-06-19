@@ -15,7 +15,7 @@
 #ifndef AUTOWARE_TENSORRT_VAD_ROS_VAD_LOGGER_HPP_
 #define AUTOWARE_TENSORRT_VAD_ROS_VAD_LOGGER_HPP_
 
-#include "vad_model.hpp"
+#include "autoware/tensorrt_vad/vad_model.hpp"
 #include <rclcpp/rclcpp.hpp>
 
 namespace autoware::tensorrt_vad

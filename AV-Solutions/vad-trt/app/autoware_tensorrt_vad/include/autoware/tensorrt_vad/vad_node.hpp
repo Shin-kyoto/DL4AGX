@@ -16,6 +16,7 @@
 #define AUTOWARE_TENSORRT_VAD_VAD_NODE_HPP_
 
 #include "autoware/tensorrt_vad/vad_model.hpp"
+#include "ros_vad_logger.hpp"
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_components/register_node_macro.hpp>
@@ -38,30 +39,6 @@
 
 namespace autoware::tensorrt_vad
 {
-
-// 簡単なROSロガークラス
-class RosVadLogger : public VadLogger {
-public:
-  void debug(const std::string& message) override {
-    (void)message; // 未使用パラメータを抑制
-    // ROS2のdebugログを使用
-  }
-  
-  void info(const std::string& message) override {
-    (void)message; // 未使用パラメータを抑制
-    // ROS2のinfoログを使用
-  }
-  
-  void warn(const std::string& message) override {
-    (void)message; // 未使用パラメータを抑制
-    // ROS2のwarnログを使用
-  }
-  
-  void error(const std::string& message) override {
-    (void)message; // 未使用パラメータを抑制
-    // ROS2のerrorログを使用
-  }
-};
 
 class VadNode : public rclcpp::Node
 {
