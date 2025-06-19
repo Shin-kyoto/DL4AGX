@@ -1,0 +1,108 @@
+# CMakeの最小バージョンを指定
+cmake_minimum_required(VERSION 3.14)
+
+# プロジェクト名を設定
+project(autoware_tensorrt_vad)
+
+find_package(autoware_cmake REQUIRED)
+autoware_package()
+
+# Set C++17 standard to match Autoware Universe
+if(NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 17)
+endif()
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+
+add_compile_options(-Wno-deprecated-declarations)
+
+find_package(ament_cmake_auto REQUIRED)
+ament_auto_find_build_dependencies()
+
+# Find additional dependencies for components
+find_package(rclcpp_components REQUIRED)
+find_package(CUDA REQUIRED)
+find_package(tf2_ros REQUIRED)
+find_package(tf2_eigen REQUIRED)
+find_package(eigen3_cmake_module REQUIRED)
+find_package(Eigen3 REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(autoware_perception_msgs REQUIRED)
+find_package(autoware_planning_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(rosbag2_cpp REQUIRED)
+
+# TensorRTの設定
+option(TRT_ROOT "$ENV{TRT_ROOT}")
+if(TRT_ROOT)
+    set(TENSORRT_INCLUDE_DIRS ${TRT_ROOT}/include/)
+    set(TENSORRT_LIBRARY_DIRS ${TRT_ROOT}/lib/)
+else()
+    # デフォルトのTensorRTパス
+    set(TENSORRT_INCLUDE_DIRS /usr/include/x86_64-linux-gnu)
+    set(TENSORRT_LIBRARY_DIRS /usr/lib/x86_64-linux-gnu)
+endif()
+
+# CUDAの設定
+set(CUDA_INCLUDE_DIRS ${CUDA_TOOLKIT_ROOT_DIR}/include)
+set(CUDA_LIBRARY_DIRS ${CUDA_TOOLKIT_ROOT_DIR}/lib64)
+
+# インクルードディレクトリの設定
+include_directories(
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/lib
+    ${CUDA_INCLUDE_DIRS}
+    ${TENSORRT_INCLUDE_DIRS}
+)
+
+# リンクディレクトリの設定
+link_directories(
+    ${CUDA_LIBRARY_DIRS}
+    ${TENSORRT_LIBRARY_DIRS}
+)
+
+# メインライブラリの追加（ヘッダーファイルは除外）
+ament_auto_add_library(${PROJECT_NAME}_lib SHARED
+    lib/tensor.cpp
+)
+
+# ライブラリのリンク設定
+target_link_libraries(${PROJECT_NAME}_lib
+    nvinfer
+    ${CUDA_LIBRARIES}
+    cuda
+    cudart
+)
+
+# コンポーネントの追加
+ament_auto_add_library(${PROJECT_NAME}_component SHARED
+    src/vad_node.cpp
+)
+
+target_link_libraries(${PROJECT_NAME}_component
+    ${PROJECT_NAME}_lib
+)
+
+rclcpp_components_register_node(${PROJECT_NAME}_component
+    PLUGIN "autoware::tensorrt_vad::VadNode"
+    EXECUTABLE vad_node
+)
+
+# テストの追加 - 一時的にコメントアウト
+# if(BUILD_TESTING)
+#     find_package(ament_lint_auto REQUIRED)
+#     set(ament_cmake_copyright_FOUND TRUE)
+#     set(ament_cmake_cpplint_FOUND TRUE)
+#     ament_lint_auto_find_test_dependencies()
+
+#     find_package(ament_cmake_gtest REQUIRED)
+    
+#     # テストディレクトリの追加
+#     add_subdirectory(test)
+# endif()
+
+ament_auto_package(
+    INSTALL_TO_SHARE
+        launch
+        config
+)
