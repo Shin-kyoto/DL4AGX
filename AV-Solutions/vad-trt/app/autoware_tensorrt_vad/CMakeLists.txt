@@ -22,17 +22,9 @@ find_package(ament_cmake_auto REQUIRED)
 ament_auto_find_build_dependencies()
 
 # Find additional dependencies for components
-find_package(rclcpp_components REQUIRED)
 find_package(CUDA REQUIRED)
-find_package(tf2_ros REQUIRED)
-find_package(tf2_eigen REQUIRED)
 find_package(eigen3_cmake_module REQUIRED)
 find_package(Eigen3 REQUIRED)
-find_package(sensor_msgs REQUIRED)
-find_package(autoware_perception_msgs REQUIRED)
-find_package(autoware_planning_msgs REQUIRED)
-find_package(geometry_msgs REQUIRED)
-find_package(rosbag2_cpp REQUIRED)
 
 # TensorRTの設定
 option(TRT_ROOT "$ENV{TRT_ROOT}")
