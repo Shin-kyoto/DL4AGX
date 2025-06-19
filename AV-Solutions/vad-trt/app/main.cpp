@@ -928,29 +928,7 @@ std::vector<autoware::tensorrt_vad::VadTopicData> extract_vad_topic_data_from_ro
         rosbag2_cpp::readers::SequentialReader reader;
         reader.open(storage_options, converter_options);
         
-        // フレームごとのデータを一時保存する構造体
-        struct FrameData {
-            rclcpp::Time stamp;
-            std::vector<sensor_msgs::msg::Image::ConstSharedPtr> images;
-            std::vector<sensor_msgs::msg::CameraInfo::ConstSharedPtr> camera_infos;
-            tf2_msgs::msg::TFMessage::ConstSharedPtr tf_static;
-            nav_msgs::msg::Odometry::ConstSharedPtr kinematic_state;
-            sensor_msgs::msg::Imu::ConstSharedPtr imu_raw;
-            
-            bool is_complete() const {
-                if (images.size() != 6 || camera_infos.size() != 6) return false;
-                
-                for (int i = 0; i < 6; ++i) {
-                    if (!images[i] || !camera_infos[i]) return false;
-                }
-                
-                return tf_static != nullptr && 
-                       kinematic_state != nullptr && 
-                       imu_raw != nullptr;
-            }
-        };
-        
-        FrameData current_frame;
+        autoware::tensorrt_vad::VadTopicData current_frame;
         bool frame_started = false;
         
         while (reader.has_next()) {
@@ -1058,20 +1036,12 @@ std::vector<autoware::tensorrt_vad::VadTopicData> extract_vad_topic_data_from_ro
                 current_frame.imu_raw = msg;
             }
             
-            // フレームが完成したらVadTopicDataに変換
+            // フレームが完成したらリストに追加
             if (frame_started && current_frame.is_complete()) {
-                autoware::tensorrt_vad::VadTopicData vad_topic_data;
-                vad_topic_data.stamp = current_frame.stamp;
-                vad_topic_data.images = current_frame.images;
-                vad_topic_data.camera_infos = current_frame.camera_infos;
-                vad_topic_data.tf_static = current_frame.tf_static;
-                vad_topic_data.kinematic_state = current_frame.kinematic_state;
-                vad_topic_data.imu_raw = current_frame.imu_raw;
-                
-                vad_topic_data_list.push_back(vad_topic_data);
+                vad_topic_data_list.push_back(current_frame);
                 
                 // 次のフレームの準備
-                current_frame = FrameData();
+                current_frame = autoware::tensorrt_vad::VadTopicData();
                 frame_started = false;
             }
         }

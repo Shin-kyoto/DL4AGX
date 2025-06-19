@@ -64,6 +64,19 @@ struct VadTopicData
 
   // IMUデータ（/sensing/imu/tamagawa/imu_raw などから）
   sensor_msgs::msg::Imu::ConstSharedPtr imu_raw;
+
+  // フレームが完成しているかをチェック
+  bool is_complete() const {
+    if (images.size() != 6 || camera_infos.size() != 6) return false;
+    
+    for (int i = 0; i < 6; ++i) {
+      if (!images[i] || !camera_infos[i]) return false;
+    }
+    
+    return tf_static != nullptr && 
+           kinematic_state != nullptr && 
+           imu_raw != nullptr;
+  }
 };
 
 class VadInterface {
