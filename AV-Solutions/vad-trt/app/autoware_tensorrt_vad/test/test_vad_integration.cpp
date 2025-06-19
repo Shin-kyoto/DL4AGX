@@ -8,7 +8,7 @@
 #include <dlfcn.h>
 #include <yaml-cpp/yaml.h>
 #include "mock_vad_logger.hpp"
-#include "autoware/tensorrt_vad/vad_trt.hpp"
+#include "autoware/tensorrt_vad/vad_model.hpp"
 
 namespace autoware::tensorrt_vad {
 namespace test {

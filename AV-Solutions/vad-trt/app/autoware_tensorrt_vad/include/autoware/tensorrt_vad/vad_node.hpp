@@ -15,7 +15,7 @@
 #ifndef AUTOWARE_TENSORRT_VAD_VAD_NODE_HPP_
 #define AUTOWARE_TENSORRT_VAD_VAD_NODE_HPP_
 
-#include "autoware/tensorrt_vad/vad_trt.hpp"
+#include "autoware/tensorrt_vad/vad_model.hpp"
 
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_components/register_node_macro.hpp>
