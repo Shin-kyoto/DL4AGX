@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef AUTOWARE_TENSORRT_VAD_VAD_TRT_HPP_
-#define AUTOWARE_TENSORRT_VAD_VAD_TRT_HPP_
+#ifndef AUTOWARE_TENSORRT_VAD_VAD_MODEL_HPP_
+#define AUTOWARE_TENSORRT_VAD_VAD_MODEL_HPP_
 
 #include <optional>
 #include <string>
@@ -386,4 +386,4 @@ private:
 
 }  // namespace autoware::tensorrt_vad
 
-#endif  // AUTOWARE_TENSORRT_VAD_VAD_TRT_HPP_
+#endif  // AUTOWARE_TENSORRT_VAD_VAD_MODEL_HPP_
