@@ -106,17 +106,6 @@ struct VadConfig
   std::string plugins_path;
   int32_t warm_up_num;
   std::vector<NetConfig> nets_config;
-
-  // テストデータの設定
-  struct {
-    struct {
-      std::string src_path;
-      std::string dst_path;
-    } bev_embed;
-    struct {
-      std::string path;
-    } camera_images;
-  } test_data;
 };
 
 class NetworkParam
