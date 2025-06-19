@@ -131,7 +131,14 @@ class VadModel
 {
 public:
   VadModel(const VadConfig& config, std::shared_ptr<LoggerType> logger)
-    : initialized_(false), stream_(nullptr), is_first_frame_(true), config_(config), logger_(std::move(logger))
+    : runtime_(nullptr)
+    , stream_(nullptr)
+    , nets_()
+    , initialized_(false)
+    , saved_prev_bev_(nullptr)
+    , is_first_frame_(true)
+    , config_(config)
+    , logger_(std::move(logger))
   {
     // loggerはVadLoggerを継承したclassのみ受け取る
     static_assert(std::is_base_of_v<VadLogger, LoggerType>, 
@@ -219,7 +226,7 @@ private:
   // メンバ関数
   std::unique_ptr<nvinfer1::IRuntime, std::function<void(nvinfer1::IRuntime*)>> create_runtime() {
     static std::unique_ptr<Logger> logger_instance = std::make_unique<Logger>(logger_);
-    auto runtime_deleter = [](nvinfer1::IRuntime *runtime) {};
+    auto runtime_deleter = [](nvinfer1::IRuntime *runtime) { (void)runtime; };
     std::unique_ptr<nvinfer1::IRuntime, decltype(runtime_deleter)> runtime{
         nvinfer1::createInferRuntime(*logger_instance), runtime_deleter};
     return runtime;

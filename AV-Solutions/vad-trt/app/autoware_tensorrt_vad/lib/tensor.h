@@ -80,7 +80,7 @@ struct Tensor {
 
   template<class Dtype=float>
   void load(const std::vector<float>& data, cudaStream_t stream = 0) {
-    if (data.size() != volume) {
+    if (static_cast<int32_t>(data.size()) != volume) {
       std::cerr << "Data size mismatch: expected " << volume << ", got " << data.size() << std::endl;
       return;
     }

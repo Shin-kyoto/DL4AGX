@@ -88,18 +88,43 @@ rclcpp_components_register_node(${PROJECT_NAME}_component
     EXECUTABLE vad_node
 )
 
-# テストの追加 - 一時的にコメントアウト
-# if(BUILD_TESTING)
-#     find_package(ament_lint_auto REQUIRED)
-#     set(ament_cmake_copyright_FOUND TRUE)
-#     set(ament_cmake_cpplint_FOUND TRUE)
-#     ament_lint_auto_find_test_dependencies()
+# テスト用の関数定義
+function(add_testcase filepath)
+  get_filename_component(filename ${filepath} NAME)
+  string(REGEX REPLACE ".cpp" "" test_name ${filename})
+  ament_add_gmock(${test_name} ${filepath})
+  target_include_directories(${test_name} PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/include
+      ${CMAKE_CURRENT_SOURCE_DIR}/lib
+      ${CMAKE_CURRENT_SOURCE_DIR}/test
+      ${CUDA_INCLUDE_DIRS}
+      ${TENSORRT_INCLUDE_DIRS}
+  )
+  target_link_directories(${test_name} PRIVATE
+      ${CUDA_LIBRARY_DIRS}
+      ${TENSORRT_LIBRARY_DIRS}
+  )
+  target_sources(${test_name} PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/lib/tensor.cpp
+  )
+  target_link_libraries(${test_name}
+      ${PROJECT_NAME}_lib
+      ${CUDA_LIBRARIES}
+      dl
+      pthread
+      nvinfer
+      nvonnxparser
+      nvinfer_plugin
+  )
+  ament_target_dependencies(${test_name} ${${PROJECT_NAME}_FOUND_BUILD_DEPENDS})
+endfunction()
 
-#     find_package(ament_cmake_gtest REQUIRED)
-    
-#     # テストディレクトリの追加
-#     add_subdirectory(test)
-# endif()
+# テストの追加
+if(BUILD_TESTING)
+    find_package(ament_lint_auto REQUIRED)
+    ament_lint_auto_find_test_dependencies()
+    add_testcase(test/test_vad_integration.cpp)
+endif()
 
 ament_auto_package(
     INSTALL_TO_SHARE

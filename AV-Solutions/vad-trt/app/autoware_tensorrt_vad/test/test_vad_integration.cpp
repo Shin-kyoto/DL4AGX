@@ -8,7 +8,7 @@
 #include <dlfcn.h>
 #include <yaml-cpp/yaml.h>
 #include "mock_vad_logger.hpp"
-#include "vad_model.hpp"
+#include "autoware/tensorrt_vad/vad_trt.hpp"
 
 namespace autoware::tensorrt_vad {
 namespace test {
@@ -251,7 +251,8 @@ TEST_F(VadInferIntegrationTest, RealInferExecution) {
     auto prev_bev_data = loadBevEmbedFromFile("bev_embed_frame1.bin");
     
     auto dummy_input = createFrame2InputData();
-    model->infer(dummy_input); 
+    auto result1 = model->infer(dummy_input); 
+    (void)result1; // 戻り値を明示的に無視
     
     model->is_first_frame_ = false;
 
