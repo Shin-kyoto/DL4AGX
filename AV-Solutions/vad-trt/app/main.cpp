@@ -1248,7 +1248,7 @@ int main(int argc, char** argv) {
   int32_t default_command = node->declare_parameter<int>("model_params.default_command", 0);
   printf("[INFO] default_command=%d\n", default_command);
 
-    auto vad_topic_data_list = extract_vad_topic_data_from_rosbag("/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/rosbag/output_bag/");
+  auto vad_topic_data_list = extract_vad_topic_data_from_rosbag("/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/rosbag/output_bag/");
   auto subscribed_image_dict = load_image_from_rosbag("/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/rosbag/output_bag/", n_frames);
   auto [subscribed_can_bus_dict, subscribed_shift_dict] = load_can_bus_shift_from_rosbag("/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/rosbag/output_bag/", n_frames);
   int32_t input_image_width = cfg["input_image_width"];
