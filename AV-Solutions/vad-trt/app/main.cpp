@@ -439,6 +439,25 @@ private:
 std::vector<std::vector<float>>
 load_image_from_rosbag_single_frame(const std::vector<sensor_msgs::msg::Image::ConstSharedPtr> &images, int frame_id) {
 
+  // 画像リサイズ処理を関数内関数として切り出し
+  auto resize_image = [](unsigned char *image_data, int32_t width, int32_t height, int32_t channels, 
+                         int32_t target_width, int32_t target_height) -> std::optional<std::tuple<unsigned char*, int32_t, int32_t>> {
+    unsigned char *resized_data = (unsigned char *)malloc(target_width * target_height * channels);
+    
+    int resize_result = stbir_resize_uint8(image_data, width, height, 0, resized_data,
+                                          target_width, target_height, 0, channels);
+    
+    if (!resize_result) {
+      free(resized_data);
+      return std::nullopt;
+    }
+    
+    // 元のデータを解放
+    stbi_image_free(image_data);
+    
+    return std::make_tuple(resized_data, target_width, target_height);
+  };
+
   std::vector<std::vector<float>> frame_images;
   frame_images.resize(6); // VADカメラ順序で初期化
 
@@ -471,22 +490,16 @@ load_image_from_rosbag_single_frame(const std::vector<sensor_msgs::msg::Image::C
         &width, &height, &channels, STBI_rgb); // RGBとして読み込む
 
     // サイズが目標と違う場合はリサイズする
-    unsigned char *resized_data = nullptr;
     if (width != target_width || height != target_height) {
-      // stb_image_resizeを使用してリサイズ
-      resized_data =
-          (unsigned char *)malloc(target_width * target_height * channels);
-
-      // stb_image_resizeを使ってリサイズ
-      int resize_result =
-          stbir_resize_uint8(image_data, width, height, 0, resized_data,
-                              target_width, target_height, 0, channels);
-
-      // 元のデータを解放し、リサイズしたデータを使用
-      stbi_image_free(image_data);
-      image_data = resized_data;
-      width = target_width;
-      height = target_height;
+      auto resize_result = resize_image(image_data, width, height, channels, target_width, target_height);
+      
+      if (resize_result.has_value()) {
+        // リサイズされたデータとサイズを取得
+        auto [new_image_data, new_width, new_height] = resize_result.value();
+        image_data = new_image_data;
+        width = new_width;
+        height = new_height;
+      }
     }
 
     // BGRの順で処理
