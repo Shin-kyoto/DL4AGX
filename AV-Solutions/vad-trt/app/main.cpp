@@ -792,6 +792,14 @@ std::vector<float> load_lidar2img_from_rosbag_single_frame(
     int frame_id,
     float scale_width, float scale_height) {
   
+  // スケーリング処理を関数内関数として切り出し
+  auto apply_scaling = [](const Eigen::Matrix4f &lidar2img, float scale_width, float scale_height) -> Eigen::Matrix4f {
+    Eigen::Matrix4f scale_matrix = Eigen::Matrix4f::Identity();
+    scale_matrix(0, 0) = scale_width;
+    scale_matrix(1, 1) = scale_height;
+    return scale_matrix * lidar2img;
+  };
+
   std::vector<float> frame_lidar2img(16 * 6, 0.0f); // 6カメラ分のスペースを確保
 
   // AutowareカメラインデックスからVADカメラインデックスへのマッピング
@@ -862,11 +870,7 @@ std::vector<float> load_lidar2img_from_rosbag_single_frame(
         Eigen::Matrix4f lidar2img = viewpad * lidar2cam_rt_T;
 
         // スケーリングを適用
-        Eigen::Matrix4f scale_matrix = Eigen::Matrix4f::Identity();
-        scale_matrix(0, 0) = scale_width;
-        scale_matrix(1, 1) = scale_height;
-
-        lidar2img = scale_matrix * lidar2img;
+        lidar2img = apply_scaling(lidar2img, scale_width, scale_height);
 
         // 結果を格納
         std::vector<float> lidar2img_flat(16);
