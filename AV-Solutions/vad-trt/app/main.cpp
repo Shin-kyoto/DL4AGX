@@ -812,6 +812,17 @@ std::vector<float> load_lidar2img_from_rosbag_single_frame(
     return flat;
   };
 
+  // camera_infoからk_matrixを作成する処理を関数内関数として切り出し
+  auto create_k_matrix = [](const sensor_msgs::msg::CameraInfo::ConstSharedPtr &camera_info) -> Eigen::Matrix3f {
+    Eigen::Matrix3f k_matrix;
+    for (int i = 0; i < 3; ++i) {
+      for (int j = 0; j < 3; ++j) {
+        k_matrix(i, j) = camera_info->k[i * 3 + j];
+      }
+    }
+    return k_matrix;
+  };
+
   std::vector<float> frame_lidar2img(16 * 6, 0.0f); // 6カメラ分のスペースを確保
 
   // AutowareカメラインデックスからVADカメラインデックスへのマッピング
@@ -839,13 +850,7 @@ std::vector<float> load_lidar2img_from_rosbag_single_frame(
           camera_infos[autoware_camera_id]) {
 
         // カメラ行列Kを3x3行列として抽出
-        Eigen::Matrix3f k_matrix;
-        const auto &camera_info = camera_infos[autoware_camera_id];
-        for (int i = 0; i < 3; ++i) {
-          for (int j = 0; j < 3; ++j) {
-            k_matrix(i, j) = camera_info->k[i * 3 + j];
-          }
-        }
+        Eigen::Matrix3f k_matrix = create_k_matrix(camera_infos[autoware_camera_id]);
 
         // 変換行列の構築
         Eigen::Vector3f aw_translation(transform.transform.translation.x,
