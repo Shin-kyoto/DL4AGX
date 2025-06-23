@@ -800,6 +800,18 @@ std::vector<float> load_lidar2img_from_rosbag_single_frame(
     return scale_matrix * lidar2img;
   };
 
+  // 4x4行列を1次元ベクトルに変換する処理を関数内関数として切り出し
+  auto matrix_to_flat = [](const Eigen::Matrix4f &matrix) -> std::vector<float> {
+    std::vector<float> flat(16);
+    int32_t k = 0;
+    for (int i = 0; i < 4; ++i) {
+      for (int j = 0; j < 4; ++j) {
+        flat[k++] = matrix(i, j);
+      }
+    }
+    return flat;
+  };
+
   std::vector<float> frame_lidar2img(16 * 6, 0.0f); // 6カメラ分のスペースを確保
 
   // AutowareカメラインデックスからVADカメラインデックスへのマッピング
@@ -873,13 +885,7 @@ std::vector<float> load_lidar2img_from_rosbag_single_frame(
         lidar2img = apply_scaling(lidar2img, scale_width, scale_height);
 
         // 結果を格納
-        std::vector<float> lidar2img_flat(16);
-        int32_t k = 0;
-        for (int i = 0; i < 4; ++i) {
-          for (int j = 0; j < 4; ++j) {
-            lidar2img_flat[k++] = lidar2img(i, j);
-          }
-        }
+        std::vector<float> lidar2img_flat = matrix_to_flat(lidar2img);
 
         // lidar2imgの計算後、VADカメラIDの位置に格納
         int vad_camera_id = autoware_to_vad[autoware_camera_id];
