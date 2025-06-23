@@ -21,6 +21,7 @@
 #include <memory>
 #include <functional>
 #include <unordered_map>
+#include <map>
 #include <cuda_runtime.h>
 #include <NvInfer.h>
 #include <dlfcn.h>
@@ -35,10 +36,10 @@ public:
   virtual ~VadLogger() = default;
   
   // 各ログレベルのメソッドを純粋仮想関数として定義
-  virtual void debug(const std::string& message) = 0;
-  virtual void info(const std::string& message) = 0;
-  virtual void warn(const std::string& message) = 0;
-  virtual void error(const std::string& message) = 0;
+  virtual void debug(const std::string& message) const = 0;
+  virtual void info(const std::string& message) const = 0;
+  virtual void warn(const std::string& message) const = 0;
+  virtual void error(const std::string& message) const = 0;
 };
 
 // Loggerクラス（VadModel内で使用）

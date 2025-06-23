@@ -1,4 +1,5 @@
 build*/
+log*
 test/build*/
 lib/cuOSD/
 lib/stb/

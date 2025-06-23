@@ -98,6 +98,7 @@ target_compile_options(${APP}_cu PRIVATE
 # Main application
 add_executable(${APP}_app 
     main.cpp 
+    ${CMAKE_SOURCE_DIR}/lib/vad_interface.cpp
     ${CMAKE_SOURCE_DIR}/lib/visualize.cpp 
     ${CMAKE_SOURCE_DIR}/lib/tensor.cpp 
     ${CMAKE_SOURCE_DIR}/lib/cuOSD/cuosd.cpp

@@ -41,19 +41,19 @@ public:
     explicit RosVadLogger(const rclcpp::Logger& logger) 
         : logger_(logger) {}
 
-    void debug(const std::string& message) override {
+    void debug(const std::string& message) const override {
         RCLCPP_DEBUG(logger_, "%s", message.c_str());
     }
 
-    void info(const std::string& message) override {
+    void info(const std::string& message) const override {
         RCLCPP_INFO(logger_, "%s", message.c_str());
     }
 
-    void warn(const std::string& message) override {
+    void warn(const std::string& message) const override {
         RCLCPP_WARN(logger_, "%s", message.c_str());
     }
 
-    void error(const std::string& message) override {
+    void error(const std::string& message) const override {
         RCLCPP_ERROR(logger_, "%s", message.c_str());
     }
 };
