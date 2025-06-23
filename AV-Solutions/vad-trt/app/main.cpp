@@ -458,6 +458,26 @@ load_image_from_rosbag_single_frame(const std::vector<sensor_msgs::msg::Image::C
     return std::make_tuple(resized_data, target_width, target_height);
   };
 
+  // 画像正規化処理を関数内関数として切り出し
+  auto normalize_image = [](unsigned char *image_data, int32_t width, int32_t height, 
+                           const float mean[3], const float std[3]) -> std::vector<float> {
+    std::vector<float> normalized_image_data(width * height * 3);
+    
+    // BGRの順で処理
+    for (int c = 0; c < 3; ++c) {
+      for (int h = 0; h < height; ++h) {
+        for (int w = 0; w < width; ++w) {
+          int32_t src_idx = (h * width + w) * 3 + (2 - c); // BGR -> RGB
+          int32_t dst_idx = c * height * width + h * width + w; // CHW形式
+          float pixel_value = static_cast<float>(image_data[src_idx]);
+          normalized_image_data[dst_idx] = (pixel_value - mean[c]) / std[c];
+        }
+      }
+    }
+    
+    return normalized_image_data;
+  };
+
   std::vector<std::vector<float>> frame_images;
   frame_images.resize(6); // VADカメラ順序で初期化
 
@@ -502,18 +522,8 @@ load_image_from_rosbag_single_frame(const std::vector<sensor_msgs::msg::Image::C
       }
     }
 
-    // BGRの順で処理
-    std::vector<float> normalized_image_data(width * height * 3);
-    for (int c = 0; c < 3; ++c) {
-      for (int h = 0; h < height; ++h) {
-        for (int w = 0; w < width; ++w) {
-          int32_t src_idx = (h * width + w) * 3 + (2 - c); // BGR -> RGB
-          int32_t dst_idx = c * height * width + h * width + w; // CHW形式
-          float pixel_value = static_cast<float>(image_data[src_idx]);
-          normalized_image_data[dst_idx] = (pixel_value - mean[c]) / std[c];
-        }
-      }
-    }
+    // 画像を正規化
+    std::vector<float> normalized_image_data = normalize_image(image_data, width, height, mean, std);
 
     // VADカメラ順序で格納
     int vad_idx = autoware_to_vad[autoware_idx];
