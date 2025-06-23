@@ -619,11 +619,58 @@ load_can_bus_shift_from_rosbag_single_frame(
     int frame_id,
     const std::vector<float> &prev_can_bus = {}) {
 
+  // can_busデータの構築を関数内関数として切り出し
+  auto build_can_bus_data = [&](const std::vector<float> &translation,
+                                const std::vector<float> &rotation,
+                                const std::vector<float> &acceleration,
+                                const std::vector<float> &angular_velocity,
+                                const std::vector<float> &velocity,
+                                const std::vector<float> &prev_can_bus,
+                                int frame_id,
+                                float default_patch_angle) -> std::vector<float> {
+    std::vector<float> can_bus(18, 0.0f);
+
+    // translation (0:3)
+    std::copy(translation.begin(), translation.end(), can_bus.begin());
+
+    // rotation (3:7)
+    std::copy(rotation.begin(), rotation.end(), can_bus.begin() + 3);
+
+    // acceleration (7:10)
+    std::copy(acceleration.begin(), acceleration.end(), can_bus.begin() + 7);
+
+    // angular velocity (10:13)
+    std::copy(angular_velocity.begin(), angular_velocity.end(),
+              can_bus.begin() + 10);
+
+    // velocity (13:16)
+    std::copy(velocity.begin(), velocity.begin() + 2, can_bus.begin() + 13);
+    can_bus[15] = 0.0f; // z方向の速度は0とする
+
+    // patch_angle[rad]の計算 (16)
+    double yaw = std::atan2(
+        2.0 * (can_bus[6] * can_bus[5] + can_bus[3] * can_bus[4]),
+        1.0 - 2.0 * (can_bus[4] * can_bus[4] + can_bus[5] * can_bus[5]));
+    if (yaw < 0)
+      yaw += 2 * M_PI;
+    can_bus[16] = static_cast<float>(yaw);
+
+    // patch_angle[deg]の計算 (17)
+    if (frame_id > 0 && !prev_can_bus.empty()) {
+      float prev_angle = prev_can_bus[16];
+      can_bus[17] = (yaw - prev_angle) * 180.0f / M_PI;
+    } else {
+      can_bus[17] = default_patch_angle; // 最初のフレームのデフォルト値
+    }
+
+    return can_bus;
+  };
+
   // default patch_angle
   float default_patch_angle = -1.0353195667266846f;
 
-  std::vector<float> can_bus(18, 0.0f);
-  std::vector<float> shift(2, 0.0f);
+  std::vector<float> can_bus;
+  std::vector<float> shift;
 
   // Apply Autoware to nuScenes coordinate transformation to position
   auto [ns_x, ns_y] =
@@ -677,44 +724,20 @@ load_can_bus_shift_from_rosbag_single_frame(
       static_cast<float>(imu_raw->linear_acceleration.z)};
 
   // can_busデータの構築（18次元ベクトル）
-
-  // translation (0:3)
-  std::copy(translation.begin(), translation.end(), can_bus.begin());
-
-  // rotation (3:7)
-  std::copy(rotation.begin(), rotation.end(), can_bus.begin() + 3);
-
-  // acceleration (7:10)
-  std::copy(acceleration.begin(), acceleration.end(), can_bus.begin() + 7);
-
-  // angular velocity (10:13)
-  std::copy(angular_velocity.begin(), angular_velocity.end(),
-            can_bus.begin() + 10);
-
-  // velocity (13:16)
-  std::copy(velocity.begin(), velocity.begin() + 2, can_bus.begin() + 13);
-  can_bus[15] = 0.0f; // z方向の速度は0とする
-
-  // patch_angle[rad]の計算 (16)
-  double yaw = std::atan2(
-      2.0 * (can_bus[6] * can_bus[5] + can_bus[3] * can_bus[4]),
-      1.0 - 2.0 * (can_bus[4] * can_bus[4] + can_bus[5] * can_bus[5]));
-  if (yaw < 0)
-    yaw += 2 * M_PI;
-  can_bus[16] = static_cast<float>(yaw);
-
-  // patch_angle[deg]の計算 (17)
-  if (frame_id > 0 && !prev_can_bus.empty()) {
-    float prev_angle = prev_can_bus[16];
-    can_bus[17] = (yaw - prev_angle) * 180.0f / M_PI;
-  } else {
-    can_bus[17] = default_patch_angle; // 最初のフレームのデフォルト値
-  }
+  can_bus = build_can_bus_data(
+      translation, rotation, acceleration, angular_velocity, velocity,
+      prev_can_bus, frame_id, default_patch_angle);
 
   // シフトデータの計算
   if (frame_id > 0 && !prev_can_bus.empty()) {
     float delta_x = translation[0] - prev_can_bus[0];
     float delta_y = translation[1] - prev_can_bus[1];
+
+    double yaw = std::atan2(
+        2.0 * (can_bus[6] * can_bus[5] + can_bus[3] * can_bus[4]),
+        1.0 - 2.0 * (can_bus[4] * can_bus[4] + can_bus[5] * can_bus[5]));
+    if (yaw < 0)
+      yaw += 2 * M_PI;
 
     shift = calculateShift(delta_x, delta_y, yaw);
   } else {
