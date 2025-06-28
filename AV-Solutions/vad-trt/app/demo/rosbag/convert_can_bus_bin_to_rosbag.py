@@ -182,61 +182,6 @@ def ns2aw_imu(imu_msg: Imu) -> Imu:
     
     return aw_msg
 
-def ns2aw_tf_static(tf_static_msg: TFMessage) -> TFMessage:
-    """
-    Convert TF static message from nuScenes to Autoware coordinate system.
-    
-    Args:
-        tf_static_msg: TF static message in nuScenes coordinate system
-        
-    Returns:
-        TFMessage: Converted message in Autoware coordinate system
-    """
-    # Create a new TF message
-    aw_msg = TFMessage()
-    
-    # Process each transform in the message
-    for transform in tf_static_msg.transforms:
-        # Create a deep copy of the transform
-        aw_transform = TransformStamped()
-        aw_transform.header = transform.header
-        aw_transform.child_frame_id = transform.child_frame_id
-        
-        # Transform translation
-        ns_x = transform.transform.translation.x
-        ns_y = transform.transform.translation.y
-        aw_x, aw_y = ns2aw_xy(ns_x, ns_y)
-        
-        aw_transform.transform.translation.x = aw_x
-        aw_transform.transform.translation.y = aw_y
-        aw_transform.transform.translation.z = transform.transform.translation.z
-        
-        # Transform orientation quaternion
-        # Create a Quaternion from the original message
-        q_ns = Quaternion(
-            w=transform.transform.rotation.w,
-            x=transform.transform.rotation.x,
-            y=transform.transform.rotation.y,
-            z=transform.transform.rotation.z
-        )
-        
-        # Create a 90-degree rotation around Z-axis (yaw)
-        q_rotation = Quaternion(axis=[0, 0, 1], angle=np.pi/2)
-        
-        # Apply the rotation
-        q_aw = q_rotation * q_ns
-        
-        # Set the transformed quaternion
-        aw_transform.transform.rotation.x = q_aw.x
-        aw_transform.transform.rotation.y = q_aw.y
-        aw_transform.transform.rotation.z = q_aw.z
-        aw_transform.transform.rotation.w = q_aw.w
-        
-        # Add the transformed transform to the message
-        aw_msg.transforms.append(aw_transform)
-    
-    return aw_msg
-
 def calculate_shift(delta_x, delta_y, patch_angle_rad, grid_length=grid_length, bev_h=bev_h_, bev_w=bev_w_):
     ego_angle = np.array(patch_angle_rad / np.pi * 180)
 
@@ -358,6 +303,29 @@ def convert_bin_to_kinematic_state(can_bus_data: np.ndarray, timestamp: Time, fr
     
     return odom_msg
 
+def add_vad_base_link_to_base_link(ros_timestamp):
+    """
+    vad_base_link -> base_linkの変換を追加
+    """
+    transform_stamped = TransformStamped()
+    transform_stamped.header.stamp = ros_timestamp
+    transform_stamped.header.frame_id = "vad_base_link"
+    transform_stamped.child_frame_id = "base_link"
+    # translation: vad_base_link -> base_linkは(0, 0, 0)
+    transform_stamped.transform.translation.x = 0.0
+    transform_stamped.transform.translation.y = 0.0
+    transform_stamped.transform.translation.z = 0.0
+    # rotation: vad_base_linkのy軸はbase_linkのx軸と同じ方向，vad_base_linkのx軸はbase_linkのy軸の-方向
+    # Z軸周りに+90度 (pi/2ラジアン) の回転
+    # オイラー角からクォータニオンを計算
+    q = Quaternion(axis=[0, 0, 1], angle=np.pi/2)
+    transform_stamped.transform.rotation.x = q[0]
+    transform_stamped.transform.rotation.y = q[1]
+    transform_stamped.transform.rotation.z = q[2]
+    transform_stamped.transform.rotation.w = q[3]
+    
+    return transform_stamped
+
 def convert_bin_to_tf_static(lidar2img_data: dict[int, np.ndarray], timestamp: Time, 
                              scale_width: float = IMAGE_SCALE_WIDTH, 
                              scale_height: float = IMAGE_SCALE_HIGHT) -> TFMessage:
@@ -475,7 +443,7 @@ def convert_bin_to_tf_static(lidar2img_data: dict[int, np.ndarray], timestamp: T
         # TransformStampedメッセージの作成
         transform_stamped = TransformStamped()
         transform_stamped.header.stamp = timestamp
-        transform_stamped.header.frame_id = "base_link"  # LiDARのフレーム
+        transform_stamped.header.frame_id = "vad_base_link"  # LiDARのフレーム
         transform_stamped.child_frame_id = f"camera{autoware_camera_id}/camera_optical_link"  # カメラのフレーム
         
         # 平行移動の設定
@@ -761,7 +729,9 @@ def main():
         # 3. lidar2imgのtf_staticへの変換と書き込み
         # base_link(lidar) to camera{vad_camera_id}/camera_optical_link
         tf_static_msg = convert_bin_to_tf_static(lidar2img_data_dict[frame], ros_timestamp)
-        tf_static_msg = ns2aw_tf_static(tf_static_msg)
+        # add vad_base_link to base_link        
+        tf_static_msg.transforms.append(add_vad_base_link_to_base_link(ros_timestamp))
+
         write_to_rosbag(writer, "/tf_static", tf_static_msg, ros_timestamp)
 
         # 4. intrinsicsのcamera_infoへの変換と書き込み
