@@ -476,7 +476,7 @@ def convert_bin_to_tf_static(lidar2img_data: dict[int, np.ndarray], timestamp: T
         transform_stamped = TransformStamped()
         transform_stamped.header.stamp = timestamp
         transform_stamped.header.frame_id = "base_link"  # LiDARのフレーム
-        transform_stamped.child_frame_id = f"camera{autoware_camera_id}/optical_link"  # カメラのフレーム
+        transform_stamped.child_frame_id = f"camera{autoware_camera_id}/camera_optical_link"  # カメラのフレーム
         
         # 平行移動の設定
         transform_stamped.transform.translation.x = float(translation[0])
@@ -573,7 +573,7 @@ def create_camera_info_messages(timestamp: Time) -> dict[int, CameraInfo]:
         # CameraInfoメッセージの作成
         camera_info = CameraInfo()
         camera_info.header.stamp = timestamp
-        camera_info.header.frame_id = f"camera{autoware_camera_id}/optical_link"
+        camera_info.header.frame_id = f"camera{autoware_camera_id}/camera_optical_link"
         
         # 画像サイズの設定（一般的な値を仮定）
         camera_info.width = 1920
@@ -759,7 +759,7 @@ def main():
         write_to_rosbag(writer, "/localization/kinematic_state", kinematic_msg, ros_timestamp)
 
         # 3. lidar2imgのtf_staticへの変換と書き込み
-        # base_link(lidar) to camera{vad_camera_id}/optical_link
+        # base_link(lidar) to camera{vad_camera_id}/camera_optical_link
         tf_static_msg = convert_bin_to_tf_static(lidar2img_data_dict[frame], ros_timestamp)
         tf_static_msg = ns2aw_tf_static(tf_static_msg)
         write_to_rosbag(writer, "/tf_static", tf_static_msg, ros_timestamp)
