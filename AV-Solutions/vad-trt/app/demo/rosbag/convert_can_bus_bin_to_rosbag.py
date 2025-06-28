@@ -237,62 +237,6 @@ def ns2aw_tf_static(tf_static_msg: TFMessage) -> TFMessage:
     
     return aw_msg
 
-def ns2aw_camera_info(camera_info_msg: CameraInfo) -> CameraInfo:
-    """
-    Convert camera info message from nuScenes to Autoware coordinate system.
-    
-    Args:
-        camera_info_msg: Camera info message in nuScenes coordinate system
-        
-    Returns:
-        CameraInfo: Converted message in Autoware coordinate system
-    """
-    # Create a deep copy to avoid modifying the original message
-    aw_msg = CameraInfo()
-    aw_msg.header = camera_info_msg.header
-    aw_msg.height = camera_info_msg.height
-    aw_msg.width = camera_info_msg.width
-    aw_msg.distortion_model = camera_info_msg.distortion_model
-    aw_msg.d = camera_info_msg.d  # Distortion coefficients remain the same
-    
-    # The intrinsic camera matrix K remains the same as it's defined in camera's local coordinate system
-    aw_msg.k = camera_info_msg.k
-    
-    # The rectification matrix R depends on the camera's orientation
-    # For a rotated coordinate system, we need to modify it
-    # However, if R is identity (no rectification), it can remain the same
-    if all(val == 0.0 for i, val in enumerate(camera_info_msg.r) if i % 4 != 0) and all(val == 1.0 for i, val in enumerate(camera_info_msg.r) if i % 4 == 0):
-        # R is identity, keep it as is
-        aw_msg.r = camera_info_msg.r
-    else:
-        # R is not identity, apply rotation
-        # Convert R to numpy matrix for easier manipulation
-        r_matrix = np.array(camera_info_msg.r).reshape(3, 3)
-        
-        # Create rotation matrix for 90-degree rotation around Z-axis
-        rot_z = np.array([
-            [0, -1, 0],
-            [1, 0, 0],
-            [0, 0, 1]
-        ])
-        
-        # Apply rotation
-        r_matrix_aw = np.dot(rot_z, r_matrix)
-        
-        # Convert back to list
-        aw_msg.r = r_matrix_aw.flatten().tolist()
-    
-    # The projection matrix P combines K with the extrinsic parameters
-    # If there's a change in coordinate system, P needs to be updated
-    # For simplicity, we just copy P here since the camera's intrinsic parameters
-    # and its projection in its own coordinate system remain the same
-    aw_msg.p = camera_info_msg.p
-    
-    # Note: If the camera's extrinsic parameters (position and orientation relative to the vehicle)
-    # are encoded in P, a more complex transformation might be needed
-    
-    return aw_msg
-
 def calculate_shift(delta_x, delta_y, patch_angle_rad, grid_length=grid_length, bev_h=bev_h_, bev_w=bev_w_):
     ego_angle = np.array(patch_angle_rad / np.pi * 180)
 
@@ -823,7 +767,6 @@ def main():
         # 4. intrinsicsのcamera_infoへの変換と書き込み
         camera_infos = create_camera_info_messages(ros_timestamp)
         for autoware_camera_id in range(6):
-            camera_infos[autoware_camera_id] = ns2aw_camera_info(camera_infos[autoware_camera_id])
             write_to_rosbag(writer, f"/sensing/camera/camera{autoware_camera_id}/camera_info", camera_infos[autoware_camera_id], ros_timestamp)
         
         print(f"Processed frame {frame}")
