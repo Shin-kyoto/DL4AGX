@@ -318,11 +318,11 @@ def add_vad_base_link_to_base_link(ros_timestamp):
     # rotation: vad_base_linkのy軸はbase_linkのx軸と同じ方向，vad_base_linkのx軸はbase_linkのy軸の-方向
     # Z軸周りに+90度 (pi/2ラジアン) の回転
     # オイラー角からクォータニオンを計算
-    q = Quaternion(axis=[0, 0, 1], angle=np.pi/2)
-    transform_stamped.transform.rotation.x = q[0]
-    transform_stamped.transform.rotation.y = q[1]
-    transform_stamped.transform.rotation.z = q[2]
-    transform_stamped.transform.rotation.w = q[3]
+    quaternion = Quaternion(axis=[0, 0, 1], angle=np.pi/2)
+    transform_stamped.transform.rotation.x = float(quaternion.x)
+    transform_stamped.transform.rotation.y = float(quaternion.y)
+    transform_stamped.transform.rotation.z = float(quaternion.z)
+    transform_stamped.transform.rotation.w = float(quaternion.w)
     
     return transform_stamped
 
