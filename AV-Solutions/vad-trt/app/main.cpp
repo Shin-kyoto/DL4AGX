@@ -863,9 +863,78 @@ std::vector<float> load_lidar2img_from_rosbag_single_frame(
     transform.transform.translation.y = 0.0;
     transform.transform.translation.z = 0.0;
     // nuScenes(vad) -> Autoware(base) は +90度 Z回転
-    Eigen::Quaternionf q_rot(Eigen::AngleAxisf(static_cast<float>(-M_PI / 2.0), Eigen::Vector3f::UnitZ()));
+    Eigen::Quaternionf q_rot(Eigen::AngleAxisf(static_cast<float>(M_PI / 2.0), Eigen::Vector3f::UnitZ()));
     transform.transform.rotation = tf2::toMsg(q_rot.cast<double>());
     buffer.setTransform(transform, "default_authority", true); // 静的変換として登録
+  };
+
+  auto lookup_vad_to_base_rt =
+      [](tf2_ros::Buffer &buffer) -> std::optional<Eigen::Matrix4f> {
+    // この変換はカメラIDに依存しない
+    std::string target_frame = "base_link";
+    std::string source_frame = "vad_base_link";
+
+    try {
+      geometry_msgs::msg::TransformStamped lookup_result =
+          buffer.lookupTransform(target_frame, source_frame, tf2::TimePointZero);
+      
+      // geometry_msgs::msg::TransformからEigen::Matrix4fへの手動変換
+      Eigen::Matrix4f transform_matrix = Eigen::Matrix4f::Identity();
+      
+      // 並進部分
+      transform_matrix(0, 3) = lookup_result.transform.translation.x;
+      transform_matrix(1, 3) = lookup_result.transform.translation.y;
+      transform_matrix(2, 3) = lookup_result.transform.translation.z;
+      
+      // 回転部分（クォータニオンから回転行列への変換）
+      Eigen::Quaternionf q(
+          lookup_result.transform.rotation.w,
+          lookup_result.transform.rotation.x,
+          lookup_result.transform.rotation.y,
+          lookup_result.transform.rotation.z);
+      transform_matrix.block<3, 3>(0, 0) = q.toRotationMatrix();
+      
+      return transform_matrix;
+
+    } catch (const tf2::TransformException &ex) {
+      RCLCPP_ERROR(rclcpp::get_logger("load_lidar2img"), "TF変換の取得に失敗: %s -> %s. Reason: %s",
+                   source_frame.c_str(), target_frame.c_str(), ex.what());
+      return std::nullopt;
+    }
+  };
+
+  auto lookup_base_to_camera_rt =
+      [](tf2_ros::Buffer &buffer, int autoware_camera_id) -> std::optional<Eigen::Matrix4f> {
+    std::string target_frame = "camera" + std::to_string(autoware_camera_id) + "/camera_optical_link";
+    std::string source_frame = "base_link"; // ソースフレームを"base_link"に変更
+
+    try {
+      geometry_msgs::msg::TransformStamped lookup_result =
+          buffer.lookupTransform(target_frame, source_frame, tf2::TimePointZero);
+      
+      // geometry_msgs::msg::TransformからEigen::Matrix4fへの手動変換
+      Eigen::Matrix4f transform_matrix = Eigen::Matrix4f::Identity();
+      
+      // 並進部分
+      transform_matrix(0, 3) = lookup_result.transform.translation.x;
+      transform_matrix(1, 3) = lookup_result.transform.translation.y;
+      transform_matrix(2, 3) = lookup_result.transform.translation.z;
+      
+      // 回転部分（クォータニオンから回転行列への変換）
+      Eigen::Quaternionf q(
+          lookup_result.transform.rotation.w,
+          lookup_result.transform.rotation.x,
+          lookup_result.transform.rotation.y,
+          lookup_result.transform.rotation.z);
+      transform_matrix.block<3, 3>(0, 0) = q.toRotationMatrix();
+      
+      return transform_matrix;
+
+    } catch (const tf2::TransformException &ex) {
+      RCLCPP_ERROR(rclcpp::get_logger("load_lidar2img"), "TF変換の取得に失敗: %s -> %s. Reason: %s",
+                   source_frame.c_str(), target_frame.c_str(), ex.what());
+      return std::nullopt;
+    }
   };
 
   // TFバッファからlidar2cam_rtを取得する
@@ -940,6 +1009,12 @@ std::vector<float> load_lidar2img_from_rosbag_single_frame(
     // lidar2cam_rt (vad_base_link -> camera) をTFバッファから取得
     auto lidar2cam_rt_opt = lookup_lidar2cam_rt(tf_buffer, autoware_camera_id);
     Eigen::Matrix4f lidar2cam_rt = *lidar2cam_rt_opt;
+
+    auto base_to_camera_rt_opt = lookup_base_to_camera_rt(tf_buffer, autoware_camera_id);
+    Eigen::Matrix4f base_to_camera_rt = *base_to_camera_rt_opt;
+
+    auto vad_to_base_rt_opt = lookup_vad_to_base_rt(tf_buffer);
+    Eigen::Matrix4f vad_to_base_rt = *vad_to_base_rt_opt;
 
     Eigen::Matrix4f viewpad = create_viewpad(camera_infos[autoware_camera_id]);
     Eigen::Matrix4f lidar2cam_rt_T = lidar2cam_rt.transpose();
