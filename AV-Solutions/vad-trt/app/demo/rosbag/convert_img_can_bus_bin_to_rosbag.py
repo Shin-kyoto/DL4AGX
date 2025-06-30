@@ -9,7 +9,9 @@ from sensor_msgs.msg import CompressedImage, PointCloud2, PointField
 from std_msgs.msg import Header
 from builtin_interfaces.msg import Time
 import rosbag2_py
-
+from tf2_msgs.msg import TFMessage
+from rclpy.time import Time as RclpyTime
+import tf2_ros
 from convert_can_bus_bin_to_rosbag import convert_bin_to_imu, convert_bin_to_kinematic_state, write_to_rosbag, convert_bin_to_tf_static, create_camera_info_messages
 from convert_can_bus_bin_to_rosbag import ns2aw_kinematic_state, ns2aw_imu, add_vad_base_link_to_base_link
 
@@ -102,6 +104,7 @@ def main():
         writer.create_topic(camera_info_topic_metadata)
 
     for frame in range(1, n_frames + 1):
+        tf_buffer = tf2_ros.Buffer()
         frame_dir = os.path.join(input_dir, str(frame))
         
         # 画像データの処理
@@ -167,10 +170,26 @@ def main():
             for vad_camera_id in range(6):
                 lidar2img_dict[vad_camera_id] = lidar2img_data[16*vad_camera_id:16*(vad_camera_id+1)]
             
-            tf_static_msg = convert_bin_to_tf_static(lidar2img_dict, ros_timestamp)
-            # add vad_base_link to base_link        
-            tf_static_msg.transforms.append(add_vad_base_link_to_base_link(ros_timestamp))
-            write_to_rosbag(writer, "/tf_static", tf_static_msg, ros_timestamp)
+            tf_vad_to_cam_msg = convert_bin_to_tf_static(lidar2img_dict, ros_timestamp)
+            tf_vad_to_base_stamped = add_vad_base_link_to_base_link(ros_timestamp)
+            # バッファに静的変換として登録
+            for transform in tf_vad_to_cam_msg.transforms:
+                tf_buffer.set_transform(transform, "default_authority")
+            tf_buffer.set_transform(tf_vad_to_base_stamped, "default_authority")
+            final_tf_msg = TFMessage()
+            lookup_time = RclpyTime.from_msg(ros_timestamp)
+            for autoware_camera_id in range(6):
+                target_frame = "base_link"
+                source_frame = f"camera{autoware_camera_id}/camera_optical_link"
+
+                # バッファに登録した情報から camera -> base_link の変換を解決
+                final_transform_stamped = tf_buffer.lookup_transform(
+                    target_frame=target_frame,
+                    source_frame=source_frame,
+                    time=lookup_time
+                )
+                final_tf_msg.transforms.append(final_transform_stamped)
+            write_to_rosbag(writer, "/tf_static", final_tf_msg, ros_timestamp)
 
         # camera_infoメッセージの作成と書き込み
         camera_infos = create_camera_info_messages(ros_timestamp)
