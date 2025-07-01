@@ -1018,7 +1018,7 @@ std::vector<float> load_lidar2img_from_rosbag_single_frame(
 
     Eigen::Matrix4f viewpad = create_viewpad(camera_infos[autoware_camera_id]);
     Eigen::Matrix4f lidar2cam_rt_T = lidar2cam_rt.transpose();
-    Eigen::Matrix4f lidar2img = viewpad * lidar2cam_rt_T;
+    Eigen::Matrix4f lidar2img = viewpad * lidar2cam_rt;
 
         // スケーリングを適用
         lidar2img = apply_scaling(lidar2img, scale_width, scale_height);
