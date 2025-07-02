@@ -1333,9 +1333,7 @@ int main(int argc, char **argv) {
         vad_input_data
             .command_; // VadInputDataのcommand_の値（2 = "KEEP FORWARD"）を使用
 
-    frame.img_metas_lidar2img = vad_model.nets_["head"]
-                                    ->bindings["img_metas.0[lidar2img]"]
-                                    ->cpu<float>();
+    frame.img_metas_lidar2img = frame_lidar2img;
 
     // pred -> frame.planning
     frame.planning = vad_output_data.predicted_trajectory_;
@@ -1382,6 +1380,12 @@ int main(int argc, char **argv) {
         ret[9] = (float)max_label;
         ret[10] = max_score;
         frame.det.push_back(ret);
+      }
+    }
+    // if frame is 13, print frame.det
+    if (frame_id == 13) {
+      for (const auto &det : frame.det) {
+        std::cout << "det: " << det[0] << ", " << det[1] << ", " << det[2] << ", " << det[3] << ", " << det[4] << ", " << det[5] << ", " << det[6] << ", " << det[7] << ", " << det[8] << ", " << det[9] << ", " << det[10] << std::endl;
       }
     }
     node->publishDetectedObjects(frame.det);
