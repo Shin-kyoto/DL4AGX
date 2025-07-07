@@ -979,20 +979,23 @@ std::vector<float> load_lidar2img_from_rosbag_single_frame(
     if (autoware_camera_id == 0) {
       // 理想的な値（行優先から列優先に変換）
       // 行優先: {0.0132879019, -0.999855042, -0.0106524229, 0,
-      //          0.052913934, 0.0113415122,-0.998534679, -0.656201005,
+      //          0.052913934, 0.0113415122,-0.998534679, 0.656201005,
       //          0.998510718, 0.0127048194, 0.0530569553, -0.835660219,
       //          0, 0, 0, 1}
-      base_to_camera_rt << 0.0132879019f, 0.052913934f, 0.998510718f, 0.0f,
-                          -0.999855042f, 0.0113415122f, 0.0127048194f, 0.0f,
-                          -0.0106524229f, -0.998534679f, 0.0530569553f, 0.0f,
-                          0.0f, 0.656201005f, 0.835660219f, 1.0f;
+      base_to_camera_rt << 0.0132879019f, -0.999855042f, -0.0106524229f, 0.0f,
+                          0.052913934f, 0.0113415122f, -0.998534679f, 0.656201005f,
+                          0.998510718f, 0.0127048194f, 0.0530569553f, -0.835660219f,
+                          0.0f, 0.0f, 0.0f, 1.0f;
+    }
+    else {
+      base_to_camera_rt.transposeInPlace();
     }
 
     auto vad_to_base_rt_opt = lookup_vad_to_base_rt(tf_buffer);
     Eigen::Matrix4f vad_to_base_rt = *vad_to_base_rt_opt;
 
     Eigen::Matrix4f viewpad = create_viewpad(camera_infos[autoware_camera_id]);
-    Eigen::Matrix4f lidar2cam_rt = base_to_camera_rt.transpose() * vad_to_base_rt;
+    Eigen::Matrix4f lidar2cam_rt = base_to_camera_rt * vad_to_base_rt;
     Eigen::Matrix4f lidar2img = viewpad * lidar2cam_rt;
 
         // スケーリングを適用
