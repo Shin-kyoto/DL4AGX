@@ -221,7 +221,7 @@ class ImageArtistImplement : public ImageArtist {
     nvtype::Float4 row0 = (this->param_.viewport_nx4x4.data() + camera_index * 4)[0];
     nvtype::Float4 row1 = (this->param_.viewport_nx4x4.data() + camera_index * 4)[1];
     nvtype::Float4 row2 = (this->param_.viewport_nx4x4.data() + camera_index * 4)[2];
-    float ground_height = -1.562;
+    float ground_height = -0.3;
     float init_image_x = ground_height * row0.z + row0.w;
     float init_image_y = ground_height * row1.z + row1.w;
     float init_weight = ground_height * row2.z + row2.w;
