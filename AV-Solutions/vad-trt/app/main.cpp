@@ -1287,6 +1287,11 @@ int main(int argc, char **argv) {
   float scale_width = 640.0f / static_cast<float>(input_image_width);
   float scale_height = 384.0f / static_cast<float>(input_image_height);
   
+  // Read visualization configuration
+  float lidar_z_compensation = cfg["visualization"]["lidar_z_compensation"].get<float>();
+  float init_lidar_y = cfg["visualization"]["init_lidar_y"].get<float>();
+  float ground_height = cfg["visualization"]["ground_height"].get<float>();
+  
   // フレームごとに処理
   std::vector<float> prev_can_bus;
   for (int frame_id = 1; frame_id <= vad_topic_data_list.size(); frame_id++) {
@@ -1407,7 +1412,8 @@ int main(int argc, char **argv) {
     node->publishDetectedObjects(frame.det);
     nv::visualize(images, frame, font_path,
                   viz_dir + "/" + std::to_string(frame_id) + ".jpg",
-                  vad_model.stream_);
+                  vad_model.stream_,
+                  lidar_z_compensation, init_lidar_y, ground_height);
 
     printf("[INFO] %d, cmd=%d finished\n", frame_id, frame.cmd);
   }

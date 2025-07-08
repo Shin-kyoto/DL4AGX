@@ -50,7 +50,10 @@ void visualize(
   const VisualizeFrame& frame,
   const std::string& font_path,
   const std::string& save_path,
-  cudaStream_t stream
+  cudaStream_t stream,
+  float lidar_z_compensation,
+  float init_lidar_y,
+  float ground_height
 ) {
   std::vector<std::pair<float, float>> planning_traj = decode_planning_traj(frame);
   std::string command = decode_command(frame); 
@@ -62,6 +65,9 @@ void visualize(
   image_artist_param.image_width = 1600;
   image_artist_param.image_height = 900;
   image_artist_param.image_stride = image_artist_param.image_width * 3;
+  image_artist_param.lidar_z_compensation = lidar_z_compensation;
+  image_artist_param.init_lidar_y = init_lidar_y;
+  image_artist_param.ground_height = ground_height;
 
   for (size_t i=0; i<frame.img_metas_lidar2img.size(); i+=4) {
     nvtype::Float4 transform_vec(
@@ -99,6 +105,9 @@ void visualize(
   bev_artist_param.cx = content_width * 0.5f;
   bev_artist_param.cy = content_height * 0.5f + camera_height;
   bev_artist_param.image_stride = scene_artist_param.stride;
+  bev_artist_param.lidar_z_compensation = lidar_z_compensation;
+  bev_artist_param.init_lidar_y = init_lidar_y;
+  bev_artist_param.ground_height = ground_height;
 
   auto bev_visualizer = nv::create_bev_artist(bev_artist_param);
   bev_visualizer->font_path = font_path;
