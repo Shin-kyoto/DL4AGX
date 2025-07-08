@@ -51,7 +51,6 @@ void visualize(
   const std::string& font_path,
   const std::string& save_path,
   cudaStream_t stream,
-  float lidar_z_compensation,
   float init_lidar_y,
   float ground_height
 ) {
@@ -65,7 +64,6 @@ void visualize(
   image_artist_param.image_width = 1600;
   image_artist_param.image_height = 900;
   image_artist_param.image_stride = image_artist_param.image_width * 3;
-  image_artist_param.lidar_z_compensation = lidar_z_compensation;
   image_artist_param.init_lidar_y = init_lidar_y;
   image_artist_param.ground_height = ground_height;
 
@@ -105,7 +103,6 @@ void visualize(
   bev_artist_param.cx = content_width * 0.5f;
   bev_artist_param.cy = content_height * 0.5f + camera_height;
   bev_artist_param.image_stride = scene_artist_param.stride;
-  bev_artist_param.lidar_z_compensation = lidar_z_compensation;
   bev_artist_param.init_lidar_y = init_lidar_y;
   bev_artist_param.ground_height = ground_height;
 

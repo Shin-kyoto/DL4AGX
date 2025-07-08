@@ -1288,7 +1288,7 @@ int main(int argc, char **argv) {
   float scale_height = 384.0f / static_cast<float>(input_image_height);
   
   // Read visualization configuration
-  float lidar_z_compensation = cfg["visualization"]["lidar_z_compensation"].get<float>();
+  float lidar_z_compensation = cfg["lidar_z_compensation"].get<float>();
   float init_lidar_y = cfg["visualization"]["init_lidar_y"].get<float>();
   float ground_height = cfg["visualization"]["ground_height"].get<float>();
   
@@ -1391,7 +1391,7 @@ int main(int argc, char **argv) {
         std::vector<float> ret(11);
         ret[0] = raw[0];
         ret[1] = raw[1];
-        ret[2] = raw[4];
+        ret[2] = raw[4] + lidar_z_compensation;  // postprocessでlidar_z_compensationを適用
         ret[3] = std::exp(raw[2]);
         ret[4] = std::exp(raw[3]);
         ret[5] = std::exp(raw[5]);
@@ -1413,7 +1413,7 @@ int main(int argc, char **argv) {
     nv::visualize(images, frame, font_path,
                   viz_dir + "/" + std::to_string(frame_id) + ".jpg",
                   vad_model.stream_,
-                  lidar_z_compensation, init_lidar_y, ground_height);
+                  init_lidar_y, ground_height);
 
     printf("[INFO] %d, cmd=%d finished\n", frame_id, frame.cmd);
   }

@@ -183,7 +183,6 @@ struct ImageArtistParameter {
   std::vector<nvtype::Float4> viewport_nx4x4;
   std::vector<NameAndColor> classes;
   // Visualization configuration
-  float lidar_z_compensation;
   float init_lidar_y;
   float ground_height;
 };
@@ -210,7 +209,6 @@ struct BEVArtistParameter {
   float rotate_x;
   std::vector<NameAndColor> classes;
   // Visualization configuration
-  float lidar_z_compensation;
   float init_lidar_y;
   float ground_height;
 };
@@ -273,7 +271,6 @@ void visualize(
   const std::string& font_path,
   const std::string& save_path,
   cudaStream_t stream,
-  float lidar_z_compensation,
   float init_lidar_y,
   float ground_height
 );

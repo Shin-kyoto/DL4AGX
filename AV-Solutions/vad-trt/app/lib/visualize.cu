@@ -157,12 +157,11 @@ class ImageArtistImplement : public ImageArtist {
   virtual void draw_prediction(int camera_index, const std::vector<std::vector<float>>& predictions, bool flipx) override {
     if (predictions.size() == 0) return;
     std::vector<Prediction> bbox_container;
-    float lidar_z_compensation = param_.lidar_z_compensation;
     for (size_t i=0; i < predictions.size(); ++i) {
       Prediction obj;
       obj.position.x = predictions[i][0];
       obj.position.y = predictions[i][1];
-      obj.position.z = predictions[i][2] + lidar_z_compensation;
+      obj.position.z = predictions[i][2];
       obj.size.w = predictions[i][3];
       obj.size.l = predictions[i][4];
       obj.size.h = predictions[i][5];
@@ -503,12 +502,11 @@ class BEVArtistImplement : public BEVArtist {
     }
     if (predictions.size() == 0) return;
     std::vector<Prediction> bbox_container;
-    float lidar_z_compensation = param_.lidar_z_compensation;
     for (size_t i=0; i < predictions.size(); ++i) {
       Prediction obj;
       obj.position.x = predictions[i][0];
       obj.position.y = predictions[i][1];
-      obj.position.z = predictions[i][2] + lidar_z_compensation;
+      obj.position.z = predictions[i][2];
       obj.size.w = predictions[i][3];
       obj.size.l = predictions[i][4];
       obj.size.h = predictions[i][5];
