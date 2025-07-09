@@ -17,6 +17,7 @@ VadInterface::VadInterface(
     const std::vector<double>& default_shift,
     const std::vector<double>& image_normalization_param_mean,
     const std::vector<double>& image_normalization_param_std,
+    const std::vector<double>& vad2base,
     std::shared_ptr<tf2_ros::Buffer> tf_buffer)
   : target_image_width_(target_image_width),
     target_image_height_(target_image_height),
@@ -48,7 +49,13 @@ VadInterface::VadInterface(
   for (size_t i = 0; i < 3 && i < image_normalization_param_std.size(); ++i) {
     image_normalization_param_std_[i] = static_cast<float>(image_normalization_param_std[i]);
   }
-  
+
+  // vad2base_をEigen::Matrix4fに変換（row-majorで格納されている前提）
+  vad2base_ = Eigen::Matrix4f::Identity();
+  for (size_t i = 0; i < 16 && i < vad2base.size(); ++i) {
+    vad2base_(i / 4, i % 4) = static_cast<float>(vad2base[i]);
+  }
+
   // AutowareカメラインデックスからVADカメラインデックスへのマッピング
   autoware_to_vad_ = {
     {0, 0}, // FRONT
@@ -89,55 +96,6 @@ VadInputData VadInterface::convert(const VadInputTopicData & vad_input_topic_dat
   vad_input_data.command_ = default_command_;
   
   return vad_input_data;
-}
-
-void VadInterface::add_vad_to_base_link_transform(tf2_ros::Buffer & buffer, const rclcpp::Time & stamp) const
-{
-  geometry_msgs::msg::TransformStamped transform;
-  transform.header.stamp = stamp;
-  transform.header.frame_id = "vad_base_link";
-  transform.child_frame_id = "base_link";
-  transform.transform.translation.x = 0.0;
-  transform.transform.translation.y = 0.0;
-  transform.transform.translation.z = 0.0;
-  // nuScenes(vad) -> Autoware(base) は +90度 Z回転
-  Eigen::Quaternionf q_rot(Eigen::AngleAxisf(static_cast<float>(M_PI / 2.0), Eigen::Vector3f::UnitZ()));
-  transform.transform.rotation = tf2::toMsg(q_rot.cast<double>());
-  buffer.setTransform(transform, "default_authority", true); // 静的変換として登録
-}
-
-std::optional<Eigen::Matrix4f> VadInterface::lookup_vad_to_base_rt(tf2_ros::Buffer & buffer) const
-{
-  std::string target_frame = "base_link";
-  std::string source_frame = "vad_base_link";
-
-  try {
-    geometry_msgs::msg::TransformStamped lookup_result =
-        buffer.lookupTransform(target_frame, source_frame, tf2::TimePointZero);
-    
-    // geometry_msgs::msg::TransformからEigen::Matrix4fへの手動変換
-    Eigen::Matrix4f transform_matrix = Eigen::Matrix4f::Identity();
-    
-    // 並進部分
-    transform_matrix(0, 3) = lookup_result.transform.translation.x;
-    transform_matrix(1, 3) = lookup_result.transform.translation.y;
-    transform_matrix(2, 3) = lookup_result.transform.translation.z;
-    
-    // 回転部分（クォータニオンから回転行列への変換）
-    Eigen::Quaternionf q(
-        lookup_result.transform.rotation.w,
-        lookup_result.transform.rotation.x,
-        lookup_result.transform.rotation.y,
-        lookup_result.transform.rotation.z);
-    transform_matrix.block<3, 3>(0, 0) = q.toRotationMatrix();
-    
-    return transform_matrix;
-
-  } catch (const tf2::TransformException &ex) {
-    RCLCPP_ERROR(rclcpp::get_logger("VadInterface"), "TF変換の取得に失敗: %s -> %s. Reason: %s",
-                 source_frame.c_str(), target_frame.c_str(), ex.what());
-    return std::nullopt;
-  }
 }
 
 std::optional<Eigen::Matrix4f> VadInterface::lookup_base_to_camera_rt(tf2_ros::Buffer & buffer, int32_t autoware_camera_id) const
@@ -225,7 +183,6 @@ Lidar2ImgData VadInterface::process_lidar2img(
   if (!tf_static->transforms.empty()) {
     stamp = tf_static->transforms[0].header.stamp;
   }
-  add_vad_to_base_link_transform(*tf_buffer_, stamp);
 
   // 各カメラの処理
   for (int32_t autoware_camera_id = 0; autoware_camera_id < 6; ++autoware_camera_id) {
@@ -237,12 +194,8 @@ Lidar2ImgData VadInterface::process_lidar2img(
     if (!base_to_camera_rt_opt) continue;
     Eigen::Matrix4f base_to_camera_rt = *base_to_camera_rt_opt;
 
-    auto vad_to_base_rt_opt = lookup_vad_to_base_rt(*tf_buffer_);
-    if (!vad_to_base_rt_opt) continue;
-    Eigen::Matrix4f vad_to_base_rt = *vad_to_base_rt_opt;
-
     Eigen::Matrix4f viewpad = create_viewpad(camera_infos[autoware_camera_id]);
-    Eigen::Matrix4f lidar2cam_rt = base_to_camera_rt * vad_to_base_rt;
+    Eigen::Matrix4f lidar2cam_rt = base_to_camera_rt * vad2base_;
     Eigen::Matrix4f lidar2img = viewpad * lidar2cam_rt;
 
     // スケーリングを適用

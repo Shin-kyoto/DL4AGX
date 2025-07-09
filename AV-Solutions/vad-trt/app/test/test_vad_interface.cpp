@@ -67,12 +67,20 @@ TEST(VadLidar2ImgTest, DummyInputOutput)
     float input_image_height = 1080;
     float target_image_width = 640;
     float target_image_height = 384;
+    // vad2base: row-major 4x4 matrix (double)
+    std::vector<double> vad2base = {
+        0.0, 1.0, 0.0, 0.0,
+       -1.0, 0.0, 0.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 0.0, 1.0
+    };
     VadInterface vad_interface(
         1920, 1080, 640, 384,
         std::vector<double>{-15.0, -30.0, -2.0, 15.0, 30.0, 2.0},
         100, 100, -1.0353195667266846, 0, std::vector<double>{0.0, 0.0},
         std::vector<double>{103.530, 116.280, 123.675},
         std::vector<double>{1.0, 1.0, 1.0},
+        vad2base,
         tf_buffer);
     float scale_width = target_image_width / input_image_width;
     float scale_height = target_image_height / input_image_height;

@@ -632,6 +632,13 @@ int main(int argc, char **argv) {
       node->declare_parameter<std::vector<double>>("interface_params.image_normalization_param_std", 
                                                     std::vector<double>{1.0, 1.0, 1.0});
 
+  std::vector<double> vad2base =
+      node->declare_parameter<std::vector<double>>("interface_params.vad2base",
+        std::vector<double>{0.0, 1.0, 0.0, 0.0,
+                            -1.0, 0.0, 0.0, 0.0,
+                             0.0, 0.0, 1.0, 0.0,
+                             0.0, 0.0, 0.0, 1.0});
+
   auto tf_buffer = std::make_shared<tf2_ros::Buffer>(node->get_clock());
 
   auto vad_topic_data_list = extract_vad_topic_data_from_rosbag(
@@ -657,6 +664,7 @@ int main(int argc, char **argv) {
     default_shift,
     image_normalization_param_mean,
     image_normalization_param_std,
+    vad2base,
     tf_buffer);
 
   

@@ -93,6 +93,7 @@ public:
     const std::vector<double>& default_shift,
     const std::vector<double>& image_normalization_param_mean,
     const std::vector<double>& image_normalization_param_std,
+    const std::vector<double>& vad2base,
     std::shared_ptr<tf2_ros::Buffer> tf_buffer);
 
   VadInputData convert(const VadInputTopicData & vad_input_topic_data, const std::vector<float> & prev_can_bus = {});
@@ -127,11 +128,9 @@ private:
   // 正規化のパラメータ
   float image_normalization_param_mean_[3];
   float image_normalization_param_std_[3];
+  Eigen::Matrix4f vad2base_;
 
   // --- 内部処理関数 ---
-  void add_vad_to_base_link_transform(tf2_ros::Buffer & buffer, const rclcpp::Time & stamp) const;
-  
-  std::optional<Eigen::Matrix4f> lookup_vad_to_base_rt(tf2_ros::Buffer & buffer) const;
   std::optional<Eigen::Matrix4f> lookup_base_to_camera_rt(tf2_ros::Buffer & buffer, int32_t autoware_camera_id) const;
   Eigen::Matrix4f create_viewpad(const sensor_msgs::msg::CameraInfo::ConstSharedPtr & camera_info) const;
   Eigen::Matrix4f apply_scaling(const Eigen::Matrix4f & lidar2img, float scale_width, float scale_height) const;
