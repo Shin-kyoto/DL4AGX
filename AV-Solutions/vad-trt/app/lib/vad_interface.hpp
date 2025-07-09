@@ -83,14 +83,23 @@ using CanBusData = std::vector<float>;
 class VadInterface
 {
 public:
-  explicit VadInterface(int32_t input_image_width, int32_t input_image_height);
+  explicit VadInterface(
+    int32_t input_image_width, int32_t input_image_height,
+    int32_t target_image_width, int32_t target_image_height,
+    const std::vector<double>& point_cloud_range,
+    int32_t bev_h, int32_t bev_w,
+    double default_patch_angle,
+    int32_t default_command,
+    const std::vector<double>& default_shift,
+    const std::vector<double>& image_normalization_param_mean,
+    const std::vector<double>& image_normalization_param_std);
 
   VadInputData convert(const VadInputTopicData & vad_input_topic_data, const std::vector<float> & prev_can_bus = {});
 
 private:
   // --- クラスの不変条件 (メンバ変数) ---
   std::unordered_map<int32_t, int32_t> autoware_to_vad_;
-  int32_t target_width_, target_height_;
+  int32_t target_image_width_, target_image_height_;
   int32_t input_image_width_, input_image_height_;
   float point_cloud_range_[6];
   int32_t bev_h_, bev_w_;
@@ -98,8 +107,8 @@ private:
   int32_t default_command_;
   std::vector<float> default_shift_;
   // 正規化のパラメータ
-  float mean_[3];
-  float std_[3];
+  float image_normalization_param_mean_[3];
+  float image_normalization_param_std_[3];
 
   // --- 内部処理関数 ---
   void add_vad_to_base_link_transform(tf2_ros::Buffer & buffer, const rclcpp::Time & stamp) const;
@@ -112,7 +121,7 @@ private:
   
   std::optional<std::tuple<unsigned char*, int32_t, int32_t>> resize_image(
     unsigned char *image_data, int32_t width, int32_t height, int32_t channels, 
-    int32_t target_width, int32_t target_height) const;
+    int32_t target_image_width, int32_t target_image_height) const;
   std::vector<float> normalize_image(unsigned char *image_data, int32_t width, int32_t height) const;
   
   std::vector<float> build_can_bus_data(

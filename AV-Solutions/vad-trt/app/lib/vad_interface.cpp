@@ -8,20 +8,46 @@
 namespace autoware::tensorrt_vad
 {
 
-VadInterface::VadInterface(int32_t input_image_width, int32_t input_image_height) 
-  : target_width_(640),
-    target_height_(384),
+VadInterface::VadInterface(
+    int32_t input_image_width, int32_t input_image_height,
+    int32_t target_image_width, int32_t target_image_height,
+    const std::vector<double>& point_cloud_range,
+    int32_t bev_h, int32_t bev_w,
+    double default_patch_angle,
+    int32_t default_command,
+    const std::vector<double>& default_shift,
+    const std::vector<double>& image_normalization_param_mean,
+    const std::vector<double>& image_normalization_param_std) 
+  : target_image_width_(target_image_width),
+    target_image_height_(target_image_height),
     input_image_width_(input_image_width),
     input_image_height_(input_image_height),
-    point_cloud_range_{-15.0f, -30.0f, -2.0f, 15.0f, 30.0f, 2.0f},
-    bev_h_(100),
-    bev_w_(100),
-    default_patch_angle_(-1.0353195667266846f),
-    default_command_(2),
-    default_shift_{0.0f, 0.0f},
-    mean_{103.530f, 116.280f, 123.675f},
-    std_{1.0f, 1.0f, 1.0f}
+    bev_h_(bev_h),
+    bev_w_(bev_w),
+    default_patch_angle_(static_cast<float>(default_patch_angle)),
+    default_command_(default_command)
 {
+  // default_shiftをdoubleからfloatに変換してコピー
+  default_shift_.resize(default_shift.size());
+  for (size_t i = 0; i < default_shift.size(); ++i) {
+    default_shift_[i] = static_cast<float>(default_shift[i]);
+  }
+  
+  // point_cloud_rangeの配列への代入（doubleからfloatに変換）
+  for (size_t i = 0; i < 6 && i < point_cloud_range.size(); ++i) {
+    point_cloud_range_[i] = static_cast<float>(point_cloud_range[i]);
+  }
+  
+  // image_normalization_param_meanの配列への代入（doubleからfloatに変換）
+  for (size_t i = 0; i < 3 && i < image_normalization_param_mean.size(); ++i) {
+    image_normalization_param_mean_[i] = static_cast<float>(image_normalization_param_mean[i]);
+  }
+  
+  // image_normalization_param_stdの配列への代入（doubleからfloatに変換）
+  for (size_t i = 0; i < 3 && i < image_normalization_param_std.size(); ++i) {
+    image_normalization_param_std_[i] = static_cast<float>(image_normalization_param_std[i]);
+  }
+  
   // AutowareカメラインデックスからVADカメラインデックスへのマッピング
   autoware_to_vad_ = {
     {0, 0}, // FRONT
@@ -36,9 +62,9 @@ VadInterface::VadInterface(int32_t input_image_width, int32_t input_image_height
 VadInputData VadInterface::convert(const VadInputTopicData & vad_input_topic_data, const std::vector<float> & prev_can_bus)
 {
   VadInputData vad_input_data;
-  
-  float scale_width = target_width_ / static_cast<float>(input_image_width_);
-  float scale_height = target_height_ / static_cast<float>(input_image_height_);
+
+  float scale_width = target_image_width_ / static_cast<float>(input_image_width_);
+  float scale_height = target_image_height_ / static_cast<float>(input_image_height_);
 
   // Process lidar2img transformation
   vad_input_data.lidar2img_ = process_lidar2img(
@@ -245,12 +271,12 @@ Lidar2ImgData VadInterface::process_lidar2img(
 
 std::optional<std::tuple<unsigned char*, int32_t, int32_t>> VadInterface::resize_image(
   unsigned char *image_data, int32_t width, int32_t height, int32_t channels, 
-  int32_t target_width, int32_t target_height) const
+  int32_t target_image_width, int32_t target_image_height) const
 {
-  unsigned char *resized_data = (unsigned char *)malloc(target_width * target_height * channels);
+  unsigned char *resized_data = (unsigned char *)malloc(target_image_width * target_image_height * channels);
   
   int32_t resize_result = stbir_resize_uint8(image_data, width, height, 0, resized_data,
-                                        target_width, target_height, 0, channels);
+                                        target_image_width, target_image_height, 0, channels);
   
   if (!resize_result) {
     free(resized_data);
@@ -260,7 +286,7 @@ std::optional<std::tuple<unsigned char*, int32_t, int32_t>> VadInterface::resize
   // 元のデータを解放
   stbi_image_free(image_data);
   
-  return std::make_tuple(resized_data, target_width, target_height);
+  return std::make_tuple(resized_data, target_image_width, target_image_height);
 }
 
 std::vector<float> VadInterface::normalize_image(unsigned char *image_data, int32_t width, int32_t height) const
@@ -274,7 +300,7 @@ std::vector<float> VadInterface::normalize_image(unsigned char *image_data, int3
         int32_t src_idx = (h * width + w) * 3 + (2 - c); // BGR -> RGB
         int32_t dst_idx = c * height * width + h * width + w; // CHW形式
         float pixel_value = static_cast<float>(image_data[src_idx]);
-        normalized_image_data[dst_idx] = (pixel_value - mean_[c]) / std_[c];
+        normalized_image_data[dst_idx] = (pixel_value - image_normalization_param_mean_[c]) / image_normalization_param_std_[c];
       }
     }
   }
@@ -299,8 +325,8 @@ CameraImagesData VadInterface::process_image(
         &width, &height, &channels, STBI_rgb); // RGBとして読み込む
 
     // サイズが目標と違う場合はリサイズする
-    if (width != target_width_ || height != target_height_) {
-      auto resize_result = resize_image(image_data, width, height, channels, target_width_, target_height_);
+    if (width != target_image_width_ || height != target_image_height_) {
+      auto resize_result = resize_image(image_data, width, height, channels, target_image_width_, target_image_height_);
       
       if (resize_result.has_value()) {
         // リサイズされたデータとサイズを取得
@@ -321,7 +347,7 @@ CameraImagesData VadInterface::process_image(
 
   // 画像データを連結
   std::vector<float> concatenated_data;
-  size_t single_camera_size = 3 * target_height_ * target_width_;
+  size_t single_camera_size = 3 * target_image_height_ * target_image_width_;
   concatenated_data.reserve(single_camera_size * 6);
 
   // カメラの順序: {0, 1, 2, 3, 4, 5}

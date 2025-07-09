@@ -597,6 +597,36 @@ int main(int argc, char **argv) {
       node->declare_parameter<int>("model_params.default_command", 0);
   printf("[INFO] default_command=%d\n", default_command);
 
+  // VadInterfaceのパラメータを読み込む
+  int32_t target_image_width = 
+      node->declare_parameter<int>("interface_params.target_image_width", 640);
+  int32_t target_image_height = 
+      node->declare_parameter<int>("interface_params.target_image_height", 384);
+  
+  std::vector<double> point_cloud_range = 
+      node->declare_parameter<std::vector<double>>("interface_params.point_cloud_range", 
+                                                    std::vector<double>{-15.0, -30.0, -2.0, 15.0, 30.0, 2.0});
+  
+  int32_t bev_h = 
+      node->declare_parameter<int>("interface_params.bev_h", 100);
+  int32_t bev_w = 
+      node->declare_parameter<int>("interface_params.bev_w", 100);
+  
+  double default_patch_angle = 
+      node->declare_parameter<double>("interface_params.default_patch_angle", -1.0353195667266846);
+  
+  std::vector<double> default_shift = 
+      node->declare_parameter<std::vector<double>>("interface_params.default_shift", 
+                                                    std::vector<double>{0.0, 0.0});
+  
+  std::vector<double> image_normalization_param_mean = 
+      node->declare_parameter<std::vector<double>>("interface_params.image_normalization_param_mean", 
+                                                    std::vector<double>{103.530, 116.280, 123.675});
+  
+  std::vector<double> image_normalization_param_std = 
+      node->declare_parameter<std::vector<double>>("interface_params.image_normalization_param_std", 
+                                                    std::vector<double>{1.0, 1.0, 1.0});
+
   auto vad_topic_data_list = extract_vad_topic_data_from_rosbag(
       "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/"
       "app/demo/rosbag/output_bag/");
@@ -609,8 +639,17 @@ int main(int argc, char **argv) {
   float init_lidar_y = cfg["visualization"]["init_lidar_y"].get<float>();
   float ground_height = cfg["visualization"]["ground_height"].get<float>();
   
-  // VadInterfaceのインスタンスを作成（input_image_width, input_image_heightを渡す）
-  autoware::tensorrt_vad::VadInterface vad_interface(input_image_width, input_image_height);
+  // VadInterfaceのインスタンスを作成（すべてのパラメータを渡す）
+  autoware::tensorrt_vad::VadInterface vad_interface(
+    input_image_width, input_image_height,
+    target_image_width, target_image_height,
+    point_cloud_range,
+    bev_h, bev_w,
+    default_patch_angle,
+    default_command,
+    default_shift,
+    image_normalization_param_mean,
+    image_normalization_param_std);
   
   // フレームごとに処理
   std::vector<float> prev_can_bus;
