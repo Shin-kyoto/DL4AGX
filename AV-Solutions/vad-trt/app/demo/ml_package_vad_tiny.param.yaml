@@ -1,6 +1,8 @@
 /**:
   ros__parameters:
     interface_params:
+      input_image_width: 1920
+      input_image_height: 1080
       target_image_width: 640
       target_image_height: 384
       point_cloud_range: [-15.0, -30.0, -2.0, 15.0, 30.0, 2.0]

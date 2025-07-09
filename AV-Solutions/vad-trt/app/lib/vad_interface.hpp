@@ -86,7 +86,8 @@ using CanBusData = std::vector<float>;
 
 class VadInterface {
 public:
-  explicit VadInterface(const VadInterfaceConfig& config);
+  explicit VadInterface(const VadInterfaceConfig& config, 
+                        std::shared_ptr<tf2_ros::Buffer> tf_buffer);
 
   VadInputData convert(const VadInputTopicData & vad_input_topic_data, const std::vector<float> & prev_can_bus = {});
   Lidar2ImgData process_lidar2img(

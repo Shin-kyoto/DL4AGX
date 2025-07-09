@@ -31,15 +31,14 @@ public:
   VadInterfaceConfig(
     int32_t input_image_width_, int32_t input_image_height_,
     int32_t target_image_width_, int32_t target_image_height_,
-    const std::array<double, 6>& point_cloud_range_,
+    const std::vector<double>& point_cloud_range_,
     int32_t bev_h_, int32_t bev_w_,
     double default_patch_angle_,
     int32_t default_command_,
     const std::vector<double>& default_shift_,
-    const std::array<double, 3>& image_normalization_param_mean_,
-    const std::array<double, 3>& image_normalization_param_std_,
-    const std::vector<double>& vad2base_,
-    std::shared_ptr<tf2_ros::Buffer> tf_buffer_)
+    const std::vector<double>& image_normalization_param_mean_,
+    const std::vector<double>& image_normalization_param_std_,
+    const std::vector<double>& vad2base_)
     : input_image_width(input_image_width_),
       input_image_height(input_image_height_),
       target_image_width(target_image_width_),
@@ -47,8 +46,7 @@ public:
       bev_h(bev_h_),
       bev_w(bev_w_),
       default_patch_angle(static_cast<float>(default_patch_angle_)),
-      default_command(default_command_),
-      tf_buffer(tf_buffer_)
+      default_command(default_command_)
   {
     // point_cloud_range: 6 elements
     for (int i = 0; i < 6; ++i) {

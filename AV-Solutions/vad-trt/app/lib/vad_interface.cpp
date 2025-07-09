@@ -7,9 +7,8 @@
 namespace autoware::tensorrt_vad
 {
 
-VadInterface::VadInterface(const VadInterfaceConfig& config)
-  : tf_buffer_(config.tf_buffer),
-    target_image_width_(config.target_image_width),
+VadInterface::VadInterface(const VadInterfaceConfig& config, std::shared_ptr<tf2_ros::Buffer> tf_buffer)
+  : target_image_width_(config.target_image_width),
     target_image_height_(config.target_image_height),
     input_image_width_(config.input_image_width),
     input_image_height_(config.input_image_height),
@@ -22,7 +21,8 @@ VadInterface::VadInterface(const VadInterfaceConfig& config)
     vad2base_(config.vad2base),
     image_normalization_param_mean_(config.image_normalization_param_mean),
     image_normalization_param_std_(config.image_normalization_param_std),
-    base2vad_(config.base2vad)
+    base2vad_(config.base2vad),
+    tf_buffer_(tf_buffer)
 {
   // AutowareカメラインデックスからVADカメラインデックスへのマッピング
   autoware_to_vad_ = {

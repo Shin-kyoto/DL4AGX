@@ -67,14 +67,14 @@ TEST(VadLidar2ImgTest, DummyInputOutput)
     int32_t input_image_height = 1080;
     int32_t target_image_width = 640;
     int32_t target_image_height = 384;
-    std::array<double, 6> point_cloud_range = {-15.0, -30.0, -2.0, 15.0, 30.0, 2.0};
+    std::vector<double> point_cloud_range = {-15.0, -30.0, -2.0, 15.0, 30.0, 2.0};
     int32_t bev_h = 100;
     int32_t bev_w = 100;
     double default_patch_angle = -1.0353195667266846;
     int32_t default_command = 0;
     std::vector<double> default_shift = {0.0, 0.0};
-    std::array<double, 3> image_normalization_param_mean = {103.530, 116.280, 123.675};
-    std::array<double, 3> image_normalization_param_std = {1.0, 1.0, 1.0};
+    std::vector<double> image_normalization_param_mean = {103.530, 116.280, 123.675};
+    std::vector<double> image_normalization_param_std = {1.0, 1.0, 1.0};
     std::vector<double> vad2base = {
         0.0, 1.0, 0.0, 0.0,
        -1.0, 0.0, 0.0, 0.0,
@@ -91,9 +91,8 @@ TEST(VadLidar2ImgTest, DummyInputOutput)
         default_shift,
         image_normalization_param_mean,
         image_normalization_param_std,
-        vad2base,
-        tf_buffer);
-    VadInterface vad_interface(vad_interface_config);
+        vad2base);
+    VadInterface vad_interface(vad_interface_config, tf_buffer);
     float scale_width = static_cast<float>(target_image_width) / static_cast<float>(input_image_width);
     float scale_height = static_cast<float>(target_image_height) / static_cast<float>(input_image_height);
     auto result = vad_interface.process_lidar2img(tf_static, camera_infos, scale_width, scale_height);

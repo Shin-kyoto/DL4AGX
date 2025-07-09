@@ -137,8 +137,27 @@ convert_normalized_to_rgb(const std::vector<float> &normalized_data) {
 
 class VADNode : public rclcpp::Node {
 public:
+  autoware::tensorrt_vad::VadInterfaceConfig vad_interface_config_;
+
   VADNode(const std::vector<std::string> &yaml_config_paths)
-      : Node("vad_node", createNodeOptions(yaml_config_paths)) {
+      : Node("vad_node", createNodeOptions(yaml_config_paths)),
+        vad_interface_config_(
+          declare_parameter<int>("interface_params.input_image_width", 1920),
+          declare_parameter<int>("interface_params.input_image_height", 1080),
+          declare_parameter<int>("interface_params.target_image_width", 640),
+          declare_parameter<int>("interface_params.target_image_height", 384),
+          declare_parameter<std::vector<double>>("interface_params.point_cloud_range", { -15.0, -30.0, -2.0, 15.0, 30.0, 2.0 }),
+          declare_parameter<int>("interface_params.bev_h", 100),
+          declare_parameter<int>("interface_params.bev_w", 100),
+          declare_parameter<double>("interface_params.default_patch_angle", -1.0353195667266846),
+          declare_parameter<int>("model_params.default_command", 0),
+          declare_parameter<std::vector<double>>("interface_params.default_shift", {0.0, 0.0}),
+          declare_parameter<std::vector<double>>("interface_params.image_normalization_param_mean", {103.530, 116.280, 123.675}),
+          declare_parameter<std::vector<double>>("interface_params.image_normalization_param_std", {1.0, 1.0, 1.0}),
+          declare_parameter<std::vector<double>>("interface_params.vad2base", {0.0, 1.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0})
+        )
+  {
+
     // Publishers
     trajectory_publisher_ =
         this->create_publisher<autoware_planning_msgs::msg::Trajectory>(
@@ -597,77 +616,17 @@ int main(int argc, char **argv) {
   printf("[INFO] n_frames=%d\n", n_frames);
   std::vector<float> lidar2img;
 
-  // commandパラメータを読み込む
-  int32_t default_command =
-      node->declare_parameter<int>("model_params.default_command", 0);
-  printf("[INFO] default_command=%d\n", default_command);
-
-  // VadInterfaceのパラメータを読み込む
-  int32_t target_image_width = 
-      node->declare_parameter<int>("interface_params.target_image_width", 640);
-  int32_t target_image_height = 
-      node->declare_parameter<int>("interface_params.target_image_height", 384);
-  
-  std::vector<double> point_cloud_range = 
-      node->declare_parameter<std::vector<double>>("interface_params.point_cloud_range", 
-                                                    std::vector<double>{-15.0, -30.0, -2.0, 15.0, 30.0, 2.0});
-  
-  int32_t bev_h = 
-      node->declare_parameter<int>("interface_params.bev_h", 100);
-  int32_t bev_w = 
-      node->declare_parameter<int>("interface_params.bev_w", 100);
-  
-  double default_patch_angle = 
-      node->declare_parameter<double>("interface_params.default_patch_angle", -1.0353195667266846);
-  
-  std::vector<double> default_shift = 
-      node->declare_parameter<std::vector<double>>("interface_params.default_shift", 
-                                                    std::vector<double>{0.0, 0.0});
-  
-  std::vector<double> image_normalization_param_mean = 
-      node->declare_parameter<std::vector<double>>("interface_params.image_normalization_param_mean", 
-                                                    std::vector<double>{103.530, 116.280, 123.675});
-  
-  std::vector<double> image_normalization_param_std = 
-      node->declare_parameter<std::vector<double>>("interface_params.image_normalization_param_std", 
-                                                    std::vector<double>{1.0, 1.0, 1.0});
-
-  std::vector<double> vad2base =
-      node->declare_parameter<std::vector<double>>("interface_params.vad2base",
-        std::vector<double>{0.0, 1.0, 0.0, 0.0,
-                            -1.0, 0.0, 0.0, 0.0,
-                             0.0, 0.0, 1.0, 0.0,
-                             0.0, 0.0, 0.0, 1.0});
 
   auto tf_buffer = std::make_shared<tf2_ros::Buffer>(node->get_clock());
-
   auto vad_topic_data_list = extract_vad_topic_data_from_rosbag(
       "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/"
       "app/demo/rosbag/output_bag/", tf_buffer);
-  
-  int32_t input_image_width = cfg["input_image_width"];
-  int32_t input_image_height = cfg["input_image_hight"];
-  
   // Read visualization configuration
   float lidar_z_compensation = cfg["lidar_z_compensation"].get<float>();
   float init_lidar_y = cfg["visualization"]["init_lidar_y"].get<float>();
   float ground_height = cfg["visualization"]["ground_height"].get<float>();
-  
-  // VadInterfaceConfigを使ってインスタンスを作成
-  autoware::tensorrt_vad::VadInterfaceConfig vad_interface_config(
-    input_image_width, input_image_height,
-    target_image_width, target_image_height,
-    {point_cloud_range[0], point_cloud_range[1], point_cloud_range[2], point_cloud_range[3], point_cloud_range[4], point_cloud_range[5]},
-    bev_h, bev_w,
-    default_patch_angle,
-    default_command,
-    default_shift,
-    {image_normalization_param_mean[0], image_normalization_param_mean[1], image_normalization_param_mean[2]},
-    {image_normalization_param_std[0], image_normalization_param_std[1], image_normalization_param_std[2]},
-    vad2base,
-    tf_buffer);
 
-  autoware::tensorrt_vad::VadInterface vad_interface(vad_interface_config);
+  autoware::tensorrt_vad::VadInterface vad_interface(node->vad_interface_config_, tf_buffer);
 
   
   // フレームごとに処理
@@ -682,9 +641,6 @@ int main(int argc, char **argv) {
 
     // 前フレームのcan_busデータを更新（次のフレーム用）
     prev_can_bus = vad_input_data.can_bus_;
-
-    // commandを設定
-    vad_input_data.command_ = default_command;
 
     // VadModelのinfer関数を使用
     auto inference_result = vad_model.infer(vad_input_data);
