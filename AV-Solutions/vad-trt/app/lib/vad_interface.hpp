@@ -129,16 +129,22 @@ private:
     const sensor_msgs::msg::Imu::ConstSharedPtr & imu_raw,
     const std::vector<float> & prev_can_bus) const;
   
-  std::vector<float> calculate_shift(float delta_x, float delta_y, float patch_angle_rad) const;
+  std::vector<float> calculate_shift(
+    const std::vector<float> & can_bus,
+    const std::vector<float> & prev_can_bus) const;
   
   Lidar2ImgData process_lidar2img(
     const tf2_msgs::msg::TFMessage::ConstSharedPtr & tf_static,
     const std::vector<sensor_msgs::msg::CameraInfo::ConstSharedPtr> & camera_infos,
     float scale_width, float scale_height) const;
 
-  std::tuple<CanBusData, ShiftData> process_can_bus_shift(
+  CanBusData process_can_bus(
     const nav_msgs::msg::Odometry::ConstSharedPtr & kinematic_state,
     const sensor_msgs::msg::Imu::ConstSharedPtr & imu_raw,
+    const std::vector<float> & prev_can_bus) const;
+
+  ShiftData process_shift(
+    const std::vector<float> & can_bus,
     const std::vector<float> & prev_can_bus) const;
 
   CameraImagesData process_image(

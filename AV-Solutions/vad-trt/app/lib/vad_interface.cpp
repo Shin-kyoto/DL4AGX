@@ -74,13 +74,12 @@ VadInputData VadInterface::convert(const VadInputTopicData & vad_input_topic_dat
   );
   
   // Process can_bus and shift data
-  auto [can_bus, shift] = process_can_bus_shift(
+  vad_input_data.can_bus_ = process_can_bus(
     vad_input_topic_data.kinematic_state,
     vad_input_topic_data.imu_raw,
     prev_can_bus
   );
-  vad_input_data.can_bus_ = can_bus;
-  vad_input_data.shift_ = shift;
+  vad_input_data.shift_ = process_shift(vad_input_data.can_bus_, prev_can_bus);
   
   // Process image data
   vad_input_data.camera_images_ = process_image(vad_input_topic_data.images);
@@ -364,12 +363,12 @@ CameraImagesData VadInterface::process_image(
   return concatenated_data;
 }
 
-std::vector<float> VadInterface::calculate_can_bus(
+CanBusData VadInterface::process_can_bus(
   const nav_msgs::msg::Odometry::ConstSharedPtr & kinematic_state,
   const sensor_msgs::msg::Imu::ConstSharedPtr & imu_raw,
   const std::vector<float> & prev_can_bus) const
 {
-  std::vector<float> can_bus(18, 0.0f);
+  CanBusData can_bus(18, 0.0f);
 
   // Apply Autoware to nuScenes coordinate transformation to position
   auto [ns_x, ns_y] =
@@ -445,8 +444,18 @@ std::vector<float> VadInterface::calculate_can_bus(
   return can_bus;
 }
 
-std::vector<float> VadInterface::calculate_shift(float delta_x, float delta_y, float patch_angle_rad) const
+ShiftData VadInterface::process_shift(
+  const CanBusData & can_bus,
+  const CanBusData & prev_can_bus) const
 {
+  if (prev_can_bus.empty()) {
+    return default_shift_;
+  }
+
+  float delta_x = can_bus[0] - prev_can_bus[0];  // translation difference
+  float delta_y = can_bus[1] - prev_can_bus[1];  // translation difference
+  float patch_angle_rad = can_bus[16];  // current patch_angle[rad]
+
   float real_w = point_cloud_range_[3] - point_cloud_range_[0];
   float real_h = point_cloud_range_[4] - point_cloud_range_[1];
   float grid_length[] = {real_h / bev_h_, real_w / bev_w_};
@@ -465,35 +474,6 @@ std::vector<float> VadInterface::calculate_shift(float delta_x, float delta_y, f
                   grid_length_x / bev_w_;
 
   return {shift_x, shift_y};
-}
-
-std::tuple<CanBusData, ShiftData> VadInterface::process_can_bus_shift(
-  const nav_msgs::msg::Odometry::ConstSharedPtr & kinematic_state,
-  const sensor_msgs::msg::Imu::ConstSharedPtr & imu_raw,
-  const std::vector<float> & prev_can_bus) const
-{
-  std::vector<float> shift;
-
-  // can_busデータの計算
-  std::vector<float> can_bus = calculate_can_bus(kinematic_state, imu_raw, prev_can_bus);
-
-  // シフトデータの計算
-  if (!prev_can_bus.empty()) {
-    float delta_x = can_bus[0] - prev_can_bus[0];  // translation[0]
-    float delta_y = can_bus[1] - prev_can_bus[1];  // translation[1]
-
-    double yaw = std::atan2(
-        2.0 * (can_bus[6] * can_bus[5] + can_bus[3] * can_bus[4]),
-        1.0 - 2.0 * (can_bus[4] * can_bus[4] + can_bus[5] * can_bus[5]));
-    if (yaw < 0)
-      yaw += 2 * M_PI;
-
-    shift = calculate_shift(delta_x, delta_y, yaw);
-  } else {
-    shift = default_shift_;
-  }
-
-  return std::make_tuple(can_bus, shift);
 }
 
 std::pair<float, float> VadInterface::aw2ns_xy(float aw_x, float aw_y)
