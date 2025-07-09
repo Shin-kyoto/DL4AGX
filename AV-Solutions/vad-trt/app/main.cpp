@@ -396,7 +396,7 @@ private:
 };
 
 std::vector<autoware::tensorrt_vad::VadInputTopicData>
-extract_vad_topic_data_from_rosbag(const std::string &bag_path) {
+extract_vad_topic_data_from_rosbag(const std::string &bag_path, std::shared_ptr<tf2_ros::Buffer> tf_buffer) {
 
   std::vector<autoware::tensorrt_vad::VadInputTopicData> vad_topic_data_list;
 
@@ -497,6 +497,11 @@ extract_vad_topic_data_from_rosbag(const std::string &bag_path) {
         }
 
         current_frame.tf_static = msg;
+
+        // base_link -> camera の変換をバッファに登録
+        for (const auto &transform : msg->transforms) {
+          tf_buffer->setTransform(transform, "default_authority", true);
+        }
       }
 
       // 運動状態トピックの処理
@@ -627,9 +632,11 @@ int main(int argc, char **argv) {
       node->declare_parameter<std::vector<double>>("interface_params.image_normalization_param_std", 
                                                     std::vector<double>{1.0, 1.0, 1.0});
 
+  auto tf_buffer = std::make_shared<tf2_ros::Buffer>(node->get_clock());
+
   auto vad_topic_data_list = extract_vad_topic_data_from_rosbag(
       "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/"
-      "app/demo/rosbag/output_bag/");
+      "app/demo/rosbag/output_bag/", tf_buffer);
   
   int32_t input_image_width = cfg["input_image_width"];
   int32_t input_image_height = cfg["input_image_hight"];
@@ -649,7 +656,9 @@ int main(int argc, char **argv) {
     default_command,
     default_shift,
     image_normalization_param_mean,
-    image_normalization_param_std);
+    image_normalization_param_std,
+    tf_buffer);
+
   
   // フレームごとに処理
   std::vector<float> prev_can_bus;

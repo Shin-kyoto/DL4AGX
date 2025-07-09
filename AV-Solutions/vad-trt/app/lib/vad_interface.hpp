@@ -92,11 +92,13 @@ public:
     int32_t default_command,
     const std::vector<double>& default_shift,
     const std::vector<double>& image_normalization_param_mean,
-    const std::vector<double>& image_normalization_param_std);
+    const std::vector<double>& image_normalization_param_std,
+    std::shared_ptr<tf2_ros::Buffer> tf_buffer);
 
   VadInputData convert(const VadInputTopicData & vad_input_topic_data, const std::vector<float> & prev_can_bus = {});
 
 private:
+  std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
   // --- クラスの不変条件 (メンバ変数) ---
   std::unordered_map<int32_t, int32_t> autoware_to_vad_;
   int32_t target_image_width_, target_image_height_;

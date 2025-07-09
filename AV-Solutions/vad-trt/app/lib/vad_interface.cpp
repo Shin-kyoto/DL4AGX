@@ -17,7 +17,8 @@ VadInterface::VadInterface(
     int32_t default_command,
     const std::vector<double>& default_shift,
     const std::vector<double>& image_normalization_param_mean,
-    const std::vector<double>& image_normalization_param_std) 
+    const std::vector<double>& image_normalization_param_std,
+    std::shared_ptr<tf2_ros::Buffer> tf_buffer)
   : target_image_width_(target_image_width),
     target_image_height_(target_image_height),
     input_image_width_(input_image_width),
@@ -25,7 +26,8 @@ VadInterface::VadInterface(
     bev_h_(bev_h),
     bev_w_(bev_w),
     default_patch_angle_(static_cast<float>(default_patch_angle)),
-    default_command_(default_command)
+    default_command_(default_command),
+    tf_buffer_(tf_buffer)
 {
   // default_shiftをdoubleからfloatに変換してコピー
   default_shift_.resize(default_shift.size());
@@ -211,27 +213,20 @@ std::vector<float> VadInterface::matrix_to_flat(const Eigen::Matrix4f & matrix) 
 }
 
 Lidar2ImgData VadInterface::process_lidar2img(
-  const tf2_msgs::msg::TFMessage::ConstSharedPtr & tf_static,
-  const std::vector<sensor_msgs::msg::CameraInfo::ConstSharedPtr> & camera_infos,
-  float scale_width, float scale_height) const
+    const tf2_msgs::msg::TFMessage::ConstSharedPtr & tf_static,
+    const std::vector<sensor_msgs::msg::CameraInfo::ConstSharedPtr> & camera_infos,
+    float scale_width, float scale_height) const
 {
   std::vector<float> frame_lidar2img(16 * 6, 0.0f); // 6カメラ分のスペースを確保
 
-  // TFバッファの初期化
-  auto clock = std::make_shared<rclcpp::Clock>(RCL_ROS_TIME);
-  tf2_ros::Buffer tf_buffer(clock);
 
-  // rosbagから読み込んだ変換 (base_link -> camera) をバッファに登録
-  for (const auto &transform : tf_static->transforms) {
-    tf_buffer.setTransform(transform, "default_authority", true);
-  }
 
   // vad_base_link -> base_link の変換をバッファに登録
   rclcpp::Time stamp(0, 0, RCL_ROS_TIME);
   if (!tf_static->transforms.empty()) {
     stamp = tf_static->transforms[0].header.stamp;
   }
-  add_vad_to_base_link_transform(tf_buffer, stamp);
+  add_vad_to_base_link_transform(*tf_buffer_, stamp);
 
   // 各カメラの処理
   for (int32_t autoware_camera_id = 0; autoware_camera_id < 6; ++autoware_camera_id) {
@@ -239,11 +234,11 @@ Lidar2ImgData VadInterface::process_lidar2img(
       continue;
     }
 
-    auto base_to_camera_rt_opt = lookup_base_to_camera_rt(tf_buffer, autoware_camera_id);
+    auto base_to_camera_rt_opt = lookup_base_to_camera_rt(*tf_buffer_, autoware_camera_id);
     if (!base_to_camera_rt_opt) continue;
     Eigen::Matrix4f base_to_camera_rt = *base_to_camera_rt_opt;
 
-    auto vad_to_base_rt_opt = lookup_vad_to_base_rt(tf_buffer);
+    auto vad_to_base_rt_opt = lookup_vad_to_base_rt(*tf_buffer_);
     if (!vad_to_base_rt_opt) continue;
     Eigen::Matrix4f vad_to_base_rt = *vad_to_base_rt_opt;
 
