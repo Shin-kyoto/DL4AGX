@@ -129,6 +129,7 @@ private:
   float image_normalization_param_mean_[3];
   float image_normalization_param_std_[3];
   Eigen::Matrix4f vad2base_;
+  Eigen::Matrix4f base2vad_;
 
   // --- 内部処理関数 ---
   std::optional<Eigen::Matrix4f> lookup_base_to_camera_rt(tf2_ros::Buffer & buffer, int32_t autoware_camera_id) const;
@@ -150,9 +151,7 @@ private:
     const std::vector<float> & can_bus,
     const std::vector<float> & prev_can_bus) const;
 
-
-  // --- 静的ヘルパーメソッド ---
-  static std::tuple<float, float, float> aw2vad_xyz(float aw_x, float aw_y, float aw_z);
+  std::tuple<float, float, float> aw2vad_xyz(float aw_x, float aw_y, float aw_z) const;
   static Eigen::Quaternionf aw2vad_quaternion(const Eigen::Quaternionf & q_aw);
 };
 

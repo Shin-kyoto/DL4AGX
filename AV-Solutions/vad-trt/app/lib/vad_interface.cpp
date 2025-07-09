@@ -56,6 +56,8 @@ VadInterface::VadInterface(
     vad2base_(i / 4, i % 4) = static_cast<float>(vad2base[i]);
   }
 
+  base2vad_ = vad2base_.inverse();
+
   // AutowareカメラインデックスからVADカメラインデックスへのマッピング
   autoware_to_vad_ = {
     {0, 0}, // FRONT
@@ -447,13 +449,12 @@ ShiftData VadInterface::process_shift(
   return {shift_x, shift_y};
 }
 
-std::tuple<float, float, float> VadInterface::aw2vad_xyz(float aw_x, float aw_y, float aw_z)
+std::tuple<float, float, float> VadInterface::aw2vad_xyz(float aw_x, float aw_y, float aw_z) const
 {
-  // AutowareからVAD base_linkへの座標変換
-  float vad_x = -aw_y;
-  float vad_y = aw_x;
-  float vad_z = aw_z;
-  return {vad_x, vad_y, vad_z};
+  // Autoware(base_link)座標[x, y, z]をVAD base_link座標に変換
+  Eigen::Vector4f aw_xyz(aw_x, aw_y, aw_z, 1.0f);
+  Eigen::Vector4f vad_xyz = base2vad_ * aw_xyz;
+  return {vad_xyz[0], vad_xyz[1], vad_xyz[2]};
 }
 
 Eigen::Quaternionf VadInterface::aw2vad_quaternion(const Eigen::Quaternionf & q_aw)
