@@ -1232,9 +1232,7 @@ int main(int argc, char **argv) {
         cfg_dir.string() + "/" + cfg["font_path"].get<std::string>();
 
     nv::VisualizeFrame frame;
-    frame.cmd =
-        vad_input_data
-            .command_; // VadInputDataのcommand_の値（2 = "KEEP FORWARD"）を使用
+    frame.cmd = vad_input_data.command_;
 
     frame.img_metas_lidar2img = vad_input_data.lidar2img_;
 
