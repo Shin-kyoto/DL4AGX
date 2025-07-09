@@ -1,6 +1,5 @@
 #include "vad_interface.hpp"
-#include <stb/stb_image.h>
-#include <stb/stb_image_resize.h>
+#include <opencv2/opencv.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <tf2/exceptions.h>
 #include <cmath>
@@ -267,19 +266,23 @@ std::optional<std::tuple<unsigned char*, int32_t, int32_t>> VadInterface::resize
   unsigned char *image_data, int32_t width, int32_t height, int32_t channels, 
   int32_t target_image_width, int32_t target_image_height) const
 {
-  unsigned char *resized_data = (unsigned char *)malloc(target_image_width * target_image_height * channels);
-  
-  int32_t resize_result = stbir_resize_uint8(image_data, width, height, 0, resized_data,
-                                        target_image_width, target_image_height, 0, channels);
-  
-  if (!resize_result) {
-    free(resized_data);
+  // OpenCVのMatに変換
+  int32_t cv_type = (channels == 1) ? CV_8UC1 : (channels == 3 ? CV_8UC3 : CV_8UC4);
+  cv::Mat input_img(height, width, cv_type, image_data);
+  cv::Mat resized_img;
+  cv::resize(input_img, resized_img, cv::Size(target_image_width, target_image_height), 0, 0, cv::INTER_LINEAR);
+
+  // メモリ確保し，データをコピー
+  size_t data_size = target_image_width * target_image_height * channels;
+  unsigned char *resized_data = (unsigned char *)malloc(data_size);
+  if (!resized_data) {
     return std::nullopt;
   }
-  
+  std::memcpy(resized_data, resized_img.data, data_size);
+
   // 元のデータを解放
-  stbi_image_free(image_data);
-  
+  free(image_data);
+
   return std::make_tuple(resized_data, target_image_width, target_image_height);
 }
 
@@ -312,27 +315,43 @@ CameraImagesData VadInterface::process_image(
   for (int32_t autoware_idx = 0; autoware_idx < 6; ++autoware_idx) {
     const auto &image_msg = images[autoware_idx];
 
-    // 画像データの処理
-    int32_t width, height, channels;
-    unsigned char *image_data = stbi_load_from_memory(
-        image_msg->data.data(), static_cast<int>(image_msg->data.size()),
-        &width, &height, &channels, STBI_rgb); // RGBとして読み込む
+    // OpenCVで画像データをデコード
+    cv::Mat img_mat = cv::imdecode(cv::Mat(image_msg->data), cv::IMREAD_COLOR); // BGRでデコード
+    if (img_mat.empty()) {
+      throw std::runtime_error("画像データのデコードに失敗しました: " + std::to_string(autoware_idx));
+    }
+    int32_t width = img_mat.cols;
+    int32_t height = img_mat.rows;
+    int32_t channels = img_mat.channels();
 
     // サイズが目標と違う場合はリサイズする
+    unsigned char* image_data = nullptr;
     if (width != target_image_width_ || height != target_image_height_) {
-      auto resize_result = resize_image(image_data, width, height, channels, target_image_width_, target_image_height_);
-      
+      // RGBに変換
+      cv::Mat rgb_img;
+      cv::cvtColor(img_mat, rgb_img, cv::COLOR_BGR2RGB);
+      image_data = (unsigned char*)malloc(rgb_img.total() * rgb_img.elemSize());
+      std::memcpy(image_data, rgb_img.data, rgb_img.total() * rgb_img.elemSize());
+      auto resize_result = resize_image(image_data, width, height, 3, target_image_width_, target_image_height_);
       if (resize_result.has_value()) {
-        // リサイズされたデータとサイズを取得
         auto [new_image_data, new_width, new_height] = resize_result.value();
         image_data = new_image_data;
         width = new_width;
         height = new_height;
+      } else {
+        throw std::runtime_error("画像リサイズに失敗しました: " + std::to_string(autoware_idx));
       }
+    } else {
+      // RGBに変換
+      cv::Mat rgb_img;
+      cv::cvtColor(img_mat, rgb_img, cv::COLOR_BGR2RGB);
+      image_data = (unsigned char*)malloc(rgb_img.total() * rgb_img.elemSize());
+      std::memcpy(image_data, rgb_img.data, rgb_img.total() * rgb_img.elemSize());
     }
 
     // 画像を正規化
     std::vector<float> normalized_image_data = normalize_image(image_data, width, height);
+    free(image_data);
 
     // VADカメラ順序で格納
     int32_t vad_idx = autoware_to_vad_.at(autoware_idx);
