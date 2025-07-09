@@ -16,6 +16,9 @@
 #define AUTOWARE_TENSORRT_VAD_VAD_INTERFACE_HPP_
 
 #include <vector>
+#include <unordered_map>
+#include <optional>
+#include <tuple>
 
 #include "rclcpp/time.hpp"
 #include "sensor_msgs/msg/image.hpp"
@@ -23,6 +26,10 @@
 #include "sensor_msgs/msg/imu.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "tf2_msgs/msg/tf_message.hpp"
+#include "tf2_ros/buffer.h"
+#include <tf2_eigen/tf2_eigen.h>
+
+#include "vad_model.hpp" 
 
 namespace autoware::tensorrt_vad
 {
@@ -53,7 +60,7 @@ struct VadInputTopicData
   bool is_complete() const {
     if (images.size() != 6 || camera_infos.size() != 6) return false;
     
-    for (int i = 0; i < 6; ++i) {
+    for (int32_t i = 0; i < 6; ++i) {
       if (!images[i] || !camera_infos[i]) return false;
     }
     
@@ -61,6 +68,80 @@ struct VadInputTopicData
            kinematic_state != nullptr && 
            imu_raw != nullptr;
   }
+};
+
+// 各process_*メソッドの戻り値となるデータ構造
+using CameraImagesData = std::vector<float>;
+using ShiftData = std::vector<float>;
+using Lidar2ImgData = std::vector<float>;
+using CanBusData = std::vector<float>;
+
+/**
+ * @class VadInterface
+ * @brief ROS topicデータをVADの入力形式に変換するインターフェース
+ */
+class VadInterface
+{
+public:
+  explicit VadInterface();
+
+  VadInputData convert(const VadInputTopicData & vad_input_topic_data, int32_t frame_id, const std::vector<float> & prev_can_bus = {}, float scale_width = 1.0f, float scale_height = 1.0f);
+
+private:
+  // --- クラスの不変条件 (メンバ変数) ---
+  std::unordered_map<int32_t, int32_t> autoware_to_vad_;
+  int32_t target_width_, target_height_;
+  float point_cloud_range_[6];
+  int32_t bev_h_, bev_w_;
+  float default_patch_angle_;
+  // 正規化のパラメータ
+  float mean_[3];
+  float std_[3];
+
+  // --- 内部処理関数 ---
+  void add_vad_to_base_link_transform(tf2_ros::Buffer & buffer, const rclcpp::Time & stamp) const;
+  
+  std::optional<Eigen::Matrix4f> lookup_vad_to_base_rt(tf2_ros::Buffer & buffer) const;
+  std::optional<Eigen::Matrix4f> lookup_base_to_camera_rt(tf2_ros::Buffer & buffer, int32_t autoware_camera_id) const;
+  Eigen::Matrix4f create_viewpad(const sensor_msgs::msg::CameraInfo::ConstSharedPtr & camera_info) const;
+  Eigen::Matrix4f apply_scaling(const Eigen::Matrix4f & lidar2img, float scale_width, float scale_height) const;
+  std::vector<float> matrix_to_flat(const Eigen::Matrix4f & matrix) const;
+  
+  std::optional<std::tuple<unsigned char*, int32_t, int32_t>> resize_image(
+    unsigned char *image_data, int32_t width, int32_t height, int32_t channels, 
+    int32_t target_width, int32_t target_height) const;
+  std::vector<float> normalize_image(unsigned char *image_data, int32_t width, int32_t height) const;
+  
+  std::vector<float> build_can_bus_data(
+    const std::vector<float> & translation,
+    const std::vector<float> & rotation,
+    const std::vector<float> & acceleration,
+    const std::vector<float> & angular_velocity,
+    const std::vector<float> & velocity,
+    const std::vector<float> & prev_can_bus,
+    int32_t frame_id) const;
+  
+  std::vector<float> calculate_shift(float delta_x, float delta_y, float patch_angle_rad) const;
+  
+  Lidar2ImgData process_lidar2img(
+    const tf2_msgs::msg::TFMessage::ConstSharedPtr & tf_static,
+    const std::vector<sensor_msgs::msg::CameraInfo::ConstSharedPtr> & camera_infos,
+    int32_t frame_id,
+    float scale_width, float scale_height) const;
+
+  std::tuple<CanBusData, ShiftData> process_can_bus_shift(
+    const nav_msgs::msg::Odometry::ConstSharedPtr & kinematic_state,
+    const sensor_msgs::msg::Imu::ConstSharedPtr & imu_raw,
+    int32_t frame_id,
+    const std::vector<float> & prev_can_bus) const;
+
+  CameraImagesData process_image(
+    const std::vector<sensor_msgs::msg::Image::ConstSharedPtr> & images,
+    int32_t frame_id) const;
+
+  // --- 静的ヘルパーメソッド ---
+  static std::pair<float, float> aw2ns_xy(float aw_x, float aw_y);
+  static Eigen::Quaternionf aw2ns_quaternion(const Eigen::Quaternionf & q_aw);
 };
 
 }  // namespace autoware::tensorrt_vad

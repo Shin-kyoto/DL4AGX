@@ -371,30 +371,6 @@ private:
   }
 };
 
-// バイナリ画像データをROS
-// CompressedImageに変換し、その後TensorRTのバインディングに渡す関数
-std::vector<float>
-processImageForInference(const std::vector<std::vector<float>> &frame_images) {
-
-  // 画像データを連結
-  std::vector<float> concatenated_data;
-  size_t single_camera_size = 3 * 384 * 640;
-  concatenated_data.reserve(single_camera_size * 6);
-
-  // カメラの順序: {0, 1, 2, 3, 4, 5}
-  for (int camera_idx = 0; camera_idx < 6; ++camera_idx) {
-    const auto &img_data = frame_images[camera_idx];
-    if (img_data.size() != single_camera_size) {
-      throw std::runtime_error("画像サイズが不正です: " +
-                               std::to_string(camera_idx));
-    }
-    concatenated_data.insert(concatenated_data.end(), img_data.begin(),
-                             img_data.end());
-  }
-
-  return concatenated_data;
-}
-
 class Logger : public nvinfer1::ILogger {
 public:
   void log(nvinfer1::ILogger::Severity severity,
@@ -1203,37 +1179,26 @@ int main(int argc, char **argv) {
   float init_lidar_y = cfg["visualization"]["init_lidar_y"].get<float>();
   float ground_height = cfg["visualization"]["ground_height"].get<float>();
   
+  // VadInterfaceのインスタンスを作成
+  autoware::tensorrt_vad::VadInterface vad_interface;
+  
   // フレームごとに処理
   std::vector<float> prev_can_bus;
-  for (int frame_id = 1; frame_id <= vad_topic_data_list.size(); frame_id++) {
+  for (int32_t frame_id = 1; frame_id <= vad_topic_data_list.size(); frame_id++) {
     std::string frame_dir = data_dir + std::to_string(frame_id) + "/";
 
-    // 各フレームのデータを個別に読み込み
-    auto frame_images = load_image_from_rosbag_single_frame(
-        vad_topic_data_list[frame_id - 1].images, frame_id - 1);
-    
-    auto [frame_can_bus, frame_shift] = load_can_bus_shift_from_rosbag_single_frame(
-        vad_topic_data_list[frame_id - 1].kinematic_state,
-        vad_topic_data_list[frame_id - 1].imu_raw,
-        frame_id - 1, prev_can_bus);
-    
-    auto frame_lidar2img = load_lidar2img_from_rosbag_single_frame(
-        vad_topic_data_list[frame_id - 1].tf_static,
-        vad_topic_data_list[frame_id - 1].camera_infos,
-        frame_id - 1, scale_width, scale_height);
+    // VadInterfaceを使用してVadInputTopicDataをVadInputDataに変換（古いprev_can_busを使用）
+    auto vad_input_data = vad_interface.convert(
+        vad_topic_data_list[frame_id - 1], 
+        frame_id,  // 元のframe_idを渡す（1から始まる）
+        prev_can_bus,
+        scale_width, scale_height);  // 正しいスケーリング値を渡す
 
-    // 前フレームのcan_busデータを更新
-    prev_can_bus = frame_can_bus;
+    // 前フレームのcan_busデータを更新（次のフレーム用）
+    prev_can_bus = vad_input_data.can_bus_;
 
-    // 画像をconcatenate
-    auto image_data = processImageForInference(frame_images);
-    autoware::tensorrt_vad::VadInputData vad_input_data{
-        image_data,      // camera_images_
-        frame_shift,     // shift_
-        frame_lidar2img, // lidar2img_
-        frame_can_bus,   // can_bus_
-        default_command  // command_
-    };
+    // commandを設定
+    vad_input_data.command_ = default_command;
 
     // VadModelのinfer関数を使用
     auto inference_result = vad_model.infer(vad_input_data);
@@ -1251,10 +1216,16 @@ int main(int argc, char **argv) {
 
     std::vector<unsigned char *> images;
 
-    // 各カメラからの画像をRGBに変換
-    for (int cam_idx = 0; cam_idx < 6; ++cam_idx) {
-      const auto &normalized_img = frame_images[cam_idx];
-      unsigned char *rgb_img = convert_normalized_to_rgb(normalized_img);
+    // VadInterfaceから個別のカメラ画像を取得するために、
+    // concatenatedデータから個別カメラ画像を抽出
+    size_t single_camera_size = 3 * 384 * 640;
+    for (int32_t cam_idx = 0; cam_idx < 6; ++cam_idx) {
+      // 個別カメラ画像データを抽出
+      std::vector<float> individual_camera_data(
+          vad_input_data.camera_images_.begin() + cam_idx * single_camera_size,
+          vad_input_data.camera_images_.begin() + (cam_idx + 1) * single_camera_size);
+      
+      unsigned char *rgb_img = convert_normalized_to_rgb(individual_camera_data);
       images.push_back(rgb_img);
     }
     std::string font_path =
@@ -1265,7 +1236,7 @@ int main(int argc, char **argv) {
         vad_input_data
             .command_; // VadInputDataのcommand_の値（2 = "KEEP FORWARD"）を使用
 
-    frame.img_metas_lidar2img = frame_lidar2img;
+    frame.img_metas_lidar2img = vad_input_data.lidar2img_;
 
     // pred -> frame.planning
     frame.planning = vad_output_data.predicted_trajectory_;

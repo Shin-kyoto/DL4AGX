@@ -91,7 +91,7 @@ struct VadOutputData
 };
 
 // 後処理関数の実装
-std::vector<std::vector<std::vector<std::vector<float>>>> postprocess_traj_preds(
+inline std::vector<std::vector<std::vector<std::vector<float>>>> postprocess_traj_preds(
     const std::vector<float>& all_traj_preds_flat) {
   const int32_t num_objects = 900;
   const int32_t num_fut_modes = 6; // 6 future modes(trajectories)
@@ -121,7 +121,7 @@ std::vector<std::vector<std::vector<std::vector<float>>>> postprocess_traj_preds
   return traj_preds;
 }
 
-std::vector<std::vector<float>> postprocess_traj_cls_scores(
+inline std::vector<std::vector<float>> postprocess_traj_cls_scores(
     const std::vector<float>& all_traj_cls_scores_flat) {
   const int32_t num_objects = 900;
   const int32_t num_fut_modes = 6; // 6 future modes(trajectories)
@@ -139,7 +139,7 @@ std::vector<std::vector<float>> postprocess_traj_cls_scores(
   return traj_cls_scores;
 }
 
-std::vector<std::vector<float>> postprocess_bbox_preds(
+inline std::vector<std::vector<float>> postprocess_bbox_preds(
     const std::vector<float>& all_bbox_preds_flat) {
   const int32_t num_objects = 900;
   const int32_t bbox_features = 10;  // x,y,z,dx,dy,dz,vx,vy,label,prob
