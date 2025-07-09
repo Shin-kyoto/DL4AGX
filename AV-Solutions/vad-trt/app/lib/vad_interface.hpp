@@ -83,14 +83,15 @@ using CanBusData = std::vector<float>;
 class VadInterface
 {
 public:
-  explicit VadInterface();
+  explicit VadInterface(int32_t input_image_width, int32_t input_image_height);
 
-  VadInputData convert(const VadInputTopicData & vad_input_topic_data, const std::vector<float> & prev_can_bus = {}, float scale_width = 1.0f, float scale_height = 1.0f);
+  VadInputData convert(const VadInputTopicData & vad_input_topic_data, const std::vector<float> & prev_can_bus = {});
 
 private:
   // --- クラスの不変条件 (メンバ変数) ---
   std::unordered_map<int32_t, int32_t> autoware_to_vad_;
   int32_t target_width_, target_height_;
+  int32_t input_image_width_, input_image_height_;
   float point_cloud_range_[6];
   int32_t bev_h_, bev_w_;
   float default_patch_angle_;

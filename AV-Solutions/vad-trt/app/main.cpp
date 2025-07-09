@@ -603,16 +603,14 @@ int main(int argc, char **argv) {
   
   int32_t input_image_width = cfg["input_image_width"];
   int32_t input_image_height = cfg["input_image_hight"];
-  float scale_width = 640.0f / static_cast<float>(input_image_width);
-  float scale_height = 384.0f / static_cast<float>(input_image_height);
   
   // Read visualization configuration
   float lidar_z_compensation = cfg["lidar_z_compensation"].get<float>();
   float init_lidar_y = cfg["visualization"]["init_lidar_y"].get<float>();
   float ground_height = cfg["visualization"]["ground_height"].get<float>();
   
-  // VadInterfaceのインスタンスを作成
-  autoware::tensorrt_vad::VadInterface vad_interface;
+  // VadInterfaceのインスタンスを作成（input_image_width, input_image_heightを渡す）
+  autoware::tensorrt_vad::VadInterface vad_interface(input_image_width, input_image_height);
   
   // フレームごとに処理
   std::vector<float> prev_can_bus;
@@ -622,8 +620,7 @@ int main(int argc, char **argv) {
     // VadInterfaceを使用してVadInputTopicDataをVadInputDataに変換（古いprev_can_busを使用）
     auto vad_input_data = vad_interface.convert(
         vad_topic_data_list[frame_id - 1],
-        prev_can_bus,
-        scale_width, scale_height);  // 正しいスケーリング値を渡す
+        prev_can_bus);
 
     // 前フレームのcan_busデータを更新（次のフレーム用）
     prev_can_bus = vad_input_data.can_bus_;

@@ -8,9 +8,11 @@
 namespace autoware::tensorrt_vad
 {
 
-VadInterface::VadInterface() 
+VadInterface::VadInterface(int32_t input_image_width, int32_t input_image_height) 
   : target_width_(640),
     target_height_(384),
+    input_image_width_(input_image_width),
+    input_image_height_(input_image_height),
     point_cloud_range_{-15.0f, -30.0f, -2.0f, 15.0f, 30.0f, 2.0f},
     bev_h_(100),
     bev_w_(100),
@@ -31,10 +33,13 @@ VadInterface::VadInterface()
   };
 }
 
-VadInputData VadInterface::convert(const VadInputTopicData & vad_input_topic_data, const std::vector<float> & prev_can_bus, float scale_width, float scale_height)
+VadInputData VadInterface::convert(const VadInputTopicData & vad_input_topic_data, const std::vector<float> & prev_can_bus)
 {
   VadInputData vad_input_data;
   
+  float scale_width = target_width_ / static_cast<float>(input_image_width_);
+  float scale_height = target_height_ / static_cast<float>(input_image_height_);
+
   // Process lidar2img transformation
   vad_input_data.lidar2img_ = process_lidar2img(
     vad_input_topic_data.tf_static,
