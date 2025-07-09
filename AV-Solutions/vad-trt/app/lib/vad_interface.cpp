@@ -457,14 +457,14 @@ std::tuple<float, float, float> VadInterface::aw2vad_xyz(float aw_x, float aw_y,
   return {vad_xyz[0], vad_xyz[1], vad_xyz[2]};
 }
 
-Eigen::Quaternionf VadInterface::aw2vad_quaternion(const Eigen::Quaternionf & q_aw)
+Eigen::Quaternionf VadInterface::aw2vad_quaternion(const Eigen::Quaternionf & q_aw) const
 {
-  // Create a -90-degree rotation around Z-axis (Autoware -> VAD base_link)
-  Eigen::Quaternionf q_rotation(
-      Eigen::AngleAxisf(-M_PI / 2, Eigen::Vector3f::UnitZ()));
-
-  // Apply the rotation
-  return q_rotation * q_aw;
+  // base2vad_の回転部分をクォータニオンに変換
+  Eigen::Matrix3f rot = base2vad_.block<3,3>(0,0);
+  Eigen::Quaternionf q_v2a(rot); // base_link→vadの回転
+  Eigen::Quaternionf q_v2a_inv = q_v2a.conjugate(); // 単位クオータニオンなので逆=共役
+  // q_vad = q_v2a * q_aw * q_v2a_inv
+  return q_v2a * q_aw * q_v2a_inv;
 }
 
 }  // namespace autoware::tensorrt_vad

@@ -152,7 +152,7 @@ private:
     const std::vector<float> & prev_can_bus) const;
 
   std::tuple<float, float, float> aw2vad_xyz(float aw_x, float aw_y, float aw_z) const;
-  static Eigen::Quaternionf aw2vad_quaternion(const Eigen::Quaternionf & q_aw);
+  Eigen::Quaternionf aw2vad_quaternion(const Eigen::Quaternionf & q_aw) const;
 };
 
 }  // namespace autoware::tensorrt_vad
