@@ -15,6 +15,8 @@ VadInterface::VadInterface()
     bev_h_(100),
     bev_w_(100),
     default_patch_angle_(-1.0353195667266846f),
+    default_command_(2),
+    default_shift_{0.0f, 0.0f},
     mean_{103.530f, 116.280f, 123.675f},
     std_{1.0f, 1.0f, 1.0f}
 {
@@ -53,7 +55,7 @@ VadInputData VadInterface::convert(const VadInputTopicData & vad_input_topic_dat
   vad_input_data.camera_images_ = process_image(vad_input_topic_data.images);
   
   // Set default command
-  vad_input_data.command_ = 2;
+  vad_input_data.command_ = default_command_;
   
   return vad_input_data;
 }
@@ -476,7 +478,7 @@ std::tuple<CanBusData, ShiftData> VadInterface::process_can_bus_shift(
 
     shift = calculate_shift(delta_x, delta_y, yaw);
   } else {
-    shift = {0.0f, 0.0f};
+    shift = default_shift_;
   }
 
   return std::make_tuple(can_bus, shift);

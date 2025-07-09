@@ -94,6 +94,8 @@ private:
   float point_cloud_range_[6];
   int32_t bev_h_, bev_w_;
   float default_patch_angle_;
+  int32_t default_command_;
+  std::vector<float> default_shift_;
   // 正規化のパラメータ
   float mean_[3];
   float std_[3];
