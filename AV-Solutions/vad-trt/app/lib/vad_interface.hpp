@@ -152,8 +152,8 @@ private:
 
 
   // --- 静的ヘルパーメソッド ---
-  static std::pair<float, float> aw2ns_xy(float aw_x, float aw_y);
-  static Eigen::Quaternionf aw2ns_quaternion(const Eigen::Quaternionf & q_aw);
+  static std::tuple<float, float, float> aw2vad_xyz(float aw_x, float aw_y, float aw_z);
+  static Eigen::Quaternionf aw2vad_quaternion(const Eigen::Quaternionf & q_aw);
 };
 
 }  // namespace autoware::tensorrt_vad

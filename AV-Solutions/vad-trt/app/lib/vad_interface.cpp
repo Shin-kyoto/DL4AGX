@@ -337,60 +337,64 @@ CanBusData VadInterface::process_can_bus(
 {
   CanBusData can_bus(18, 0.0f);
 
-  // Apply Autoware to nuScenes coordinate transformation to position
-  auto [ns_x, ns_y] =
-      aw2ns_xy(kinematic_state->pose.pose.position.x,
-                kinematic_state->pose.pose.position.y);
+  // Apply Autoware to VAD base_link coordinate transformation to position
+  auto [vad_x, vad_y, vad_z] =
+      aw2vad_xyz(kinematic_state->pose.pose.position.x,
+                kinematic_state->pose.pose.position.y,
+                kinematic_state->pose.pose.position.z);
 
   // translation (0:3)
-  can_bus[0] = ns_x;
-  can_bus[1] = ns_y;
-  can_bus[2] = static_cast<float>(kinematic_state->pose.pose.position.z);
+  can_bus[0] = vad_x;
+  can_bus[1] = vad_y;
+  can_bus[2] = vad_z;
 
-  // Apply Autoware to nuScenes coordinate transformation to orientation
+  // Apply Autoware to VAD base_link coordinate transformation to orientation
   Eigen::Quaternionf q_aw(
       kinematic_state->pose.pose.orientation.w,
       kinematic_state->pose.pose.orientation.x,
       kinematic_state->pose.pose.orientation.y,
       kinematic_state->pose.pose.orientation.z);
 
-  Eigen::Quaternionf q_ns = aw2ns_quaternion(q_aw);
+  Eigen::Quaternionf q_vad = aw2vad_quaternion(q_aw);
 
   // rotation (3:7)
-  can_bus[3] = q_ns.x();
-  can_bus[4] = q_ns.y();
-  can_bus[5] = q_ns.z();
-  can_bus[6] = q_ns.w();
+  can_bus[3] = q_vad.x();
+  can_bus[4] = q_vad.y();
+  can_bus[5] = q_vad.z();
+  can_bus[6] = q_vad.w();
 
-  // Apply Autoware to nuScenes coordinate transformation to acceleration
-  auto [ns_ax, ns_ay] =
-      aw2ns_xy(imu_raw->linear_acceleration.x,
-                imu_raw->linear_acceleration.y);
+  // Apply Autoware to VAD base_link coordinate transformation to acceleration
+  auto [vad_ax, vad_ay, vad_az] =
+      aw2vad_xyz(imu_raw->linear_acceleration.x,
+                imu_raw->linear_acceleration.y,
+                imu_raw->linear_acceleration.z);
 
   // acceleration (7:10)
-  can_bus[7] = ns_ax;
-  can_bus[8] = ns_ay;
-  can_bus[9] = static_cast<float>(imu_raw->linear_acceleration.z);
+  can_bus[7] = vad_ax;
+  can_bus[8] = vad_ay;
+  can_bus[9] = vad_az;
 
-  // Apply Autoware to nuScenes coordinate transformation to angular velocity
-  auto [ns_wx, ns_wy] =
-      aw2ns_xy(kinematic_state->twist.twist.angular.x,
-                kinematic_state->twist.twist.angular.y);
+  // Apply Autoware to VAD base_link coordinate transformation to angular velocity
+  auto [vad_wx, vad_wy, vad_wz] =
+      aw2vad_xyz(kinematic_state->twist.twist.angular.x,
+                kinematic_state->twist.twist.angular.y,
+                kinematic_state->twist.twist.angular.z);
 
   // angular velocity (10:13)
-  can_bus[10] = ns_wx;
-  can_bus[11] = ns_wy;
-  can_bus[12] = static_cast<float>(kinematic_state->twist.twist.angular.z);
+  can_bus[10] = vad_wx;
+  can_bus[11] = vad_wy;
+  can_bus[12] = vad_wz;
 
-  // Apply Autoware to nuScenes coordinate transformation to velocity
-  auto [ns_vx, ns_vy] =
-      aw2ns_xy(kinematic_state->twist.twist.linear.x,
-                kinematic_state->twist.twist.linear.y);
+  // Apply Autoware to VAD base_link coordinate transformation to velocity
+  auto [vad_vx, vad_vy, vad_vz] =
+      aw2vad_xyz(kinematic_state->twist.twist.linear.x,
+                kinematic_state->twist.twist.linear.y,
+                0.0f); // z方向の速度は0とする
 
   // velocity (13:16)
-  can_bus[13] = ns_vx;
-  can_bus[14] = ns_vy;
-  can_bus[15] = 0.0f; // z方向の速度は0とする
+  can_bus[13] = vad_vx;
+  can_bus[14] = vad_vy;
+  can_bus[15] = vad_vz;
 
   // patch_angle[rad]の計算 (16)
   double yaw = std::atan2(
@@ -443,16 +447,18 @@ ShiftData VadInterface::process_shift(
   return {shift_x, shift_y};
 }
 
-std::pair<float, float> VadInterface::aw2ns_xy(float aw_x, float aw_y)
+std::tuple<float, float, float> VadInterface::aw2vad_xyz(float aw_x, float aw_y, float aw_z)
 {
-  float ns_x = -aw_y;
-  float ns_y = aw_x;
-  return {ns_x, ns_y};
+  // AutowareからVAD base_linkへの座標変換
+  float vad_x = -aw_y;
+  float vad_y = aw_x;
+  float vad_z = aw_z;
+  return {vad_x, vad_y, vad_z};
 }
 
-Eigen::Quaternionf VadInterface::aw2ns_quaternion(const Eigen::Quaternionf & q_aw)
+Eigen::Quaternionf VadInterface::aw2vad_quaternion(const Eigen::Quaternionf & q_aw)
 {
-  // Create a -90-degree rotation around Z-axis (Autoware -> nuScenes)
+  // Create a -90-degree rotation around Z-axis (Autoware -> VAD base_link)
   Eigen::Quaternionf q_rotation(
       Eigen::AngleAxisf(-M_PI / 2, Eigen::Vector3f::UnitZ()));
 
