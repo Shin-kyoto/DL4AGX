@@ -27,6 +27,7 @@ find_package(autoware_perception_msgs REQUIRED)
 find_package(autoware_planning_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(rosbag2_cpp REQUIRED)
+find_package(OpenCV REQUIRED)
 
 # TensorRTのパスをシステムパスに直接設定
 # findコマンドの結果から、ライブラリは標準のシステムディレクトリにインストールされていることが判明
@@ -35,10 +36,6 @@ set(TENSORRT_LIBRARY_DIRS /usr/lib/x86_64-linux-gnu)
 message(STATUS "Using system-installed TensorRT from: ${TENSORRT_LIBRARY_DIRS}")
 
 
-
-# STB実装ファイルの追加（実装cppのみをビルド対象に追加）
-set(STB_IMPL ${CMAKE_CURRENT_SOURCE_DIR}/stb_implementation.cpp)
-
 # テストターゲットを作成
 add_executable(
   vad_tests
@@ -46,14 +43,12 @@ add_executable(
   test_vad_interface.cpp
   test_vad_integration.cpp
   ../lib/vad_interface.cpp
-  ${STB_IMPL}
 )
 
 # ターゲットごとにインクルードディレクトリを絶対パスで指定
 get_filename_component(LIB_DIR ${CMAKE_CURRENT_SOURCE_DIR}/../lib ABSOLUTE)
 target_include_directories(vad_tests PRIVATE
     ${LIB_DIR}
-    ${LIB_DIR}/stb
     ${CUDA_INCLUDE_DIRS}
     ${TENSORRT_INCLUDE_DIRS}
     ${YAML_CPP_INCLUDE_DIR}
@@ -126,6 +121,7 @@ ament_target_dependencies(vad_tests
 # キーワード付き（PRIVATE）で統一
 target_link_libraries(vad_tests
     ${CUDA_LIBRARIES}
+    ${OpenCV_LIBS}
     dl
     pthread
     nvinfer
@@ -133,9 +129,6 @@ target_link_libraries(vad_tests
     nvinfer_plugin
     yaml-cpp
 )
-
-# STB用の定義を追加
-add_definitions(-DENABLE_TEXT_BACKEND_STB)
 
 # GoogleTestの自動検出を有効化
 include(GoogleTest)
