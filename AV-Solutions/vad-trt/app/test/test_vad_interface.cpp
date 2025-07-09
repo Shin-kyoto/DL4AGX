@@ -63,27 +63,39 @@ TEST(VadLidar2ImgTest, DummyInputOutput)
     for (const auto& t : tf_static->transforms) {
         tf_buffer->setTransform(t, "default_authority", true);
     }
-    float input_image_width = 1920;
-    float input_image_height = 1080;
-    float target_image_width = 640;
-    float target_image_height = 384;
-    // vad2base: row-major 4x4 matrix (double)
+    int32_t input_image_width = 1920;
+    int32_t input_image_height = 1080;
+    int32_t target_image_width = 640;
+    int32_t target_image_height = 384;
+    std::array<double, 6> point_cloud_range = {-15.0, -30.0, -2.0, 15.0, 30.0, 2.0};
+    int32_t bev_h = 100;
+    int32_t bev_w = 100;
+    double default_patch_angle = -1.0353195667266846;
+    int32_t default_command = 0;
+    std::vector<double> default_shift = {0.0, 0.0};
+    std::array<double, 3> image_normalization_param_mean = {103.530, 116.280, 123.675};
+    std::array<double, 3> image_normalization_param_std = {1.0, 1.0, 1.0};
     std::vector<double> vad2base = {
         0.0, 1.0, 0.0, 0.0,
        -1.0, 0.0, 0.0, 0.0,
         0.0, 0.0, 1.0, 0.0,
         0.0, 0.0, 0.0, 1.0
     };
-    VadInterface vad_interface(
-        1920, 1080, 640, 384,
-        std::vector<double>{-15.0, -30.0, -2.0, 15.0, 30.0, 2.0},
-        100, 100, -1.0353195667266846, 0, std::vector<double>{0.0, 0.0},
-        std::vector<double>{103.530, 116.280, 123.675},
-        std::vector<double>{1.0, 1.0, 1.0},
+    autoware::tensorrt_vad::VadInterfaceConfig vad_interface_config(
+        input_image_width, input_image_height,
+        target_image_width, target_image_height,
+        point_cloud_range,
+        bev_h, bev_w,
+        default_patch_angle,
+        default_command,
+        default_shift,
+        image_normalization_param_mean,
+        image_normalization_param_std,
         vad2base,
         tf_buffer);
-    float scale_width = target_image_width / input_image_width;
-    float scale_height = target_image_height / input_image_height;
+    VadInterface vad_interface(vad_interface_config);
+    float scale_width = static_cast<float>(target_image_width) / static_cast<float>(input_image_width);
+    float scale_height = static_cast<float>(target_image_height) / static_cast<float>(input_image_height);
     auto result = vad_interface.process_lidar2img(tf_static, camera_infos, scale_width, scale_height);
     ASSERT_EQ(result.size(), expected.size());
     for (size_t i = 0; i < expected.size(); ++i) {

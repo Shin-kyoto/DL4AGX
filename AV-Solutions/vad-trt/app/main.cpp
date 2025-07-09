@@ -653,19 +653,21 @@ int main(int argc, char **argv) {
   float init_lidar_y = cfg["visualization"]["init_lidar_y"].get<float>();
   float ground_height = cfg["visualization"]["ground_height"].get<float>();
   
-  // VadInterfaceのインスタンスを作成（すべてのパラメータを渡す）
-  autoware::tensorrt_vad::VadInterface vad_interface(
+  // VadInterfaceConfigを使ってインスタンスを作成
+  autoware::tensorrt_vad::VadInterfaceConfig vad_interface_config(
     input_image_width, input_image_height,
     target_image_width, target_image_height,
-    point_cloud_range,
+    {point_cloud_range[0], point_cloud_range[1], point_cloud_range[2], point_cloud_range[3], point_cloud_range[4], point_cloud_range[5]},
     bev_h, bev_w,
     default_patch_angle,
     default_command,
     default_shift,
-    image_normalization_param_mean,
-    image_normalization_param_std,
+    {image_normalization_param_mean[0], image_normalization_param_mean[1], image_normalization_param_mean[2]},
+    {image_normalization_param_std[0], image_normalization_param_std[1], image_normalization_param_std[2]},
     vad2base,
     tf_buffer);
+
+  autoware::tensorrt_vad::VadInterface vad_interface(vad_interface_config);
 
   
   // フレームごとに処理

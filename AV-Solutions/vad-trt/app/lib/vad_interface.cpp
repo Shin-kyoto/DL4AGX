@@ -7,57 +7,23 @@
 namespace autoware::tensorrt_vad
 {
 
-VadInterface::VadInterface(
-    int32_t input_image_width, int32_t input_image_height,
-    int32_t target_image_width, int32_t target_image_height,
-    const std::vector<double>& point_cloud_range,
-    int32_t bev_h, int32_t bev_w,
-    double default_patch_angle,
-    int32_t default_command,
-    const std::vector<double>& default_shift,
-    const std::vector<double>& image_normalization_param_mean,
-    const std::vector<double>& image_normalization_param_std,
-    const std::vector<double>& vad2base,
-    std::shared_ptr<tf2_ros::Buffer> tf_buffer)
-  : target_image_width_(target_image_width),
-    target_image_height_(target_image_height),
-    input_image_width_(input_image_width),
-    input_image_height_(input_image_height),
-    bev_h_(bev_h),
-    bev_w_(bev_w),
-    default_patch_angle_(static_cast<float>(default_patch_angle)),
-    default_command_(default_command),
-    tf_buffer_(tf_buffer)
+VadInterface::VadInterface(const VadInterfaceConfig& config)
+  : tf_buffer_(config.tf_buffer),
+    target_image_width_(config.target_image_width),
+    target_image_height_(config.target_image_height),
+    input_image_width_(config.input_image_width),
+    input_image_height_(config.input_image_height),
+    point_cloud_range_(config.point_cloud_range),
+    bev_h_(config.bev_h),
+    bev_w_(config.bev_w),
+    default_patch_angle_(config.default_patch_angle),
+    default_command_(config.default_command),
+    default_shift_(config.default_shift),
+    vad2base_(config.vad2base),
+    image_normalization_param_mean_(config.image_normalization_param_mean),
+    image_normalization_param_std_(config.image_normalization_param_std),
+    base2vad_(config.base2vad)
 {
-  // default_shiftをdoubleからfloatに変換してコピー
-  default_shift_.resize(default_shift.size());
-  for (size_t i = 0; i < default_shift.size(); ++i) {
-    default_shift_[i] = static_cast<float>(default_shift[i]);
-  }
-  
-  // point_cloud_rangeの配列への代入（doubleからfloatに変換）
-  for (size_t i = 0; i < 6 && i < point_cloud_range.size(); ++i) {
-    point_cloud_range_[i] = static_cast<float>(point_cloud_range[i]);
-  }
-  
-  // image_normalization_param_meanの配列への代入（doubleからfloatに変換）
-  for (size_t i = 0; i < 3 && i < image_normalization_param_mean.size(); ++i) {
-    image_normalization_param_mean_[i] = static_cast<float>(image_normalization_param_mean[i]);
-  }
-  
-  // image_normalization_param_stdの配列への代入（doubleからfloatに変換）
-  for (size_t i = 0; i < 3 && i < image_normalization_param_std.size(); ++i) {
-    image_normalization_param_std_[i] = static_cast<float>(image_normalization_param_std[i]);
-  }
-
-  // vad2base_をEigen::Matrix4fに変換（row-majorで格納されている前提）
-  vad2base_ = Eigen::Matrix4f::Identity();
-  for (size_t i = 0; i < 16 && i < vad2base.size(); ++i) {
-    vad2base_(i / 4, i % 4) = static_cast<float>(vad2base[i]);
-  }
-
-  base2vad_ = vad2base_.inverse();
-
   // AutowareカメラインデックスからVADカメラインデックスへのマッピング
   autoware_to_vad_ = {
     {0, 0}, // FRONT

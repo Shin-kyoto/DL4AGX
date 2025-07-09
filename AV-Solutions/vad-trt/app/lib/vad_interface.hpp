@@ -15,10 +15,13 @@
 #ifndef AUTOWARE_TENSORRT_VAD_VAD_INTERFACE_HPP_
 #define AUTOWARE_TENSORRT_VAD_VAD_INTERFACE_HPP_
 
+
 #include <vector>
 #include <unordered_map>
 #include <optional>
 #include <tuple>
+
+#include "vad_interface_config.hpp"
 
 #include "rclcpp/time.hpp"
 #include "sensor_msgs/msg/image.hpp"
@@ -80,21 +83,10 @@ using CanBusData = std::vector<float>;
  * @class VadInterface
  * @brief ROS topicデータをVADの入力形式に変換するインターフェース
  */
-class VadInterface
-{
+
+class VadInterface {
 public:
-  explicit VadInterface(
-    int32_t input_image_width, int32_t input_image_height,
-    int32_t target_image_width, int32_t target_image_height,
-    const std::vector<double>& point_cloud_range,
-    int32_t bev_h, int32_t bev_w,
-    double default_patch_angle,
-    int32_t default_command,
-    const std::vector<double>& default_shift,
-    const std::vector<double>& image_normalization_param_mean,
-    const std::vector<double>& image_normalization_param_std,
-    const std::vector<double>& vad2base,
-    std::shared_ptr<tf2_ros::Buffer> tf_buffer);
+  explicit VadInterface(const VadInterfaceConfig& config);
 
   VadInputData convert(const VadInputTopicData & vad_input_topic_data, const std::vector<float> & prev_can_bus = {});
   Lidar2ImgData process_lidar2img(
@@ -114,20 +106,19 @@ public:
   CameraImagesData process_image(
     const std::vector<sensor_msgs::msg::Image::ConstSharedPtr> & images) const;
 
+
 private:
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
-  // --- クラスの不変条件 (メンバ変数) ---
   std::unordered_map<int32_t, int32_t> autoware_to_vad_;
   int32_t target_image_width_, target_image_height_;
   int32_t input_image_width_, input_image_height_;
-  float point_cloud_range_[6];
+  std::array<float, 6> point_cloud_range_;
   int32_t bev_h_, bev_w_;
   float default_patch_angle_;
   int32_t default_command_;
   std::vector<float> default_shift_;
-  // 正規化のパラメータ
-  float image_normalization_param_mean_[3];
-  float image_normalization_param_std_[3];
+  std::array<float, 3> image_normalization_param_mean_;
+  std::array<float, 3> image_normalization_param_std_;
   Eigen::Matrix4f vad2base_;
   Eigen::Matrix4f base2vad_;
 

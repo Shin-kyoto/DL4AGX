@@ -43,6 +43,7 @@ add_executable(
   test_vad_interface.cpp
   test_vad_integration.cpp
   ../lib/vad_interface.cpp
+  ../lib/vad_model.cpp
 )
 
 # ターゲットごとにインクルードディレクトリを絶対パスで指定
