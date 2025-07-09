@@ -124,12 +124,9 @@ private:
     int32_t target_image_width, int32_t target_image_height) const;
   std::vector<float> normalize_image(unsigned char *image_data, int32_t width, int32_t height) const;
   
-  std::vector<float> build_can_bus_data(
-    const std::vector<float> & translation,
-    const std::vector<float> & rotation,
-    const std::vector<float> & acceleration,
-    const std::vector<float> & angular_velocity,
-    const std::vector<float> & velocity,
+  std::vector<float> calculate_can_bus(
+    const nav_msgs::msg::Odometry::ConstSharedPtr & kinematic_state,
+    const sensor_msgs::msg::Imu::ConstSharedPtr & imu_raw,
     const std::vector<float> & prev_can_bus) const;
   
   std::vector<float> calculate_shift(float delta_x, float delta_y, float patch_angle_rad) const;

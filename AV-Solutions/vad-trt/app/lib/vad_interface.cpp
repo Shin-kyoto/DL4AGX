@@ -364,31 +364,66 @@ CameraImagesData VadInterface::process_image(
   return concatenated_data;
 }
 
-std::vector<float> VadInterface::build_can_bus_data(
-  const std::vector<float> & translation,
-  const std::vector<float> & rotation,
-  const std::vector<float> & acceleration,
-  const std::vector<float> & angular_velocity,
-  const std::vector<float> & velocity,
+std::vector<float> VadInterface::calculate_can_bus(
+  const nav_msgs::msg::Odometry::ConstSharedPtr & kinematic_state,
+  const sensor_msgs::msg::Imu::ConstSharedPtr & imu_raw,
   const std::vector<float> & prev_can_bus) const
 {
   std::vector<float> can_bus(18, 0.0f);
 
+  // Apply Autoware to nuScenes coordinate transformation to position
+  auto [ns_x, ns_y] =
+      aw2ns_xy(kinematic_state->pose.pose.position.x,
+                kinematic_state->pose.pose.position.y);
+
   // translation (0:3)
-  std::copy(translation.begin(), translation.end(), can_bus.begin());
+  can_bus[0] = ns_x;
+  can_bus[1] = ns_y;
+  can_bus[2] = static_cast<float>(kinematic_state->pose.pose.position.z);
+
+  // Apply Autoware to nuScenes coordinate transformation to orientation
+  Eigen::Quaternionf q_aw(
+      kinematic_state->pose.pose.orientation.w,
+      kinematic_state->pose.pose.orientation.x,
+      kinematic_state->pose.pose.orientation.y,
+      kinematic_state->pose.pose.orientation.z);
+
+  Eigen::Quaternionf q_ns = aw2ns_quaternion(q_aw);
 
   // rotation (3:7)
-  std::copy(rotation.begin(), rotation.end(), can_bus.begin() + 3);
+  can_bus[3] = q_ns.x();
+  can_bus[4] = q_ns.y();
+  can_bus[5] = q_ns.z();
+  can_bus[6] = q_ns.w();
+
+  // Apply Autoware to nuScenes coordinate transformation to acceleration
+  auto [ns_ax, ns_ay] =
+      aw2ns_xy(imu_raw->linear_acceleration.x,
+                imu_raw->linear_acceleration.y);
 
   // acceleration (7:10)
-  std::copy(acceleration.begin(), acceleration.end(), can_bus.begin() + 7);
+  can_bus[7] = ns_ax;
+  can_bus[8] = ns_ay;
+  can_bus[9] = static_cast<float>(imu_raw->linear_acceleration.z);
+
+  // Apply Autoware to nuScenes coordinate transformation to angular velocity
+  auto [ns_wx, ns_wy] =
+      aw2ns_xy(kinematic_state->twist.twist.angular.x,
+                kinematic_state->twist.twist.angular.y);
 
   // angular velocity (10:13)
-  std::copy(angular_velocity.begin(), angular_velocity.end(),
-            can_bus.begin() + 10);
+  can_bus[10] = ns_wx;
+  can_bus[11] = ns_wy;
+  can_bus[12] = static_cast<float>(kinematic_state->twist.twist.angular.z);
+
+  // Apply Autoware to nuScenes coordinate transformation to velocity
+  auto [ns_vx, ns_vy] =
+      aw2ns_xy(kinematic_state->twist.twist.linear.x,
+                kinematic_state->twist.twist.linear.y);
 
   // velocity (13:16)
-  std::copy(velocity.begin(), velocity.begin() + 2, can_bus.begin() + 13);
+  can_bus[13] = ns_vx;
+  can_bus[14] = ns_vy;
   can_bus[15] = 0.0f; // z方向の速度は0とする
 
   // patch_angle[rad]の計算 (16)
@@ -437,69 +472,15 @@ std::tuple<CanBusData, ShiftData> VadInterface::process_can_bus_shift(
   const sensor_msgs::msg::Imu::ConstSharedPtr & imu_raw,
   const std::vector<float> & prev_can_bus) const
 {
-  std::vector<float> can_bus;
   std::vector<float> shift;
 
-  // Apply Autoware to nuScenes coordinate transformation to position
-  auto [ns_x, ns_y] =
-      aw2ns_xy(kinematic_state->pose.pose.position.x,
-                kinematic_state->pose.pose.position.y);
-
-  std::vector<float> translation = {
-      ns_x, ns_y,
-      static_cast<float>(
-          kinematic_state->pose.pose.position.z)};
-
-  // Apply Autoware to nuScenes coordinate transformation to orientation
-  Eigen::Quaternionf q_aw(
-      kinematic_state->pose.pose.orientation.w,
-      kinematic_state->pose.pose.orientation.x,
-      kinematic_state->pose.pose.orientation.y,
-      kinematic_state->pose.pose.orientation.z);
-
-  Eigen::Quaternionf q_ns = aw2ns_quaternion(q_aw);
-
-  std::vector<float> rotation = {q_ns.x(), q_ns.y(), q_ns.z(), q_ns.w()};
-
-  // Apply Autoware to nuScenes coordinate transformation to velocity
-  auto [ns_vx, ns_vy] =
-      aw2ns_xy(kinematic_state->twist.twist.linear.x,
-                kinematic_state->twist.twist.linear.y);
-
-  std::vector<float> velocity = {
-      ns_vx, ns_vy,
-      static_cast<float>(
-          kinematic_state->twist.twist.linear.z)};
-
-  // Apply Autoware to nuScenes coordinate transformation to angular
-  // velocity
-  auto [ns_wx, ns_wy] =
-      aw2ns_xy(kinematic_state->twist.twist.angular.x,
-                kinematic_state->twist.twist.angular.y);
-
-  std::vector<float> angular_velocity = {
-      ns_wx, ns_wy,
-      static_cast<float>(
-          kinematic_state->twist.twist.angular.z)};
-
-  // Apply Autoware to nuScenes coordinate transformation to acceleration
-  auto [ns_ax, ns_ay] =
-      aw2ns_xy(imu_raw->linear_acceleration.x,
-                imu_raw->linear_acceleration.y);
-
-  std::vector<float> acceleration = {
-      ns_ax, ns_ay,
-      static_cast<float>(imu_raw->linear_acceleration.z)};
-
-  // can_busデータの構築（18次元ベクトル）
-  can_bus = build_can_bus_data(
-      translation, rotation, acceleration, angular_velocity, velocity,
-      prev_can_bus);
+  // can_busデータの計算
+  std::vector<float> can_bus = calculate_can_bus(kinematic_state, imu_raw, prev_can_bus);
 
   // シフトデータの計算
   if (!prev_can_bus.empty()) {
-    float delta_x = translation[0] - prev_can_bus[0];
-    float delta_y = translation[1] - prev_can_bus[1];
+    float delta_x = can_bus[0] - prev_can_bus[0];  // translation[0]
+    float delta_y = can_bus[1] - prev_can_bus[1];  // translation[1]
 
     double yaw = std::atan2(
         2.0 * (can_bus[6] * can_bus[5] + can_bus[3] * can_bus[4]),
