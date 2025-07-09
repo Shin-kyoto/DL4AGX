@@ -39,7 +39,7 @@ VadInputData VadInterface::convert(const VadInputTopicData & vad_input_topic_dat
   vad_input_data.lidar2img_ = process_lidar2img(
     vad_input_topic_data.tf_static,
     vad_input_topic_data.camera_infos,
-    scale_width, scale_height  // 正しいスケーリング値を使用
+    scale_width, scale_height
   );
   
   // Process can_bus and shift data
@@ -314,7 +314,7 @@ CameraImagesData VadInterface::process_image(
     frame_images[vad_idx] = normalized_image_data;
   }
 
-  // 画像データを連結 (processImageForInferenceの処理を統合)
+  // 画像データを連結
   std::vector<float> concatenated_data;
   size_t single_camera_size = 3 * target_height_ * target_width_;
   concatenated_data.reserve(single_camera_size * 6);
