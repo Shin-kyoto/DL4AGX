@@ -85,7 +85,7 @@ class VadInterface
 public:
   explicit VadInterface();
 
-  VadInputData convert(const VadInputTopicData & vad_input_topic_data, int32_t frame_id, const std::vector<float> & prev_can_bus = {}, float scale_width = 1.0f, float scale_height = 1.0f);
+  VadInputData convert(const VadInputTopicData & vad_input_topic_data, const std::vector<float> & prev_can_bus = {}, float scale_width = 1.0f, float scale_height = 1.0f);
 
 private:
   // --- クラスの不変条件 (メンバ変数) ---
@@ -118,26 +118,22 @@ private:
     const std::vector<float> & acceleration,
     const std::vector<float> & angular_velocity,
     const std::vector<float> & velocity,
-    const std::vector<float> & prev_can_bus,
-    int32_t frame_id) const;
+    const std::vector<float> & prev_can_bus) const;
   
   std::vector<float> calculate_shift(float delta_x, float delta_y, float patch_angle_rad) const;
   
   Lidar2ImgData process_lidar2img(
     const tf2_msgs::msg::TFMessage::ConstSharedPtr & tf_static,
     const std::vector<sensor_msgs::msg::CameraInfo::ConstSharedPtr> & camera_infos,
-    int32_t frame_id,
     float scale_width, float scale_height) const;
 
   std::tuple<CanBusData, ShiftData> process_can_bus_shift(
     const nav_msgs::msg::Odometry::ConstSharedPtr & kinematic_state,
     const sensor_msgs::msg::Imu::ConstSharedPtr & imu_raw,
-    int32_t frame_id,
     const std::vector<float> & prev_can_bus) const;
 
   CameraImagesData process_image(
-    const std::vector<sensor_msgs::msg::Image::ConstSharedPtr> & images,
-    int32_t frame_id) const;
+    const std::vector<sensor_msgs::msg::Image::ConstSharedPtr> & images) const;
 
   // --- 静的ヘルパーメソッド ---
   static std::pair<float, float> aw2ns_xy(float aw_x, float aw_y);

@@ -1189,8 +1189,7 @@ int main(int argc, char **argv) {
 
     // VadInterfaceを使用してVadInputTopicDataをVadInputDataに変換（古いprev_can_busを使用）
     auto vad_input_data = vad_interface.convert(
-        vad_topic_data_list[frame_id - 1], 
-        frame_id,  // 元のframe_idを渡す（1から始まる）
+        vad_topic_data_list[frame_id - 1],
         prev_can_bus,
         scale_width, scale_height);  // 正しいスケーリング値を渡す
 

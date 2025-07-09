@@ -29,7 +29,7 @@ VadInterface::VadInterface()
   };
 }
 
-VadInputData VadInterface::convert(const VadInputTopicData & vad_input_topic_data, int32_t frame_id, const std::vector<float> & prev_can_bus, float scale_width, float scale_height)
+VadInputData VadInterface::convert(const VadInputTopicData & vad_input_topic_data, const std::vector<float> & prev_can_bus, float scale_width, float scale_height)
 {
   VadInputData vad_input_data;
   
@@ -37,7 +37,6 @@ VadInputData VadInterface::convert(const VadInputTopicData & vad_input_topic_dat
   vad_input_data.lidar2img_ = process_lidar2img(
     vad_input_topic_data.tf_static,
     vad_input_topic_data.camera_infos,
-    frame_id,
     scale_width, scale_height  // 正しいスケーリング値を使用
   );
   
@@ -45,14 +44,13 @@ VadInputData VadInterface::convert(const VadInputTopicData & vad_input_topic_dat
   auto [can_bus, shift] = process_can_bus_shift(
     vad_input_topic_data.kinematic_state,
     vad_input_topic_data.imu_raw,
-    frame_id,
     prev_can_bus
   );
   vad_input_data.can_bus_ = can_bus;
   vad_input_data.shift_ = shift;
   
   // Process image data
-  vad_input_data.camera_images_ = process_image(vad_input_topic_data.images, frame_id);
+  vad_input_data.camera_images_ = process_image(vad_input_topic_data.images);
   
   // Set default command
   vad_input_data.command_ = 2;
@@ -183,7 +181,6 @@ std::vector<float> VadInterface::matrix_to_flat(const Eigen::Matrix4f & matrix) 
 Lidar2ImgData VadInterface::process_lidar2img(
   const tf2_msgs::msg::TFMessage::ConstSharedPtr & tf_static,
   const std::vector<sensor_msgs::msg::CameraInfo::ConstSharedPtr> & camera_infos,
-  int32_t frame_id,
   float scale_width, float scale_height) const
 {
   std::vector<float> frame_lidar2img(16 * 6, 0.0f); // 6カメラ分のスペースを確保
@@ -279,8 +276,7 @@ std::vector<float> VadInterface::normalize_image(unsigned char *image_data, int3
 }
 
 CameraImagesData VadInterface::process_image(
-  const std::vector<sensor_msgs::msg::Image::ConstSharedPtr> & images,
-  int32_t frame_id) const
+  const std::vector<sensor_msgs::msg::Image::ConstSharedPtr> & images) const
 {
   std::vector<std::vector<float>> frame_images;
   frame_images.resize(6); // VADカメラ順序で初期化
@@ -341,8 +337,7 @@ std::vector<float> VadInterface::build_can_bus_data(
   const std::vector<float> & acceleration,
   const std::vector<float> & angular_velocity,
   const std::vector<float> & velocity,
-  const std::vector<float> & prev_can_bus,
-  int32_t frame_id) const
+  const std::vector<float> & prev_can_bus) const
 {
   std::vector<float> can_bus(18, 0.0f);
 
@@ -372,7 +367,7 @@ std::vector<float> VadInterface::build_can_bus_data(
   can_bus[16] = static_cast<float>(yaw);
 
   // patch_angle[deg]の計算 (17)
-  if (frame_id > 0 && !prev_can_bus.empty()) {
+  if (!prev_can_bus.empty()) {
     float prev_angle = prev_can_bus[16];
     can_bus[17] = (yaw - prev_angle) * 180.0f / M_PI;
   } else {
@@ -407,7 +402,6 @@ std::vector<float> VadInterface::calculate_shift(float delta_x, float delta_y, f
 std::tuple<CanBusData, ShiftData> VadInterface::process_can_bus_shift(
   const nav_msgs::msg::Odometry::ConstSharedPtr & kinematic_state,
   const sensor_msgs::msg::Imu::ConstSharedPtr & imu_raw,
-  int32_t frame_id,
   const std::vector<float> & prev_can_bus) const
 {
   std::vector<float> can_bus;
@@ -467,10 +461,10 @@ std::tuple<CanBusData, ShiftData> VadInterface::process_can_bus_shift(
   // can_busデータの構築（18次元ベクトル）
   can_bus = build_can_bus_data(
       translation, rotation, acceleration, angular_velocity, velocity,
-      prev_can_bus, frame_id);
+      prev_can_bus);
 
   // シフトデータの計算
-  if (frame_id > 0 && !prev_can_bus.empty()) {
+  if (!prev_can_bus.empty()) {
     float delta_x = translation[0] - prev_can_bus[0];
     float delta_y = translation[1] - prev_can_bus[1];
 
