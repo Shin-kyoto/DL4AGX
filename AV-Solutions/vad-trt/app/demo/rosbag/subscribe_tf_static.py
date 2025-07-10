@@ -26,7 +26,7 @@ class RosbagProcessor(Node):
         self.rosbag_path = rosbag_path
         
         # フレームをハードコード
-        self.parent_frame = 'base_link'
+        self.parent_frame = 'sensor_kit_base_link'
         self.child_frames = [
             'camera0/camera_optical_link',
             'camera1/camera_optical_link',
