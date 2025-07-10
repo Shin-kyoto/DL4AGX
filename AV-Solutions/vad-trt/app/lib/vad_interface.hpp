@@ -128,10 +128,7 @@ private:
   Eigen::Matrix4f create_viewpad(const sensor_msgs::msg::CameraInfo::ConstSharedPtr & camera_info) const;
   Eigen::Matrix4f apply_scaling(const Eigen::Matrix4f & lidar2img, float scale_width, float scale_height) const;
   std::vector<float> matrix_to_flat(const Eigen::Matrix4f & matrix) const;
-  
-  std::optional<std::tuple<unsigned char*, int32_t, int32_t>> resize_image(
-    unsigned char *image_data, int32_t width, int32_t height, int32_t channels, 
-    int32_t target_image_width, int32_t target_image_height) const;
+
   std::vector<float> normalize_image(unsigned char *image_data, int32_t width, int32_t height) const;
   
   std::vector<float> calculate_can_bus(

@@ -176,30 +176,6 @@ Lidar2ImgData VadInterface::process_lidar2img(
   return frame_lidar2img;
 }
 
-std::optional<std::tuple<unsigned char*, int32_t, int32_t>> VadInterface::resize_image(
-  unsigned char *image_data, int32_t width, int32_t height, int32_t channels, 
-  int32_t target_image_width, int32_t target_image_height) const
-{
-  // OpenCVのMatに変換
-  int32_t cv_type = (channels == 1) ? CV_8UC1 : (channels == 3 ? CV_8UC3 : CV_8UC4);
-  cv::Mat input_img(height, width, cv_type, image_data);
-  cv::Mat resized_img;
-  cv::resize(input_img, resized_img, cv::Size(target_image_width, target_image_height), 0, 0, cv::INTER_LINEAR);
-
-  // メモリ確保し，データをコピー
-  size_t data_size = target_image_width * target_image_height * channels;
-  unsigned char *resized_data = (unsigned char *)malloc(data_size);
-  if (!resized_data) {
-    return std::nullopt;
-  }
-  std::memcpy(resized_data, resized_img.data, data_size);
-
-  // 元のデータを解放
-  free(image_data);
-
-  return std::make_tuple(resized_data, target_image_width, target_image_height);
-}
-
 std::vector<float> VadInterface::normalize_image(unsigned char *image_data, int32_t width, int32_t height) const
 {
   std::vector<float> normalized_image_data(width * height * 3);
@@ -230,42 +206,22 @@ CameraImagesData VadInterface::process_image(
     const auto &image_msg = images[autoware_idx];
 
     // OpenCVで画像データをデコード
-    cv::Mat img_mat = cv::imdecode(cv::Mat(image_msg->data), cv::IMREAD_COLOR); // BGRでデコード
-    if (img_mat.empty()) {
+    cv::Mat bgr_img = cv::imdecode(cv::Mat(image_msg->data), cv::IMREAD_COLOR); // BGRでデコード
+    if (bgr_img.empty()) {
       throw std::runtime_error("画像データのデコードに失敗しました: " + std::to_string(autoware_idx));
     }
-    int32_t width = img_mat.cols;
-    int32_t height = img_mat.rows;
-    int32_t channels = img_mat.channels();
+
+    // RGBに変換
+    cv::Mat rgb_img;
+    cv::cvtColor(bgr_img, rgb_img, cv::COLOR_BGR2RGB);
 
     // サイズが目標と違う場合はリサイズする
-    unsigned char* image_data = nullptr;
-    if (width != target_image_width_ || height != target_image_height_) {
-      // RGBに変換
-      cv::Mat rgb_img;
-      cv::cvtColor(img_mat, rgb_img, cv::COLOR_BGR2RGB);
-      image_data = (unsigned char*)malloc(rgb_img.total() * rgb_img.elemSize());
-      std::memcpy(image_data, rgb_img.data, rgb_img.total() * rgb_img.elemSize());
-      auto resize_result = resize_image(image_data, width, height, 3, target_image_width_, target_image_height_);
-      if (resize_result.has_value()) {
-        auto [new_image_data, new_width, new_height] = resize_result.value();
-        image_data = new_image_data;
-        width = new_width;
-        height = new_height;
-      } else {
-        throw std::runtime_error("画像リサイズに失敗しました: " + std::to_string(autoware_idx));
-      }
-    } else {
-      // RGBに変換
-      cv::Mat rgb_img;
-      cv::cvtColor(img_mat, rgb_img, cv::COLOR_BGR2RGB);
-      image_data = (unsigned char*)malloc(rgb_img.total() * rgb_img.elemSize());
-      std::memcpy(image_data, rgb_img.data, rgb_img.total() * rgb_img.elemSize());
+    if (rgb_img.cols != target_image_width_ || rgb_img.rows != target_image_height_) {
+      cv::resize(rgb_img, rgb_img, cv::Size(target_image_width_, target_image_height_));
     }
 
     // 画像を正規化
-    std::vector<float> normalized_image_data = normalize_image(image_data, width, height);
-    free(image_data);
+    std::vector<float> normalized_image_data = normalize_image(rgb_img.data, rgb_img.cols, rgb_img.rows);
 
     // VADカメラ順序で格納
     int32_t vad_idx = autoware_to_vad_camera_mapping_.at(autoware_idx);
