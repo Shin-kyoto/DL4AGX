@@ -25,14 +25,7 @@ VadInterface::VadInterface(const VadInterfaceConfig& config, std::shared_ptr<tf2
     tf_buffer_(tf_buffer)
 {
   // AutowareカメラインデックスからVADカメラインデックスへのマッピング
-  autoware_to_vad_ = {
-    {0, 0}, // FRONT
-    {4, 1}, // FRONT_RIGHT
-    {2, 2}, // FRONT_LEFT
-    {1, 3}, // BACK
-    {3, 4}, // BACK_LEFT
-    {5, 5}  // BACK_RIGHT
-  };
+  autoware_to_vad_camera_mapping_ = config.autoware_to_vad_camera_mapping;
 }
 
 VadInputData VadInterface::convert(const VadInputTopicData & vad_input_topic_data, const std::vector<float> & prev_can_bus)
@@ -173,7 +166,7 @@ Lidar2ImgData VadInterface::process_lidar2img(
     std::vector<float> lidar2img_flat = matrix_to_flat(lidar2img);
 
     // lidar2imgの計算後、VADカメラIDの位置に格納
-    int32_t vad_camera_id = autoware_to_vad_.at(autoware_camera_id);
+    int32_t vad_camera_id = autoware_to_vad_camera_mapping_.at(autoware_camera_id);
     if (vad_camera_id >= 0 && vad_camera_id < 6) {
       std::copy(lidar2img_flat.begin(), lidar2img_flat.end(),
                 frame_lidar2img.begin() + vad_camera_id * 16);
@@ -275,7 +268,7 @@ CameraImagesData VadInterface::process_image(
     free(image_data);
 
     // VADカメラ順序で格納
-    int32_t vad_idx = autoware_to_vad_.at(autoware_idx);
+    int32_t vad_idx = autoware_to_vad_camera_mapping_.at(autoware_idx);
     frame_images[vad_idx] = normalized_image_data;
   }
 

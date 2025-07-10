@@ -110,7 +110,6 @@ public:
 
 private:
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
-  std::unordered_map<int32_t, int32_t> autoware_to_vad_;
   int32_t target_image_width_, target_image_height_;
   int32_t input_image_width_, input_image_height_;
   std::array<float, 6> point_cloud_range_;
@@ -122,6 +121,7 @@ private:
   std::array<float, 3> image_normalization_param_std_;
   Eigen::Matrix4f vad2base_;
   Eigen::Matrix4f base2vad_;
+  std::unordered_map<int32_t, int32_t> autoware_to_vad_camera_mapping_;
 
   // --- 内部処理関数 ---
   std::optional<Eigen::Matrix4f> lookup_base_to_camera_rt(tf2_ros::Buffer & buffer, int32_t autoware_camera_id) const;

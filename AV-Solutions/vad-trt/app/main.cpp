@@ -142,19 +142,20 @@ public:
   VADNode(const std::vector<std::string> &yaml_config_paths)
       : Node("vad_node", createNodeOptions(yaml_config_paths)),
         vad_interface_config_(
-          declare_parameter<int>("interface_params.input_image_width", 1920),
-          declare_parameter<int>("interface_params.input_image_height", 1080),
-          declare_parameter<int>("interface_params.target_image_width", 640),
-          declare_parameter<int>("interface_params.target_image_height", 384),
-          declare_parameter<std::vector<double>>("interface_params.point_cloud_range", { -15.0, -30.0, -2.0, 15.0, 30.0, 2.0 }),
-          declare_parameter<int>("interface_params.bev_h", 100),
-          declare_parameter<int>("interface_params.bev_w", 100),
-          declare_parameter<double>("interface_params.default_patch_angle", -1.0353195667266846),
-          declare_parameter<int>("model_params.default_command", 0),
-          declare_parameter<std::vector<double>>("interface_params.default_shift", {0.0, 0.0}),
-          declare_parameter<std::vector<double>>("interface_params.image_normalization_param_mean", {103.530, 116.280, 123.675}),
-          declare_parameter<std::vector<double>>("interface_params.image_normalization_param_std", {1.0, 1.0, 1.0}),
-          declare_parameter<std::vector<double>>("interface_params.vad2base", {0.0, 1.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0})
+          declare_parameter<int32_t>("interface_params.input_image_width"),
+          declare_parameter<int32_t>("interface_params.input_image_height"),
+          declare_parameter<int32_t>("interface_params.target_image_width"),
+          declare_parameter<int32_t>("interface_params.target_image_height"),
+          declare_parameter<std::vector<double>>("interface_params.point_cloud_range"),
+          declare_parameter<int32_t>("interface_params.bev_h"),
+          declare_parameter<int32_t>("interface_params.bev_w"),
+          declare_parameter<double>("interface_params.default_patch_angle"),
+          declare_parameter<int32_t>("model_params.default_command"),
+          declare_parameter<std::vector<double>>("interface_params.default_shift"),
+          declare_parameter<std::vector<double>>("interface_params.image_normalization_param_mean"),
+          declare_parameter<std::vector<double>>("interface_params.image_normalization_param_std"),
+          declare_parameter<std::vector<double>>("interface_params.vad2base"),
+          declare_parameter<std::vector<int64_t>>("interface_params.autoware_to_vad_camera_mapping")
         )
   {
 

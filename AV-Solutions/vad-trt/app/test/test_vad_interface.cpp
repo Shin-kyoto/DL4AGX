@@ -81,6 +81,13 @@ TEST(VadLidar2ImgTest, DummyInputOutput)
         0.0, 0.0, 1.0, 0.0,
         0.0, 0.0, 0.0, 1.0
     };
+    std::vector<int64_t> autoware_to_vad_camera_mapping = {0, 0, // FRONT
+                                                           4, 1, // FRONT_RIGHT
+                                                           2, 2, // FRONT_LEFT
+                                                           1, 3, // BACK
+                                                           3, 4, // BACK_LEFT
+                                                           5, 5  // BACK_RIGHT
+                                                           };
     autoware::tensorrt_vad::VadInterfaceConfig vad_interface_config(
         input_image_width, input_image_height,
         target_image_width, target_image_height,
@@ -91,7 +98,8 @@ TEST(VadLidar2ImgTest, DummyInputOutput)
         default_shift,
         image_normalization_param_mean,
         image_normalization_param_std,
-        vad2base);
+        vad2base,
+        autoware_to_vad_camera_mapping);
     VadInterface vad_interface(vad_interface_config, tf_buffer);
     float scale_width = static_cast<float>(target_image_width) / static_cast<float>(input_image_width);
     float scale_height = static_cast<float>(target_image_height) / static_cast<float>(input_image_height);

@@ -25,9 +25,9 @@ public:
   std::array<float, 3> image_normalization_param_std;
   Eigen::Matrix4f vad2base;
   Eigen::Matrix4f base2vad;
-  std::shared_ptr<tf2_ros::Buffer> tf_buffer;
+  std::unordered_map<int32_t, int32_t> autoware_to_vad_camera_mapping;
 
-  // Constructor: accepts all params as double/int, does conversion inside
+  // ROS 2のdeclare_parameterで，std::vector<float>やstd::vector<int32_t>を受け取ることができないため，doubleやint64_tを使用
   VadInterfaceConfig(
     int32_t input_image_width_, int32_t input_image_height_,
     int32_t target_image_width_, int32_t target_image_height_,
@@ -38,7 +38,8 @@ public:
     const std::vector<double>& default_shift_,
     const std::vector<double>& image_normalization_param_mean_,
     const std::vector<double>& image_normalization_param_std_,
-    const std::vector<double>& vad2base_)
+    const std::vector<double>& vad2base_,
+    const std::vector<int64_t>& autoware_to_vad_camera_mapping_)
     : input_image_width(input_image_width_),
       input_image_height(input_image_height_),
       target_image_width(target_image_width_),
@@ -67,6 +68,13 @@ public:
     }
     // base2vad: inverse
     base2vad = vad2base.inverse();
+    // camera mapping: convert from vector to map
+    autoware_to_vad_camera_mapping.clear();
+    for (size_t i = 0; i + 1 < autoware_to_vad_camera_mapping_.size(); i += 2) {
+        int32_t key = static_cast<int32_t>(autoware_to_vad_camera_mapping_[i]);
+        int32_t value = static_cast<int32_t>(autoware_to_vad_camera_mapping_[i + 1]);
+        autoware_to_vad_camera_mapping[key] = value;
+    }
   }
 };
 
