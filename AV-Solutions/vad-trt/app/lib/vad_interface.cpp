@@ -28,7 +28,7 @@ VadInterface::VadInterface(const VadInterfaceConfig& config, std::shared_ptr<tf2
   autoware_to_vad_camera_mapping_ = config.autoware_to_vad_camera_mapping;
 }
 
-VadInputData VadInterface::convert(const VadInputTopicData & vad_input_topic_data, const std::vector<float> & prev_can_bus)
+VadInputData VadInterface::convert_input(const VadInputTopicData & vad_input_topic_data, const std::vector<float> & prev_can_bus)
 {
   VadInputData vad_input_data;
 

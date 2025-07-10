@@ -89,7 +89,7 @@ public:
   explicit VadInterface(const VadInterfaceConfig& config, 
                         std::shared_ptr<tf2_ros::Buffer> tf_buffer);
 
-  VadInputData convert(const VadInputTopicData & vad_input_topic_data, const std::vector<float> & prev_can_bus = {});
+  VadInputData convert_input(const VadInputTopicData & vad_input_topic_data, const std::vector<float> & prev_can_bus = {});
   Lidar2ImgData process_lidar2img(
     const tf2_msgs::msg::TFMessage::ConstSharedPtr & tf_static,
     const std::vector<sensor_msgs::msg::CameraInfo::ConstSharedPtr> & camera_infos,

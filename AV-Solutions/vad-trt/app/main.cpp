@@ -636,7 +636,7 @@ int main(int argc, char **argv) {
     std::string frame_dir = data_dir + std::to_string(frame_id) + "/";
 
     // VadInterfaceを使用してVadInputTopicDataをVadInputDataに変換（古いprev_can_busを使用）
-    auto vad_input_data = vad_interface.convert(
+    auto vad_input_data = vad_interface.convert_input(
         vad_topic_data_list[frame_id - 1],
         prev_can_bus);
 
