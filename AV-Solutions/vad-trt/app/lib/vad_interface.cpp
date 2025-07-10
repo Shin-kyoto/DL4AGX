@@ -8,24 +8,24 @@ namespace autoware::tensorrt_vad
 {
 
 VadInterface::VadInterface(const VadInterfaceConfig& config, std::shared_ptr<tf2_ros::Buffer> tf_buffer)
-  : target_image_width_(config.target_image_width_),
-    target_image_height_(config.target_image_height_),
-    input_image_width_(config.input_image_width_),
-    input_image_height_(config.input_image_height_),
-    point_cloud_range_(config.point_cloud_range_),
-    bev_h_(config.bev_h_),
-    bev_w_(config.bev_w_),
-    default_patch_angle_(config.default_patch_angle_),
-    default_command_(config.default_command_),
-    default_shift_(config.default_shift_),
-    vad2base_(config.vad2base_),
-    image_normalization_param_mean_(config.image_normalization_param_mean_),
-    image_normalization_param_std_(config.image_normalization_param_std_),
-    base2vad_(config.base2vad_),
+  : target_image_width_(config.target_image_width),
+    target_image_height_(config.target_image_height),
+    input_image_width_(config.input_image_width),
+    input_image_height_(config.input_image_height),
+    point_cloud_range_(config.point_cloud_range),
+    bev_h_(config.bev_h),
+    bev_w_(config.bev_w),
+    default_patch_angle_(config.default_patch_angle),
+    default_command_(config.default_command),
+    default_shift_(config.default_shift),
+    vad2base_(config.vad2base),
+    image_normalization_param_mean_(config.image_normalization_param_mean),
+    image_normalization_param_std_(config.image_normalization_param_std),
+    base2vad_(config.base2vad),
     tf_buffer_(tf_buffer)
 {
   // AutowareカメラインデックスからVADカメラインデックスへのマッピング
-  autoware_to_vad_camera_mapping_ = config.autoware_to_vad_camera_mapping_;
+  autoware_to_vad_camera_mapping_ = config.autoware_to_vad_camera_mapping;
 }
 
 VadInputData VadInterface::convert(const VadInputTopicData & vad_input_topic_data, const std::vector<float> & prev_can_bus)
