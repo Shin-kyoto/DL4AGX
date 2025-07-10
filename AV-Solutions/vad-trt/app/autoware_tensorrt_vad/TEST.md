@@ -59,7 +59,7 @@ colcon test-result --verbose
 
 3. **VadInferIntegrationTest.RealInferExecution**
    - 実際のデータを使用したVAD推論の実行
-   - エンドツーエンドの推論パイプラインを検証
+   - 推論パイプラインを検証
    - 予測された軌道の出力を確認
 
 ### トラブルシューティング
