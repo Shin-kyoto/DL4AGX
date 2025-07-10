@@ -32,7 +32,7 @@ cp test/test_config.yaml build/autoware_tensorrt_vad/
 colcon build --packages-select autoware_tensorrt_vad
 
 # テスト実行（lint系テストを除く）
-colcon test --packages-select autoware_tensorrt_vad --ctest-args -R test_vad_integration
+colcon test --packages-select autoware_tensorrt_vad --ctest-args -R test_vad_integration test_vad_interface
 ```
 
 #### 3. テスト結果の確認
