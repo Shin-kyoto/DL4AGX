@@ -1,4 +1,5 @@
-#pragma once
+#ifndef AUTOWARE_TENSORRT_VAD_TEST_CONFIG_CONSTANTS_HPP_
+#define AUTOWARE_TENSORRT_VAD_TEST_CONFIG_CONSTANTS_HPP_
 
 #include <vector>
 #include <string>
@@ -20,3 +21,5 @@ inline std::string getTestConfigPath() {
 }
 
 }  // namespace autoware::tensorrt_vad::test
+
+#endif  // AUTOWARE_TENSORRT_VAD_TEST_CONFIG_CONSTANTS_HPP_
