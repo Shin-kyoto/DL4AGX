@@ -37,7 +37,6 @@ jobs:
           apt-get install -y --no-install-recommends \
             cuda-toolkit-12-1 \
             libeigen3-dev \
-            # 【FIX】Specify the exact matching versions for all TensorRT dev packages
             libnvinfer-dev=8.6.1.6-1+cuda12.0 \
             libnvinfer-headers-dev=8.6.1.6-1+cuda12.0
         shell: bash
