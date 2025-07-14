@@ -16,7 +16,7 @@ env:
 jobs:
   build:
     # Autowareが提供するROS 2 Humbleのコンテナイメージを使用
-    container: osrf/ros:humble-desktop-full
+    container: nvcr.io/nvidia/isaac-ros-dev-x86_64:2.0.0-humble
     runs-on: ubuntu-latest
     
     steps:
