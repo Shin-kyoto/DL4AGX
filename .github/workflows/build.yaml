@@ -61,7 +61,7 @@ jobs:
 
       # 6. autoware_tensorrt_vad パッケージをビルド
       - name: Build autoware_tensorrt_vad package
-        working-directory: ./DL4AGX/AV-Solutions/vad-trt/app
+        working-directory: AV-Solutions/vad-trt/app
         run: |
           source /opt/ros/humble/setup.bash
           colcon build \
