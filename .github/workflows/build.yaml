@@ -4,7 +4,7 @@ name: Build autoware_tensorrt_vad (Differential)
 
 on:
   pull_request:
-    branches: [ main ] # mainブランチへのプルリクエスト作成・更新時 (ブランチ名は適宜変更してください)
+    branches: [ dev/ns-ros-node ] # dev/ns-ros-nodeブランチへのプルリクエスト作成・更新時 (ブランチ名は適宜変更してください)
 
 # ccacheを有効にするための環境変数
 env:
