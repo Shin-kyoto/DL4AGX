@@ -6,17 +6,19 @@ on:
   pull_request:
     branches: [ dev/ns-ros-node ] # dev/ns-ros-nodeブランチへのプルリクエスト作成・更新時
 
-# ccacheを有効にするための環境変数
-env:
-  CC: /usr/lib/ccache/gcc
-  CXX: /usr/lib/ccache/g++
-  # ccacheのディレクトリを指定
-  CCACHE_DIR: ${{ runner.home }}/.ccache
+
 
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
+    # ccacheを有効にするための環境変数
+    env:
+      CC: /usr/lib/ccache/gcc
+      CXX: /usr/lib/ccache/g++
+      # ccacheのディレクトリを指定
+      CCACHE_DIR: ${{ runner.home }}/.ccache
+
     steps:
       # 1. リポジトリのチェックアウト
       - name: Checkout repository
