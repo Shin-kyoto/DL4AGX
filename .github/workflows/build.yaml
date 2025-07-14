@@ -68,7 +68,8 @@ jobs:
             --symlink-install \
             --cmake-args \
               -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-              -DCMAKE_BUILD_TYPE=Release
+              -DCMAKE_BUILD_TYPE=Release \
+              --base-paths DL4AGX/AV-Solutions/vad-trt/app/autoware_tensorrt_vad
         shell: bash
 
       # 7. ビルド後のccache統計情報を表示
