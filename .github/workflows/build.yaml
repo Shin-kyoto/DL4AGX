@@ -15,8 +15,6 @@ env:
 
 jobs:
   build:
-    # Autowareが提供するROS 2 Humbleのコンテナイメージを使用
-    container: nvcr.io/nvidia/isaac-ros-dev-x86_64:2.0.0-humble
     runs-on: ubuntu-latest
     
     steps:
@@ -24,7 +22,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. システム依存関係のインストール
+      # 2. NVIDIA Container Registryへのログイン
+      - name: Log in to NVIDIA Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: nvcr.io
+          username: $oauthtoken
+          password: ${{ secrets.NGC_API_KEY }}
+
+      # 3. システム依存関係のインストール
       - name: Install system dependencies
         run: |
           sudo apt-get update
@@ -33,7 +39,7 @@ jobs:
             python3-colcon-common-extensions
         shell: bash
 
-      # 3. ccacheのキャッシュを復元
+      # 4. ccacheのキャッシュを復元
       - name: Restore ccache
         uses: actions/cache@v4
         with:
@@ -43,7 +49,7 @@ jobs:
           restore-keys: |
             ccache-${{ github.ref_name }}-${{ runner.arch }}-humble-
 
-      # 4. ビルド前のccache統計情報を表示
+      # 5. ビルド前のccache統計情報を表示
       - name: Show ccache stats before build and reset stats
         run: |
           mkdir -p ${{ env.CCACHE_DIR }}
@@ -51,25 +57,31 @@ jobs:
           ccache -z
         shell: bash
 
-      # 5. ROS依存関係のインストール
-      - name: Install ROS dependencies
+      # 5. autoware_tensorrt_vad パッケージをビルド (コンテナ内で実行)
+      - name: Build and Test in Container
+        # docker runコマンドでコンテナを起動し、複数のステップをまとめて実行
         run: |
-          source /opt/ros/humble/setup.bash
-          rosdep update --include-eol-distros
-          rosdep install --from-paths . --ignore-src -r -y
-        shell: bash
-
-      # 6. autoware_tensorrt_vad パッケージをビルド
-      - name: Build autoware_tensorrt_vad package
-        working-directory: AV-Solutions/vad-trt/app
-        run: |
-          source /opt/ros/humble/setup.bash
-          colcon build \
-            --packages-select autoware_tensorrt_vad \
-            --symlink-install \
-            --cmake-args \
-              -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-              -DCMAKE_BUILD_TYPE=Release
+          docker run --rm \
+            -v ${{ github.workspace }}:/workdir \
+            -w /workdir \
+            nvcr.io/nvidia/isaac-ros-dev-x86_64:2.0.0-humble \
+            /bin/bash -c "
+              set -e
+              
+              # ROS依存関係のインストール
+              cd AV-Solutions/vad-trt/app
+              source /opt/ros/humble/setup.bash
+              rosdep update --include-eol-distros
+              rosdep install --from-paths . --ignore-src -r -y
+              
+              # ビルドの実行
+              colcon build \
+                --packages-select autoware_tensorrt_vad \
+                --symlink-install \
+                --cmake-args \
+                  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+                  -DCMAKE_BUILD_TYPE=Release
+            "
         shell: bash
 
       # 7. ビルド後のccache統計情報を表示
