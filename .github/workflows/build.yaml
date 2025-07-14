@@ -61,6 +61,7 @@ jobs:
 
       # 6. autoware_tensorrt_vad パッケージをビルド
       - name: Build autoware_tensorrt_vad package
+        working-directory: ./DL4AGX/AV-Solutions/vad-trt/app
         run: |
           source /opt/ros/humble/setup.bash
           colcon build \
@@ -68,8 +69,7 @@ jobs:
             --symlink-install \
             --cmake-args \
               -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-              -DCMAKE_BUILD_TYPE=Release \
-              --base-paths DL4AGX/AV-Solutions/vad-trt/app/autoware_tensorrt_vad
+              -DCMAKE_BUILD_TYPE=Release
         shell: bash
 
       # 7. ビルド後のccache統計情報を表示
