@@ -1,6 +1,6 @@
 # .github/workflows/build.yml
 
-name: Build autoware_tensorrt_vad
+name: Build with CUDA on OSRF Image
 
 on:
   pull_request:
@@ -9,29 +9,40 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-
-    # 【変更】ジョブ全体をコンテナ内で実行するよう指定
-    container:
-      # 使用するコンテナイメージ
-      image: nvcr.io/nvidia/isaac-ros-dev-x86_64:2.0.0-humble
-      # 【重要】コンテナイメージをダウンロードするための認証情報を指定
-      credentials:
-        username: $oauthtoken
-        password: ${{ secrets.NGC_API_KEY }}
+    
+    # ベースとして、公開されているOSRFのROS 2イメージを使用
+    container: osrf/ros:humble-desktop-full
 
     steps:
       # 1. リポジトリのチェックアウト
-      # このステップは指定したコンテナ内で実行されます
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. 依存関係のインストールとビルド
+      # 2. CUDA Toolkitのインストール
+      # このステップで、ROSコンテナ内にNVIDIAの開発環境を構築します
+      - name: Install CUDA Toolkit
+        run: |
+          set -e
+          # aptのソースリストを汚染しないように一時ディレクトリで作業
+          cd /tmp
+          
+          # NVIDIAのGPGキーとリポジトリを追加
+          apt-get update
+          apt-get install -y --no-install-recommends wget
+          wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+          dpkg -i cuda-keyring_1.1-1_all.deb
+          rm cuda-keyring_1.1-1_all.deb
+          
+          # リポジトリ情報を更新し、CUDA Toolkitをインストール
+          apt-get update
+          # --no-install-recommends で不要な推奨パッケージを除外し、時間を節約
+          apt-get install -y --no-install-recommends cuda-toolkit-12-1
+        shell: bash
+
+      # 3. 依存関係のインストールとビルド
       - name: Install Dependencies and Build
         run: |
           set -e
-          
-          # コンテナ内で必要なツールを念のため更新・インストール
-          apt-get update && apt-get install -y --no-install-recommends git
           
           # ワークスペースに移動
           cd AV-Solutions/vad-trt/app
@@ -44,10 +55,13 @@ jobs:
           rosdep install --from-paths . --ignore-src -r -y
           
           # ビルドを実行
+          # ここでCMakeにCUDA Toolkitの場所を教える
           colcon build \
             --packages-select autoware_tensorrt_vad \
             --symlink-install \
             --cmake-args \
               -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-              -DCMAKE_BUILD_TYPE=Release
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCUDA_TOOLKIT_ROOT_DIR=/usr/local/cuda-12.1
         shell: bash
+  
