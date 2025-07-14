@@ -30,7 +30,7 @@ jobs:
           apt-get install -y --no-install-recommends wget
           wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
           dpkg -i cuda-keyring_1.1-1_all.deb
-          rm cuda-keyring_1.1-1_all.deb
+          rm cuda-key-ring_1.1-1_all.deb
           
           # Update repository information and install all necessary libraries
           apt-get update
@@ -56,8 +56,8 @@ jobs:
           rosdep update --include-eol-distros
           rosdep install --from-paths . --ignore-src -r -y --skip-keys "libeigen3-dev"
           
-          # Build the package, telling CMake where to find CUDA
-          colcon build \
+          # 【FIX】Set the library path for the linker and then build
+          export LD_LIBRARY_PATH=/usr/local/cuda-12.1/lib64:$LD_LIBRARY_PATH && colcon build \
             --packages-select autoware_tensorrt_vad \
             --symlink-install \
             --cmake-args \
