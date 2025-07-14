@@ -307,7 +307,7 @@ private:
   void enqueue(const std::string& head_name) {
     nets_["backbone"]->Enqueue(stream_);
     nets_[head_name]->Enqueue(stream_);
-    cudaDeviceSynchronize();
+    cudaStreamSynchronize(stream_);
   }
 
   std::shared_ptr<nv::Tensor> save_prev_bev(const std::string& head_name) {
