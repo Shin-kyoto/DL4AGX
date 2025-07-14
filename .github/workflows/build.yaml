@@ -16,10 +16,11 @@ jobs:
     env:
       CC: /usr/lib/ccache/gcc
       CXX: /usr/lib/ccache/g++
-      # ccacheのディレクトリを指定
-      CCACHE_DIR: ${{ runner.home }}/.ccache
 
     steps:
+      # 1. ccacheのパスを設定し、後続ステップで使えるようにする
+      - name: Set up ccache path
+        run: echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
       # 1. リポジトリのチェックアウト
       - name: Checkout repository
         uses: actions/checkout@v4
