@@ -4,83 +4,50 @@ name: Build autoware_tensorrt_vad
 
 on:
   pull_request:
-    branches: [ dev/ns-ros-node ] # dev/ns-ros-nodeブランチへのプルリクエスト作成・更新時
-
-
+    branches: [ dev/ns-ros-node ]
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
-    # ccacheを有効にするための環境変数
-    env:
-      CC: /usr/lib/ccache/gcc
-      CXX: /usr/lib/ccache/g++
+    # 【変更】ジョブ全体をコンテナ内で実行するよう指定
+    container:
+      # 使用するコンテナイメージ
+      image: nvcr.io/nvidia/isaac-ros-dev-x86_64:2.0.0-humble
+      # 【重要】コンテナイメージをダウンロードするための認証情報を指定
+      credentials:
+        username: $oauthtoken
+        password: ${{ secrets.NGC_API_KEY }}
 
     steps:
-      # 1. ccacheのパスを設定し、後続ステップで使えるようにする
-      - name: Set up ccache path
-        run: echo "CCACHE_DIR=$HOME/.ccache" >> $GITHUB_ENV
       # 1. リポジトリのチェックアウト
+      # このステップは指定したコンテナ内で実行されます
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 3. システム依存関係のインストール
-      - name: Install system dependencies
+      # 2. 依存関係のインストールとビルド
+      - name: Install Dependencies and Build
         run: |
-          sudo apt-get update
-          sudo apt-get install -y ccache
-        shell: bash
-
-      # 4. ccacheのキャッシュを復元
-      - name: Restore ccache
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.CCACHE_DIR }}
-          # キャッシュキー: ブランチ、アーキテクチャ、ROSディストロで構成
-          key: ccache-${{ github.ref_name }}-${{ runner.arch }}-humble
-          restore-keys: |
-            ccache-${{ github.ref_name }}-${{ runner.arch }}-humble-
-
-      # 5. ビルド前のccache統計情報を表示
-      - name: Show ccache stats before build and reset stats
-        run: |
-          mkdir -p ${{ env.CCACHE_DIR }}
-          ccache -s
-          ccache -z
-        shell: bash
-
-      # 5. autoware_tensorrt_vad パッケージをビルド (コンテナ内で実行)
-      - name: Login, Build, and Test in Container
-        # docker runコマンドでコンテナを起動し、複数のステップをまとめて実行
-        run: |
-          echo "${{ secrets.NGC_API_KEY }}" | docker login nvcr.io --username '$oauthtoken' --password-stdin
-
-          docker run --rm \
-            -v ${{ github.workspace }}:/workdir \
-            -w /workdir \
-            nvcr.io/nvidia/isaac-ros-dev-x86_64:2.0.0-humble \
-            /bin/bash -c "
-              set -e
-              
-              # ROS依存関係のインストール
-              cd AV-Solutions/vad-trt/app
-              source /opt/ros/humble/setup.bash
-              rosdep update --include-eol-distros
-              rosdep install --from-paths . --ignore-src -r -y
-              
-              # ビルドの実行
-              colcon build \
-                --packages-select autoware_tensorrt_vad \
-                --symlink-install \
-                --cmake-args \
-                  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-                  -DCMAKE_BUILD_TYPE=Release
-            "
-        shell: bash
-
-      # 7. ビルド後のccache統計情報を表示
-      - name: Show ccache stats after build
-        if: always()
-        run: ccache -s
+          set -e
+          
+          # コンテナ内で必要なツールを念のため更新・インストール
+          apt-get update && apt-get install -y --no-install-recommends git
+          
+          # ワークスペースに移動
+          cd AV-Solutions/vad-trt/app
+          
+          # ROS環境をセットアップ
+          source /opt/ros/humble/setup.bash
+          
+          # ROS依存関係をインストール
+          rosdep update --include-eol-distros
+          rosdep install --from-paths . --ignore-src -r -y
+          
+          # ビルドを実行
+          colcon build \
+            --packages-select autoware_tensorrt_vad \
+            --symlink-install \
+            --cmake-args \
+              -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+              -DCMAKE_BUILD_TYPE=Release
         shell: bash
