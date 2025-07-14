@@ -11,7 +11,7 @@ env:
   CC: /usr/lib/ccache/gcc
   CXX: /usr/lib/ccache/g++
   # ccacheのディレクトリを指定
-  CCACHE_DIR: /github/home/.ccache
+  CCACHE_DIR: ${{ runner.home }}/.ccache
 
 jobs:
   build:
