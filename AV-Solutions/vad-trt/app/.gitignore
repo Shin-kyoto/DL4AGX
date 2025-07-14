@@ -3,3 +3,6 @@ test/build*/
 lib/cuOSD/
 lib/stb/
 *.bin
+log/
+install/
+msgs_ws/

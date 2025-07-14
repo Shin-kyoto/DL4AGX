@@ -40,7 +40,12 @@
 #include <Eigen/Dense>
 #include <autoware_perception_msgs/msg/detected_objects.hpp>
 #include <autoware_planning_msgs/msg/trajectory.hpp>
+#include <autoware_internal_planning_msgs/msg/candidate_trajectories.hpp>
+#include <autoware_internal_planning_msgs/msg/candidate_trajectory.hpp>
+#include <autoware_internal_planning_msgs/msg/generator_info.hpp>
 #include <autoware_planning_msgs/msg/trajectory_point.hpp>
+#include <unique_identifier_msgs/msg/uuid.hpp>
+#include <std_msgs/msg/string.hpp>
 #include <geometry_msgs/msg/pose.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -169,6 +174,10 @@ public:
         this->create_publisher<autoware_planning_msgs::msg::Trajectory>(
             "/planning/vad/trajectory", rclcpp::QoS(1));
 
+    candidate_trajectories_publisher_ =
+        this->create_publisher<autoware_internal_planning_msgs::msg::CandidateTrajectories>(
+            "/planning/vad/trajectories", rclcpp::QoS(1));
+
     objects_publisher_ =
         this->create_publisher<autoware_perception_msgs::msg::DetectedObjects>(
             "/perception/object_recognition/detection/vad/objects",
@@ -200,8 +209,26 @@ public:
   }
 
   void publishTrajectory(const std::vector<float> &planning) {
+    // 元の Trajectory メッセージを作成
     auto trajectory_msg =
         std::make_unique<autoware_planning_msgs::msg::Trajectory>();
+
+    // CandidateTrajectories メッセージを作成
+    auto candidate_trajectories_msg =
+        std::make_unique<autoware_internal_planning_msgs::msg::CandidateTrajectories>();
+
+    // 単一のCandidateTrajectoryを作成
+    autoware_internal_planning_msgs::msg::CandidateTrajectory candidate_trajectory;
+    
+    // ヘッダーを設定
+    candidate_trajectory.header.stamp = this->now();
+    candidate_trajectory.header.frame_id = "map";
+    
+    // generator_idを設定（デフォルトのUUID）
+    // UUIDは通常は16バイトですが、ここでは簡単のため0で初期化
+    for (int i = 0; i < 16; ++i) {
+      candidate_trajectory.generator_id.uuid[i] = 0;
+    }
 
     for (size_t i = 0; i < planning.size(); i += 2) {
       autoware_planning_msgs::msg::TrajectoryPoint point;
@@ -224,13 +251,29 @@ public:
       point.acceleration_mps2 = 0.0;
       point.heading_rate_rps = 0.0;
 
+      // 両方のメッセージに同じポイントを追加
       trajectory_msg->points.push_back(point);
+      candidate_trajectory.points.push_back(point);
     }
 
+    // 元のTrajectoryメッセージのヘッダーを設定
     trajectory_msg->header.stamp = this->now();
     trajectory_msg->header.frame_id = "map";
 
+    // CandidateTrajectoryをCandidateTrajectories配列に追加
+    candidate_trajectories_msg->candidate_trajectories.push_back(candidate_trajectory);
+
+    // GeneratorInfoを追加（オプション）
+    autoware_internal_planning_msgs::msg::GeneratorInfo generator_info;
+    for (int i = 0; i < 16; ++i) {
+      generator_info.generator_id.uuid[i] = 0;
+    }
+    generator_info.generator_name.data = "vad_generator";
+    candidate_trajectories_msg->generator_info.push_back(generator_info);
+
+    // 両方のメッセージを発行
     trajectory_publisher_->publish(std::move(trajectory_msg));
+    candidate_trajectories_publisher_->publish(std::move(candidate_trajectories_msg));
   }
 
   void
@@ -272,6 +315,8 @@ public:
 private:
   rclcpp::Publisher<autoware_planning_msgs::msg::Trajectory>::SharedPtr
       trajectory_publisher_;
+  rclcpp::Publisher<autoware_internal_planning_msgs::msg::CandidateTrajectories>::SharedPtr
+      candidate_trajectories_publisher_;
   rclcpp::Publisher<autoware_perception_msgs::msg::DetectedObjects>::SharedPtr
       objects_publisher_;
   std::vector<

@@ -7,6 +7,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_C_FLAGS "-fPIC -g -O0")
 set(CMAKE_CXX_FLAGS "-fPIC -g -O0")
 
+# msgs_wsのインストールパスをCMAKE_PREFIX_PATHに追加
+list(APPEND CMAKE_PREFIX_PATH "${CMAKE_CURRENT_SOURCE_DIR}/msgs_ws/install")
+
 # ROS2の依存関係を追加
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -16,9 +19,12 @@ find_package(eigen3_cmake_module REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(autoware_perception_msgs REQUIRED)
+find_package(autoware_internal_planning_msgs REQUIRED)
 find_package(autoware_planning_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(rosbag2_cpp REQUIRED)
+find_package(unique_identifier_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
 find_package(OpenCV REQUIRED)
 
 # Find CUDA package first
@@ -70,6 +76,7 @@ include_directories(
     ${CUDA_INCLUDE_DIRS}
     ${CUDA_TOOLKIT_ROOT_DIR}/include
     ${TENSORRT_INCLUDE_DIRS}
+    ${CMAKE_CURRENT_SOURCE_DIR}/msgs_ws/install/autoware_internal_planning_msgs/include
 )
 
 # Common link directories
@@ -123,6 +130,7 @@ target_link_libraries(${APP}_app
     ${eigen3_cmake_module_LIBRARIES}
     ${Eigen3_LIBRARIES}
     ${autoware_perception_msgs_LIBRARIES}
+    ${autoware_internal_planning_msgs_LIBRARIES}
     ${autoware_planning_msgs_LIBRARIES}
     ${geometry_msgs_LIBRARIES}
     ${rosbag2_cpp_LIBRARIES}
@@ -137,6 +145,7 @@ target_include_directories(${APP}_app PUBLIC
     ${eigen3_cmake_module_INCLUDE_DIRS}
     ${Eigen3_INCLUDE_DIRS}
     ${autoware_perception_msgs_INCLUDE_DIRS}
+    ${autoware_internal_planning_msgs_INCLUDE_DIRS}
     ${autoware_planning_msgs_INCLUDE_DIRS}
     ${geometry_msgs_INCLUDE_DIRS}
     ${rosbag2_cpp_INCLUDE_DIRS}
