@@ -307,6 +307,7 @@ private:
   void enqueue(const std::string& head_name) {
     nets_["backbone"]->Enqueue(stream_);
     nets_[head_name]->Enqueue(stream_);
+    cudaStreamSynchronize(stream_);
   }
 
   std::shared_ptr<nv::Tensor> save_prev_bev(const std::string& head_name) {
@@ -321,12 +322,12 @@ private:
     if (nets_.find(network_name) != nets_.end()) {
       // まずbindingsをクリア
       nets_[network_name]->bindings.clear();
-      cudaDeviceSynchronize();
+      cudaStreamSynchronize(stream_);
       
       // 次にNetオブジェクトを解放
       nets_[network_name].reset();
       nets_.erase(network_name);
-      cudaDeviceSynchronize();
+      cudaStreamSynchronize(stream_);
     }
   }
 
