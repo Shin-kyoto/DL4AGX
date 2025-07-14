@@ -10,54 +10,54 @@ jobs:
   build:
     runs-on: ubuntu-latest
     
-    # ベースとして、公開されているOSRFのROS 2イメージを使用
+    # Use the public OSRF ROS 2 image as the base
     container: osrf/ros:humble-desktop-full
 
     steps:
-      # 1. リポジトリのチェックアウト
+      # 1. Check out the repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. CUDA Toolkitと開発ライブラリのインストール
+      # 2. Install CUDA Toolkit and development libraries
       - name: Install CUDA Toolkit and Dev Libraries
         run: |
           set -e
-          # aptのソースリストを汚染しないように一時ディレクトリで作業
+          # Work in a temporary directory to keep things clean
           cd /tmp
           
-          # NVIDIAのGPGキーとリポジトリを追加
+          # Add the NVIDIA GPG key and repository
           apt-get update
           apt-get install -y --no-install-recommends wget
           wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
           dpkg -i cuda-keyring_1.1-1_all.deb
           rm cuda-keyring_1.1-1_all.deb
           
-          # リポジトリ情報を更新し、必要なライブラリを全てインストール
+          # Update repository information and install all necessary libraries
           apt-get update
           apt-get install -y --no-install-recommends \
             cuda-toolkit-12-1 \
+            libeigen3-dev \
+            # 【FIX】Specify the exact matching versions for all TensorRT dev packages
             libnvinfer-dev=8.6.1.6-1+cuda12.0 \
-            libeigen3-dev
+            libnvinfer-headers-dev=8.6.1.6-1+cuda12.0
         shell: bash
 
-      # 3. 依存関係のインストールとビルド
+      # 3. Install dependencies and build the project
       - name: Install Dependencies and Build
         run: |
           set -e
           
-          # ワークスペースに移動
+          # Navigate to the workspace
           cd AV-Solutions/vad-trt/app
           
-          # ROS環境をセットアップ
+          # Set up the ROS environment
           source /opt/ros/humble/setup.bash
           
-          # ROS依存関係をインストール
-          # --skip-keysで未解決のキーを無視して続行
+          # Install ROS dependencies, skipping the one we installed manually
           rosdep update --include-eol-distros
           rosdep install --from-paths . --ignore-src -r -y --skip-keys "libeigen3-dev"
           
-          # ビルドを実行
-          # ここでCMakeにCUDA Toolkitの場所を教える
+          # Build the package, telling CMake where to find CUDA
           colcon build \
             --packages-select autoware_tensorrt_vad \
             --symlink-install \
