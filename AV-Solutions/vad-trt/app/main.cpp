@@ -276,6 +276,65 @@ public:
     candidate_trajectories_publisher_->publish(std::move(candidate_trajectories_msg));
   }
 
+  void publishTrajectories(const std::map<int32_t, std::vector<float>> &trajectories_map) {
+    // CandidateTrajectories メッセージを作成
+    auto candidate_trajectories_msg =
+        std::make_unique<autoware_internal_planning_msgs::msg::CandidateTrajectories>();
+
+    // 各コマンドの軌道をCandidateTrajectoryとして追加
+    for (const auto& [command_idx, trajectory] : trajectories_map) {
+      autoware_internal_planning_msgs::msg::CandidateTrajectory candidate_trajectory;
+      
+      // ヘッダーを設定
+      candidate_trajectory.header.stamp = this->now();
+      candidate_trajectory.header.frame_id = "map";
+      
+      // generator_idを設定（コマンドインデックスベース）
+      for (int i = 0; i < 16; ++i) {
+        candidate_trajectory.generator_id.uuid[i] = 0;
+      }
+      // コマンドインデックスをUUIDの最初のバイトに設定
+      candidate_trajectory.generator_id.uuid[0] = static_cast<uint8_t>(command_idx);
+
+      for (size_t i = 0; i < trajectory.size(); i += 2) {
+        autoware_planning_msgs::msg::TrajectoryPoint point;
+
+        point.pose.position.x = trajectory[i + 1];
+        point.pose.position.y = -trajectory[i];
+        point.pose.position.z = 0.0;
+
+        if (i + 2 < trajectory.size()) {
+          float ns_dx = trajectory[i + 2] - trajectory[i];
+          float ns_dy = trajectory[i + 3] - trajectory[i + 1];
+          float aw_dx = ns_dy;  // Autowareの座標系に変換
+          float aw_dy = -ns_dx; // Autowareの座標系に変換
+          float yaw = std::atan2(aw_dy, aw_dx);
+          point.pose.orientation = createQuaternionFromYaw(yaw);
+        }
+
+        point.longitudinal_velocity_mps = 0.0;
+        point.lateral_velocity_mps = 0.0;
+        point.acceleration_mps2 = 0.0;
+        point.heading_rate_rps = 0.0;
+
+        candidate_trajectory.points.push_back(point);
+      }
+
+      candidate_trajectories_msg->candidate_trajectories.push_back(candidate_trajectory);
+
+      // 各コマンドのGeneratorInfoを追加
+      autoware_internal_planning_msgs::msg::GeneratorInfo generator_info;
+      for (int i = 0; i < 16; ++i) {
+        generator_info.generator_id.uuid[i] = 0;
+      }
+      generator_info.generator_id.uuid[0] = static_cast<uint8_t>(command_idx);
+      generator_info.generator_name.data = "vad_generator_cmd_" + std::to_string(command_idx);
+      candidate_trajectories_msg->generator_info.push_back(generator_info);
+    }
+
+    candidate_trajectories_publisher_->publish(std::move(candidate_trajectories_msg));
+  }
+
   void
   publishDetectedObjects(const std::vector<std::vector<float>> &detections) {
     auto objects_msg =
@@ -732,6 +791,10 @@ int main(int argc, char **argv) {
     // pred -> frame.planning
     frame.planning = vad_output_data.predicted_trajectory_;
     node->publishTrajectory(frame.planning);
+    
+    // publish all trajectories as CandidateTrajectories
+    node->publishTrajectories(vad_output_data.predicted_trajectories_);
+    
     printf("publish trajectory");
     rclcpp::spin_some(node);
 
