@@ -24,6 +24,7 @@ find_package(autoware_planning_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(rosbag2_cpp REQUIRED)
 find_package(unique_identifier_msgs REQUIRED)
+find_package(autoware_utils_uuid REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(OpenCV REQUIRED)
 
@@ -154,4 +155,22 @@ target_include_directories(${APP}_app PUBLIC
 # インストール設定
 install(TARGETS ${PROJECT_NAME}
     DESTINATION lib/${PROJECT_NAME}
+)
+
+# ament_target_dependenciesでROS2の依存関係を設定
+ament_target_dependencies(${APP}_app
+    rclcpp
+    tf2_ros
+    tf2_eigen
+    eigen3_cmake_module
+    Eigen3
+    sensor_msgs
+    autoware_perception_msgs
+    autoware_internal_planning_msgs
+    autoware_planning_msgs
+    geometry_msgs
+    rosbag2_cpp
+    unique_identifier_msgs
+    autoware_utils_uuid
+    std_msgs
 )

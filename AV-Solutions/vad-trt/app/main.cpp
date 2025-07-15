@@ -44,7 +44,7 @@
 #include <autoware_internal_planning_msgs/msg/candidate_trajectory.hpp>
 #include <autoware_internal_planning_msgs/msg/generator_info.hpp>
 #include <autoware_planning_msgs/msg/trajectory_point.hpp>
-#include <unique_identifier_msgs/msg/uuid.hpp>
+#include <autoware_utils_uuid/uuid_helper.hpp>
 #include <std_msgs/msg/string.hpp>
 #include <geometry_msgs/msg/pose.hpp>
 #include <geometry_msgs/msg/twist.hpp>
@@ -213,22 +213,6 @@ public:
     auto trajectory_msg =
         std::make_unique<autoware_planning_msgs::msg::Trajectory>();
 
-    // CandidateTrajectories メッセージを作成
-    auto candidate_trajectories_msg =
-        std::make_unique<autoware_internal_planning_msgs::msg::CandidateTrajectories>();
-
-    // 単一のCandidateTrajectoryを作成
-    autoware_internal_planning_msgs::msg::CandidateTrajectory candidate_trajectory;
-    
-    // ヘッダーを設定
-    candidate_trajectory.header.stamp = this->now();
-    candidate_trajectory.header.frame_id = "map";
-    
-    // generator_idを設定（デフォルトのUUID）
-    // UUIDは通常は16バイトですが、ここでは簡単のため0で初期化
-    for (int i = 0; i < 16; ++i) {
-      candidate_trajectory.generator_id.uuid[i] = 0;
-    }
 
     for (size_t i = 0; i < planning.size(); i += 2) {
       autoware_planning_msgs::msg::TrajectoryPoint point;
@@ -253,27 +237,15 @@ public:
 
       // 両方のメッセージに同じポイントを追加
       trajectory_msg->points.push_back(point);
-      candidate_trajectory.points.push_back(point);
     }
 
     // 元のTrajectoryメッセージのヘッダーを設定
     trajectory_msg->header.stamp = this->now();
     trajectory_msg->header.frame_id = "map";
 
-    // CandidateTrajectoryをCandidateTrajectories配列に追加
-    candidate_trajectories_msg->candidate_trajectories.push_back(candidate_trajectory);
-
-    // GeneratorInfoを追加（オプション）
-    autoware_internal_planning_msgs::msg::GeneratorInfo generator_info;
-    for (int i = 0; i < 16; ++i) {
-      generator_info.generator_id.uuid[i] = 0;
-    }
-    generator_info.generator_name.data = "vad_generator";
-    candidate_trajectories_msg->generator_info.push_back(generator_info);
 
     // 両方のメッセージを発行
     trajectory_publisher_->publish(std::move(trajectory_msg));
-    candidate_trajectories_publisher_->publish(std::move(candidate_trajectories_msg));
   }
 
   void publishTrajectories(const std::map<int32_t, std::vector<float>> &trajectories_map) {
@@ -289,12 +261,8 @@ public:
       candidate_trajectory.header.stamp = this->now();
       candidate_trajectory.header.frame_id = "map";
       
-      // generator_idを設定（コマンドインデックスベース）
-      for (int i = 0; i < 16; ++i) {
-        candidate_trajectory.generator_id.uuid[i] = 0;
-      }
-      // コマンドインデックスをUUIDの最初のバイトに設定
-      candidate_trajectory.generator_id.uuid[0] = static_cast<uint8_t>(command_idx);
+      // generator_idを設定（ユニークなUUID）
+      candidate_trajectory.generator_id = autoware_utils_uuid::generate_uuid();
 
       for (size_t i = 0; i < trajectory.size(); i += 2) {
         autoware_planning_msgs::msg::TrajectoryPoint point;
@@ -324,11 +292,8 @@ public:
 
       // 各コマンドのGeneratorInfoを追加
       autoware_internal_planning_msgs::msg::GeneratorInfo generator_info;
-      for (int i = 0; i < 16; ++i) {
-        generator_info.generator_id.uuid[i] = 0;
-      }
-      generator_info.generator_id.uuid[0] = static_cast<uint8_t>(command_idx);
-      generator_info.generator_name.data = "vad_generator_cmd_" + std::to_string(command_idx);
+      generator_info.generator_id = autoware_utils_uuid::generate_uuid();
+      generator_info.generator_name.data = "autoware_tensorrt_vad_cmd_" + std::to_string(command_idx);
       candidate_trajectories_msg->generator_info.push_back(generator_info);
     }
 
