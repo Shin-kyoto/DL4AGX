@@ -64,7 +64,10 @@ private:
 
   // Publisher methods
   void publishTrajectory(const std::vector<float> & planning);
-  void publishTrajectories(const std::map<int32_t, std::vector<float>> & trajectories_map);
+  void publishTrajectories(const autoware_internal_planning_msgs::msg::CandidateTrajectories & candidate_trajectories);
+
+  // Conversion methods
+  autoware_internal_planning_msgs::msg::CandidateTrajectories convert_candidate_trajectories(const std::map<int32_t, std::vector<float>> & trajectories_map);
 
   // Helper function
   geometry_msgs::msg::Quaternion createQuaternionFromYaw(double yaw);

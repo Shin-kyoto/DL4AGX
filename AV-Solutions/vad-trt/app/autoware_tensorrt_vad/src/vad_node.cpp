@@ -433,11 +433,10 @@ void VadNode::publishTrajectory(const std::vector<float> &planning)
   trajectory_publisher_->publish(std::move(trajectory_msg));
 }
 
-void VadNode::publishTrajectories(const std::map<int32_t, std::vector<float>> &trajectories_map)
+autoware_internal_planning_msgs::msg::CandidateTrajectories VadNode::convert_candidate_trajectories(const std::map<int32_t, std::vector<float>> &trajectories_map)
 {
   // CandidateTrajectories メッセージを作成
-  auto candidate_trajectories_msg =
-      std::make_unique<autoware_internal_planning_msgs::msg::CandidateTrajectories>();
+  autoware_internal_planning_msgs::msg::CandidateTrajectories candidate_trajectories_msg;
 
   // 各コマンドの軌道をCandidateTrajectoryとして追加
   for (const auto& [command_idx, trajectory] : trajectories_map) {
@@ -494,15 +493,21 @@ void VadNode::publishTrajectories(const std::map<int32_t, std::vector<float>> &t
       candidate_trajectory.points.push_back(point);
     }
 
-    candidate_trajectories_msg->candidate_trajectories.push_back(candidate_trajectory);
+    candidate_trajectories_msg.candidate_trajectories.push_back(candidate_trajectory);
 
     // 各コマンドのGeneratorInfoを追加
     autoware_internal_planning_msgs::msg::GeneratorInfo generator_info;
     generator_info.generator_id = autoware_utils_uuid::generate_uuid();
     generator_info.generator_name.data = "autoware_tensorrt_vad_cmd_" + std::to_string(command_idx);
-    candidate_trajectories_msg->generator_info.push_back(generator_info);
+    candidate_trajectories_msg.generator_info.push_back(generator_info);
   }
 
+  return candidate_trajectories_msg;
+}
+
+void VadNode::publishTrajectories(const autoware_internal_planning_msgs::msg::CandidateTrajectories & candidate_trajectories)
+{
+  auto candidate_trajectories_msg = std::make_unique<autoware_internal_planning_msgs::msg::CandidateTrajectories>(candidate_trajectories);
   candidate_trajectories_publisher_->publish(std::move(candidate_trajectories_msg));
 }
 
@@ -531,12 +536,13 @@ std::optional<autoware_internal_planning_msgs::msg::CandidateTrajectories> VadNo
         publishTrajectory(vad_output->predicted_trajectory_);
       }
 
-      // Publish candidate trajectories if available
+      // Convert candidate trajectories if available
       if (!vad_output->predicted_trajectories_.empty()) {
-        publishTrajectories(vad_output->predicted_trajectories_);
+        auto candidate_trajectories_msg = convert_candidate_trajectories(vad_output->predicted_trajectories_);
+        return std::optional<autoware_internal_planning_msgs::msg::CandidateTrajectories>(candidate_trajectories_msg);
       }
 
-      // Return a simple success indicator - we already published the data above
+      // Return empty message if no trajectories available
       auto candidate_trajectories_msg = autoware_internal_planning_msgs::msg::CandidateTrajectories();
       return std::optional<autoware_internal_planning_msgs::msg::CandidateTrajectories>(candidate_trajectories_msg);
     }
@@ -555,7 +561,7 @@ void VadNode::publish(const VadInputTopicData & vad_topic_data)
 
     // 結果をパブリッシュ
     if (candidate_trajectories_msg.has_value()) {
-      // We already published in execute_inference, just log success
+      publishTrajectories(candidate_trajectories_msg.value());
       RCLCPP_DEBUG(this->get_logger(), "Published candidate trajectories");
     } else {
       RCLCPP_WARN(this->get_logger(), "No valid trajectories to publish");
