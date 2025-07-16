@@ -1,6 +1,8 @@
 <?xml version="1.0"?>
 <launch>
   <arg name="log_level" default="info"/>
+  <arg name="rviz" default="false" description="launch rviz"/>
+  <arg name="rviz_respawn" default="true" description="respawn rviz"/>
 
   <arg name="camera_info0" default="/sensing/camera/camera0/camera_info"/>
   <arg name="camera_info1" default="/sensing/camera/camera1/camera_info"/>
@@ -49,4 +51,19 @@
     <remap from="~/input/imu_raw" to="$(var imu_raw)"/>
     <remap from="~/input/tf_static" to="$(var tf_static)"/>
   </node>
+
+  <!-- Rviz for individual node testing-->
+  <arg name="rviz_config_name" default="perception.rviz" description="rviz config name"/>
+  <arg name="rviz_config" default="$(find-pkg-share autoware_launch)/rviz/$(var rviz_config_name)" description="rviz config path"/>
+  <group>
+    <node
+      pkg="rviz2"
+      exec="rviz2"
+      name="rviz2"
+      output="screen"
+      if="$(var rviz)"
+      args="-d $(var rviz_config) -s $(find-pkg-share autoware_launch)/rviz/image/autoware.png"
+      respawn="$(var rviz_respawn)"
+    />
+  </group>
 </launch>
