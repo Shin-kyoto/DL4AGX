@@ -67,11 +67,11 @@ private:
   void loadNetConfigs();
   void initializeVadModel();
 
-  // Publisher methods referencing main.cpp
+  // Publisher methods
   void publishTrajectory(const std::vector<float> & planning);
   void publishTrajectories(const std::map<int32_t, std::vector<float>> & trajectories_map);
 
-  // Helper function from main.cpp
+  // Helper function
   geometry_msgs::msg::Quaternion createQuaternionFromYaw(double yaw);
 
   void image_callback(const sensor_msgs::msg::CompressedImage::ConstSharedPtr msg, std::size_t camera_id);
@@ -90,10 +90,10 @@ private:
   tf2_ros::Buffer tf_buffer_;
   tf2_ros::TransformListener tf_listener_{tf_buffer_};
 
-  // VAD interface config and previous can bus data (public like in main.cpp)
+  // VAD interface config and previous can bus data
   std::vector<float> prev_can_bus_;
 
-  // Subscribers for images (CompressedImage like in main.cpp)
+  // Subscribers for images (CompressedImage)
   std::vector<rclcpp::Subscription<sensor_msgs::msg::CompressedImage>::SharedPtr> camera_image_subs_;
   std::vector<rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr> camera_info_subs_;
 
@@ -111,10 +111,10 @@ private:
   // VAD config
   VadConfig vad_config_;
 
-  // trajectory_timestep parameter like in main.cpp
+  // trajectory_timestep parameter
   double trajectory_timestep_;
 
-  // Publishers like in main.cpp
+  // Publishers
   rclcpp::Publisher<autoware_planning_msgs::msg::Trajectory>::SharedPtr trajectory_publisher_;
   rclcpp::Publisher<autoware_internal_planning_msgs::msg::CandidateTrajectories>::SharedPtr candidate_trajectories_publisher_;
   rclcpp::Publisher<autoware_perception_msgs::msg::DetectedObjects>::SharedPtr objects_publisher_;

@@ -45,12 +45,12 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
     trajectory_timestep_(declare_parameter<double>("interface_params.trajectory_timestep", 1.0)),
     frame_started_(false)
 {
-  // Initialize prev_can_bus from parameters like in main.cpp
+  // Initialize prev_can_bus from parameters
   std::vector<double> default_can_bus = this->declare_parameter<std::vector<double>>("interface_params.default_can_bus");
   prev_can_bus_.clear();
   for (auto v : default_can_bus) prev_can_bus_.push_back(static_cast<float>(v));
 
-  // Publishers like in main.cpp - use output remapping from launch file
+  // Publishers
   trajectory_publisher_ =
       this->create_publisher<autoware_planning_msgs::msg::Trajectory>(
           "~/output/trajectory", rclcpp::QoS(1));
@@ -64,7 +64,7 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
           "~/output/objects",
           rclcpp::QoS(1));
 
-  // Subscribers for each camera like in main.cpp
+  // Subscribers for each camera
   camera_image_subs_.resize(6);
   for (int32_t i = 0; i < 6; ++i) {
     auto callback =
@@ -92,12 +92,12 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
             rclcpp::QoS(1), callback);
   }
 
-  // Odometry subscriber like in extract_vad_topic_data_from_rosbag
+  // Odometry subscriber
   odometry_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
       "/localization/kinematic_state", rclcpp::QoS(1),
       std::bind(&VadNode::odometry_callback, this, std::placeholders::_1));
 
-  // IMU subscriber like in extract_vad_topic_data_from_rosbag
+  // IMU subscriber
   imu_sub_ = this->create_subscription<sensor_msgs::msg::Imu>(
       "/sensing/imu/tamagawa/imu_raw", rclcpp::QoS(1),
       std::bind(&VadNode::imu_callback, this, std::placeholders::_1));
@@ -107,7 +107,7 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
       "/tf_static", rclcpp::QoS(1),
       std::bind(&VadNode::tf_static_callback, this, std::placeholders::_1));
 
-  // Load VadConfig like in main.cpp
+  // Load VadConfig
   loadVadConfig();
 
   // Initialize current frame structure
@@ -237,7 +237,7 @@ void VadNode::tf_static_callback(const tf2_msgs::msg::TFMessage::ConstSharedPtr 
 
   current_frame_.tf_static = msg;
 
-  // Register transforms in tf_buffer like in main.cpp
+  // Register transforms in tf_buffer
   for (const auto &transform : msg->transforms) {
     tf_buffer_.setTransform(transform, "default_authority", true);
   }
@@ -296,11 +296,11 @@ void VadNode::reset_current_frame()
 void VadNode::initializeVadModel()
 {
   try {
-    // Initialize VAD interface and model like in main.cpp
+    // Initialize VAD interface and model
     auto tf_buffer_shared = std::shared_ptr<tf2_ros::Buffer>(&tf_buffer_, [](tf2_ros::Buffer*){});
     vad_interface_ptr_ = std::make_unique<VadInterface>(vad_interface_config_, tf_buffer_shared);
     
-    // Create RosVadLogger using the logger directly (no shared_from_this needed)
+    // Create RosVadLogger using the logger
     auto ros_logger = std::make_shared<RosVadLogger>(this->get_logger());
     vad_model_ptr_ = std::make_unique<VadModel<RosVadLogger>>(vad_config_, ros_logger);
     
@@ -312,7 +312,7 @@ void VadNode::initializeVadModel()
 
 void VadNode::loadVadConfig()
 {
-  // Load VAD config parameters like in main.cpp
+  // Load VAD config parameters
   vad_config_.plugins_path =
       this->declare_parameter<std::string>("model_params.plugins_path", "");
   vad_config_.warm_up_num =
@@ -324,7 +324,7 @@ void VadNode::loadVadConfig()
 
 void VadNode::loadNetConfigs()
 {
-  // Load network configurations like in main.cpp
+  // Load network configurations
   
   // backbone configuration
   NetConfig backbone_config;
