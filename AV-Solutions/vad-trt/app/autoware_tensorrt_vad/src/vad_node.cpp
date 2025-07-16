@@ -264,16 +264,6 @@ void VadNode::check_and_process_frame()
     if (vad_model_ptr_) {
       // Execute inference and publish results
       publish(current_frame_);
-      
-      // Update prev_can_bus for next frame if we have one
-      if (current_frame_.kinematic_state && current_frame_.imu_raw) {
-        // Update prev_can_bus based on current odometry/IMU data
-        // This is a simplified version - real implementation would convert properly
-        prev_can_bus_.clear();
-        prev_can_bus_.push_back(static_cast<float>(current_frame_.kinematic_state->twist.twist.linear.x));
-        prev_can_bus_.push_back(static_cast<float>(current_frame_.kinematic_state->twist.twist.linear.y));
-        prev_can_bus_.push_back(static_cast<float>(current_frame_.kinematic_state->twist.twist.angular.z));
-      }
     }
 
     // Reset frame for next data collection
