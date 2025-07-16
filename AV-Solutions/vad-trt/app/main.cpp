@@ -209,7 +209,6 @@ public:
   }
 
   void publishTrajectory(const std::vector<float> &planning) {
-    // 元の Trajectory メッセージを作成
     auto trajectory_msg =
         std::make_unique<autoware_planning_msgs::msg::Trajectory>();
 
@@ -257,11 +256,9 @@ public:
       trajectory_msg->points.push_back(point);
     }
 
-    // 元のTrajectoryメッセージのヘッダーを設定
     trajectory_msg->header.stamp = this->now();
     trajectory_msg->header.frame_id = "base_link";
 
-    // 両方のメッセージを発行
     trajectory_publisher_->publish(std::move(trajectory_msg));
   }
 
