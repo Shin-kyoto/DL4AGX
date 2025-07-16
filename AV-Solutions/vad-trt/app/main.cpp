@@ -45,7 +45,6 @@
 #include <autoware_internal_planning_msgs/msg/generator_info.hpp>
 #include <autoware_planning_msgs/msg/trajectory_point.hpp>
 #include <autoware_utils_uuid/uuid_helper.hpp>
-#include <std_msgs/msg/string.hpp>
 #include <geometry_msgs/msg/pose.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <rclcpp/rclcpp.hpp>
