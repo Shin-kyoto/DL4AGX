@@ -17,12 +17,368 @@
 #include "autoware/tensorrt_vad/utils.hpp"
 
 #include <rclcpp_components/register_node_macro.hpp>
+#include <cv_bridge/cv_bridge.h>
+#include <sensor_msgs/image_encodings.hpp>
 
 namespace autoware::tensorrt_vad
 {
 
-// ヘルパー関数：yaw角からクォータニオンを作成
-geometry_msgs::msg::Quaternion calculate_quaternion_from_yaw(double yaw)
+VadNode::VadNode(const rclcpp::NodeOptions & options) 
+  : Node("vad_node", options), 
+    vad_interface_config_(
+      declare_parameter<int32_t>("interface_params.input_image_width"),
+      declare_parameter<int32_t>("interface_params.input_image_height"),
+      declare_parameter<int32_t>("interface_params.target_image_width"),
+      declare_parameter<int32_t>("interface_params.target_image_height"),
+      declare_parameter<std::vector<double>>("interface_params.point_cloud_range"),
+      declare_parameter<int32_t>("interface_params.bev_h"),
+      declare_parameter<int32_t>("interface_params.bev_w"),
+      declare_parameter<double>("interface_params.default_patch_angle"),
+      declare_parameter<int32_t>("model_params.default_command"),
+      declare_parameter<std::vector<double>>("interface_params.default_shift"),
+      declare_parameter<std::vector<double>>("interface_params.image_normalization_param_mean"),
+      declare_parameter<std::vector<double>>("interface_params.image_normalization_param_std"),
+      declare_parameter<std::vector<double>>("interface_params.vad2base"),
+      declare_parameter<std::vector<int64_t>>("interface_params.autoware_to_vad_camera_mapping")
+    ),
+    tf_buffer_(this->get_clock()),
+    trajectory_timestep_(declare_parameter<double>("interface_params.trajectory_timestep", 1.0)),
+    frame_started_(false)
+{
+  // Initialize prev_can_bus from parameters like in main.cpp
+  std::vector<double> default_can_bus = this->declare_parameter<std::vector<double>>("interface_params.default_can_bus");
+  prev_can_bus_.clear();
+  for (auto v : default_can_bus) prev_can_bus_.push_back(static_cast<float>(v));
+
+  // Publishers like in main.cpp - use output remapping from launch file
+  trajectory_publisher_ =
+      this->create_publisher<autoware_planning_msgs::msg::Trajectory>(
+          "~/output/trajectory", rclcpp::QoS(1));
+
+  candidate_trajectories_publisher_ =
+      this->create_publisher<autoware_internal_planning_msgs::msg::CandidateTrajectories>(
+          "~/output/trajectories", rclcpp::QoS(1));
+
+  objects_publisher_ =
+      this->create_publisher<autoware_perception_msgs::msg::DetectedObjects>(
+          "~/output/objects",
+          rclcpp::QoS(1));
+
+  // Subscribers for each camera like in main.cpp
+  camera_image_subs_.resize(6);
+  for (int32_t i = 0; i < 6; ++i) {
+    auto callback =
+        [this, i](const sensor_msgs::msg::CompressedImage::SharedPtr msg) {
+          this->image_callback(msg, i);
+        };
+
+    camera_image_subs_[i] =
+        this->create_subscription<sensor_msgs::msg::CompressedImage>(
+            "~/input/image" + std::to_string(i),
+            rclcpp::QoS(1), callback);
+  }
+
+  // Camera info subscribers
+  camera_info_subs_.resize(6);
+  for (int32_t i = 0; i < 6; ++i) {
+    auto callback =
+        [this, i](const sensor_msgs::msg::CameraInfo::SharedPtr msg) {
+          this->camera_info_callback(msg, i);
+        };
+
+    camera_info_subs_[i] =
+        this->create_subscription<sensor_msgs::msg::CameraInfo>(
+            "~/input/camera_info" + std::to_string(i),
+            rclcpp::QoS(1), callback);
+  }
+
+  // Odometry subscriber like in extract_vad_topic_data_from_rosbag
+  odometry_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
+      "/localization/kinematic_state", rclcpp::QoS(1),
+      std::bind(&VadNode::odometry_callback, this, std::placeholders::_1));
+
+  // IMU subscriber like in extract_vad_topic_data_from_rosbag
+  imu_sub_ = this->create_subscription<sensor_msgs::msg::Imu>(
+      "/sensing/imu/tamagawa/imu_raw", rclcpp::QoS(1),
+      std::bind(&VadNode::imu_callback, this, std::placeholders::_1));
+
+  // TF static subscriber
+  tf_static_sub_ = this->create_subscription<tf2_msgs::msg::TFMessage>(
+      "/tf_static", rclcpp::QoS(1),
+      std::bind(&VadNode::tf_static_callback, this, std::placeholders::_1));
+
+  // Load VadConfig like in main.cpp
+  loadVadConfig();
+
+  // Initialize current frame structure
+  current_frame_.images.resize(6);
+  current_frame_.camera_infos.resize(6);
+
+  // Initialize timeout timer
+  frame_timeout_timer_ = this->create_wall_timer(
+    FRAME_TIMEOUT,
+    std::bind(&VadNode::frame_timeout_callback, this));
+  
+  // Start timer as stopped initially
+  frame_timeout_timer_->cancel();
+
+  RCLCPP_INFO(this->get_logger(), "VAD Node has been initialized - VAD model will be initialized after first callback");
+}
+
+void VadNode::image_callback(const sensor_msgs::msg::CompressedImage::ConstSharedPtr msg, std::size_t camera_id)
+{
+  // Validate camera_id
+  if (camera_id >= 6) {
+    RCLCPP_ERROR(this->get_logger(), "Invalid camera_id: %zu. Expected 0-5", camera_id);
+    return;
+  }
+
+  std::lock_guard<std::mutex> lock(frame_mutex_);
+
+  try {
+    // Always use cv_bridge to properly decode compressed images
+    cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
+    auto image_msg = cv_ptr->toImageMsg();
+    
+    // Initialize frame if not started
+    if (!frame_started_) {
+      current_frame_.stamp = msg->header.stamp;
+      frame_started_ = true;
+      // Start timeout timer for this frame
+      frame_timeout_timer_->reset();
+    }
+
+    // Store as ConstSharedPtr
+    current_frame_.images[camera_id] = std::const_pointer_cast<const sensor_msgs::msg::Image>(image_msg);
+    
+    check_and_process_frame();
+  } catch (cv_bridge::Exception& e) {
+    RCLCPP_ERROR(this->get_logger(), "cv_bridge exception: %s", e.what());
+    return;
+  } catch (const std::exception& e) {
+    RCLCPP_ERROR(this->get_logger(), "Exception in image_callback: %s", e.what());
+    return;
+  }
+
+  RCLCPP_DEBUG(this->get_logger(), "Received image from camera %zu", camera_id);
+}
+
+void VadNode::camera_info_callback(const sensor_msgs::msg::CameraInfo::ConstSharedPtr msg, std::size_t camera_id)
+{
+  // Validate camera_id
+  if (camera_id >= 6) {
+    RCLCPP_ERROR(this->get_logger(), "Invalid camera_id: %zu. Expected 0-5", camera_id);
+    return;
+  }
+
+  std::lock_guard<std::mutex> lock(frame_mutex_);
+
+  // Initialize frame if not started
+  if (!frame_started_) {
+    current_frame_.stamp = msg->header.stamp;
+    frame_started_ = true;
+    // Start timeout timer for this frame
+    frame_timeout_timer_->reset();
+  }
+
+  current_frame_.camera_infos[camera_id] = msg;
+  check_and_process_frame();
+
+  RCLCPP_DEBUG(this->get_logger(), "Received camera info from camera %zu", camera_id);
+}
+
+void VadNode::odometry_callback(const nav_msgs::msg::Odometry::ConstSharedPtr msg)
+{
+  std::lock_guard<std::mutex> lock(frame_mutex_);
+
+  // Initialize frame if not started
+  if (!frame_started_) {
+    current_frame_.stamp = msg->header.stamp;
+    frame_started_ = true;
+    // Start timeout timer for this frame
+    frame_timeout_timer_->reset();
+  }
+
+  current_frame_.kinematic_state = msg;
+  check_and_process_frame();
+
+  RCLCPP_DEBUG(this->get_logger(), "Received odometry data");
+}
+
+void VadNode::imu_callback(const sensor_msgs::msg::Imu::ConstSharedPtr msg)
+{
+  std::lock_guard<std::mutex> lock(frame_mutex_);
+
+  // Initialize frame if not started
+  if (!frame_started_) {
+    current_frame_.stamp = msg->header.stamp;
+    frame_started_ = true;
+    // Start timeout timer for this frame
+    frame_timeout_timer_->reset();
+  }
+
+  current_frame_.imu_raw = msg;
+  check_and_process_frame();
+
+  RCLCPP_DEBUG(this->get_logger(), "Received IMU data");
+}
+
+void VadNode::tf_static_callback(const tf2_msgs::msg::TFMessage::ConstSharedPtr msg)
+{
+  std::lock_guard<std::mutex> lock(frame_mutex_);
+
+  // Initialize frame if not started (though tf_static typically comes first)
+  if (!frame_started_) {
+    current_frame_.stamp = rclcpp::Time(0);  // tf_static doesn't have timestamp
+    frame_started_ = true;
+    // Start timeout timer for this frame
+    frame_timeout_timer_->reset();
+  }
+
+  current_frame_.tf_static = msg;
+
+  // Register transforms in tf_buffer like in main.cpp
+  for (const auto &transform : msg->transforms) {
+    tf_buffer_.setTransform(transform, "default_authority", true);
+  }
+
+  check_and_process_frame();
+
+  RCLCPP_DEBUG(this->get_logger(), "Received TF static data");
+}
+
+void VadNode::check_and_process_frame()
+{
+  // Use the built-in is_complete() method to check if we have all required data
+  if (current_frame_.is_complete()) {
+    
+    // Cancel timeout timer since frame is complete
+    frame_timeout_timer_->cancel();
+    
+    // Initialize VAD model on first complete frame
+    if (!vad_model_ptr_) {
+      RCLCPP_INFO(this->get_logger(), "Initializing VAD model with first complete frame");
+      initializeVadModel();
+    }
+
+    if (vad_model_ptr_) {
+      // Execute inference and publish results
+      publish(current_frame_);
+      
+      // Update prev_can_bus for next frame if we have one
+      if (current_frame_.kinematic_state && current_frame_.imu_raw) {
+        // Update prev_can_bus based on current odometry/IMU data
+        // This is a simplified version - real implementation would convert properly
+        prev_can_bus_.clear();
+        prev_can_bus_.push_back(static_cast<float>(current_frame_.kinematic_state->twist.twist.linear.x));
+        prev_can_bus_.push_back(static_cast<float>(current_frame_.kinematic_state->twist.twist.linear.y));
+        prev_can_bus_.push_back(static_cast<float>(current_frame_.kinematic_state->twist.twist.angular.z));
+      }
+    }
+
+    // Reset frame for next data collection
+    reset_current_frame();
+  }
+}
+
+void VadNode::reset_current_frame()
+{
+  current_frame_.images.clear();
+  current_frame_.images.resize(6);
+  current_frame_.camera_infos.clear();
+  current_frame_.camera_infos.resize(6);
+  current_frame_.kinematic_state.reset();
+  current_frame_.imu_raw.reset();
+  current_frame_.tf_static.reset();
+  frame_started_ = false;
+}
+
+void VadNode::initializeVadModel()
+{
+  try {
+    // Initialize VAD interface and model like in main.cpp
+    auto tf_buffer_shared = std::shared_ptr<tf2_ros::Buffer>(&tf_buffer_, [](tf2_ros::Buffer*){});
+    vad_interface_ptr_ = std::make_unique<VadInterface>(vad_interface_config_, tf_buffer_shared);
+    
+    // Create RosVadLogger using the logger directly (no shared_from_this needed)
+    auto ros_logger = std::make_shared<RosVadLogger>(this->get_logger());
+    vad_model_ptr_ = std::make_unique<VadModel<RosVadLogger>>(vad_config_, ros_logger);
+    
+    RCLCPP_INFO(this->get_logger(), "VAD model and interface initialized successfully");
+  } catch (const std::exception& e) {
+    RCLCPP_ERROR(this->get_logger(), "Failed to initialize VAD model: %s", e.what());
+  }
+}
+
+void VadNode::loadVadConfig()
+{
+  // Load VAD config parameters like in main.cpp
+  vad_config_.plugins_path =
+      this->declare_parameter<std::string>("model_params.plugins_path", "");
+  vad_config_.warm_up_num =
+      this->declare_parameter<int>("model_params.warm_up_num", 20);
+
+  // Load network configurations
+  loadNetConfigs();
+}
+
+void VadNode::loadNetConfigs()
+{
+  // Load network configurations like in main.cpp
+  
+  // backbone configuration
+  NetConfig backbone_config;
+  backbone_config.name = this->declare_parameter<std::string>(
+      "model_params.nets.backbone.name", "backbone");
+  backbone_config.engine_file = this->declare_parameter<std::string>(
+      "model_params.nets.backbone.engine_file", "");
+  backbone_config.use_graph = this->declare_parameter<bool>(
+      "model_params.nets.backbone.use_graph", true);
+
+  // head configuration
+  NetConfig head_config;
+  head_config.name = this->declare_parameter<std::string>(
+      "model_params.nets.head.name", "head");
+  head_config.engine_file = this->declare_parameter<std::string>(
+      "model_params.nets.head.engine_file", "");
+  head_config.use_graph = this->declare_parameter<bool>(
+      "model_params.nets.head.use_graph", true);
+
+  // head inputs
+  std::string input_feature = this->declare_parameter<std::string>(
+      "model_params.nets.head.inputs.input_feature", "mlvl_feats.0");
+  std::string net_param = this->declare_parameter<std::string>(
+      "model_params.nets.head.inputs.net", "backbone");
+  std::string name_param = this->declare_parameter<std::string>(
+      "model_params.nets.head.inputs.name", "out.0");
+  head_config.inputs[input_feature]["net"] = net_param;
+  head_config.inputs[input_feature]["name"] = name_param;
+
+  // head_no_prev configuration
+  NetConfig head_no_prev_config;
+  head_no_prev_config.name = this->declare_parameter<std::string>(
+      "model_params.nets.head_no_prev.name", "head_no_prev");
+  head_no_prev_config.engine_file = this->declare_parameter<std::string>(
+      "model_params.nets.head_no_prev.engine_file", "");
+  head_no_prev_config.use_graph = this->declare_parameter<bool>(
+      "model_params.nets.head_no_prev.use_graph", true);
+
+  // head_no_prev inputs
+  std::string input_feature_no_prev = this->declare_parameter<std::string>(
+      "model_params.nets.head_no_prev.inputs.input_feature", "mlvl_feats.0");
+  std::string net_param_no_prev = this->declare_parameter<std::string>(
+      "model_params.nets.head_no_prev.inputs.net", "backbone");
+  std::string name_param_no_prev = this->declare_parameter<std::string>(
+      "model_params.nets.head_no_prev.inputs.name", "out.0");
+  head_no_prev_config.inputs[input_feature_no_prev]["net"] = net_param_no_prev;
+  head_no_prev_config.inputs[input_feature_no_prev]["name"] = name_param_no_prev;
+
+  vad_config_.nets_config.push_back(backbone_config);
+  vad_config_.nets_config.push_back(head_config);
+  vad_config_.nets_config.push_back(head_no_prev_config);
+}
+
+geometry_msgs::msg::Quaternion VadNode::createQuaternionFromYaw(double yaw)
 {
   geometry_msgs::msg::Quaternion q{};
   q.x = 0.0;
@@ -32,31 +388,222 @@ geometry_msgs::msg::Quaternion calculate_quaternion_from_yaw(double yaw)
   return q;
 }
 
-VadNode::VadNode(const rclcpp::NodeOptions & options) : Node("vad_node", options), tf_buffer_(this->get_clock())
+void VadNode::publishTrajectory(const std::vector<float> &planning)
 {
-  // Publishers の初期化
-  trajectory_pub_ = this->create_publisher<autoware_planning_msgs::msg::Trajectory>("~/output/trajectory", rclcpp::QoS(1));
+  auto trajectory_msg =
+      std::make_unique<autoware_planning_msgs::msg::Trajectory>();
 
-  // VADモデルの初期化 - 一時的にコメントアウト
-  // TODO: 適切な設定ファイルとロガーを用意してから初期化
-  // auto logger = std::make_shared<RosVadLogger>();
-  // VadConfig config;
-  // vad_model_ptr_ = std::make_unique<VadModel<RosVadLogger>>(config, logger);
+  // 0秒目の点 (0,0) を追加
+  autoware_planning_msgs::msg::TrajectoryPoint initial_point;
+  initial_point.pose.position.x = 0.0;
+  initial_point.pose.position.y = 0.0;
+  initial_point.pose.position.z = 0.0;
+  initial_point.pose.orientation = createQuaternionFromYaw(0.0);
+  initial_point.longitudinal_velocity_mps = 0.0;
+  initial_point.lateral_velocity_mps = 0.0;
+  initial_point.acceleration_mps2 = 0.0;
+  initial_point.heading_rate_rps = 0.0;
+  initial_point.time_from_start.sec = 0;
+  initial_point.time_from_start.nanosec = 0;
+  trajectory_msg->points.push_back(initial_point);
 
-  RCLCPP_INFO(this->get_logger(), "VAD Node initialized");
+  for (size_t i = 0; i < planning.size(); i += 2) {
+    autoware_planning_msgs::msg::TrajectoryPoint point;
+
+    point.pose.position.x = planning[i + 1];
+    point.pose.position.y = -planning[i];
+    point.pose.position.z = 0.0;
+
+    if (i + 2 < planning.size()) {
+      float ns_dx = planning[i + 2] - planning[i];
+      float ns_dy = planning[i + 3] - planning[i + 1];
+      float aw_dx = ns_dy;  // Autowareの座標系に変換
+      float aw_dy = -ns_dx; // Autowareの座標系に変換
+      float yaw = std::atan2(aw_dy, aw_dx);
+      point.pose.orientation = createQuaternionFromYaw(yaw);
+    }
+
+    point.longitudinal_velocity_mps = 0.0;
+    point.lateral_velocity_mps = 0.0;
+    point.acceleration_mps2 = 0.0;
+    point.heading_rate_rps = 0.0;
+
+    // time_from_startを設定（1秒, 2秒, 3秒, 4秒, 5秒, 6秒）
+    size_t point_index = i / 2;
+    double time_sec = (point_index + 1) * trajectory_timestep_;
+    point.time_from_start.sec = static_cast<int32_t>(time_sec);
+    point.time_from_start.nanosec = static_cast<uint32_t>((time_sec - point.time_from_start.sec) * 1e9);
+
+    trajectory_msg->points.push_back(point);
+  }
+
+  trajectory_msg->header.stamp = this->now();
+  trajectory_msg->header.frame_id = "base_link";
+
+  trajectory_publisher_->publish(std::move(trajectory_msg));
 }
 
-// std::tuple<std::optional<autoware_planning_msgs::msg::Trajectory>, std::optional<autoware_perception_msgs::msg::DetectedObjects> > execute_inference(const VadInputTopicData vad_topic_data)
-// {
-//   // VadInterfaceを通じてVadInputDataに変換
-//   // scalingされた状態の画像を含む
-//   const auto vad_input = vad_interface_ptr_->convert_ros_to_vad_input(vad_topic_data);
+void VadNode::publishTrajectories(const std::map<int32_t, std::vector<float>> &trajectories_map)
+{
+  // CandidateTrajectories メッセージを作成
+  auto candidate_trajectories_msg =
+      std::make_unique<autoware_internal_planning_msgs::msg::CandidateTrajectories>();
 
-//   // VadModelで推論実行
-//   const auto vad_output = vad_model_ptr_->infer(vad_input);
+  // 各コマンドの軌道をCandidateTrajectoryとして追加
+  for (const auto& [command_idx, trajectory] : trajectories_map) {
+    autoware_internal_planning_msgs::msg::CandidateTrajectory candidate_trajectory;
+    
+    // ヘッダーを設定
+    candidate_trajectory.header.stamp = this->now();
+    candidate_trajectory.header.frame_id = "base_link";
+    
+    // generator_idを設定（ユニークなUUID）
+    candidate_trajectory.generator_id = autoware_utils_uuid::generate_uuid();
 
-//   // VadInterfaceを通じてROS型に変換
-//   return vad_interface_ptr_->convert_vad_output_to_ros(vad_output);
+    // 0秒目の点 (0,0) を追加
+    autoware_planning_msgs::msg::TrajectoryPoint initial_point;
+    initial_point.pose.position.x = 0.0;
+    initial_point.pose.position.y = 0.0;
+    initial_point.pose.position.z = 0.0;
+    initial_point.pose.orientation = createQuaternionFromYaw(0.0);
+    initial_point.longitudinal_velocity_mps = 0.0;
+    initial_point.lateral_velocity_mps = 0.0;
+    initial_point.acceleration_mps2 = 0.0;
+    initial_point.heading_rate_rps = 0.0;
+    initial_point.time_from_start.sec = 0;
+    initial_point.time_from_start.nanosec = 0;
+    candidate_trajectory.points.push_back(initial_point);
+
+    for (size_t i = 0; i < trajectory.size(); i += 2) {
+      autoware_planning_msgs::msg::TrajectoryPoint point;
+
+      point.pose.position.x = trajectory[i + 1];
+      point.pose.position.y = -trajectory[i];
+      point.pose.position.z = 0.0;
+
+      if (i + 2 < trajectory.size()) {
+        float ns_dx = trajectory[i + 2] - trajectory[i];
+        float ns_dy = trajectory[i + 3] - trajectory[i + 1];
+        float aw_dx = ns_dy;  // Autowareの座標系に変換
+        float aw_dy = -ns_dx; // Autowareの座標系に変換
+        float yaw = std::atan2(aw_dy, aw_dx);
+        point.pose.orientation = createQuaternionFromYaw(yaw);
+      }
+
+      point.longitudinal_velocity_mps = 0.0;
+      point.lateral_velocity_mps = 0.0;
+      point.acceleration_mps2 = 0.0;
+      point.heading_rate_rps = 0.0;
+
+      // time_from_startを設定（1秒, 2秒, 3秒, 4秒, 5秒, 6秒）
+      size_t point_index = i / 2;
+      double time_sec = (point_index + 1) * trajectory_timestep_;
+      point.time_from_start.sec = static_cast<int32_t>(time_sec);
+      point.time_from_start.nanosec = static_cast<uint32_t>((time_sec - point.time_from_start.sec) * 1e9);
+
+      candidate_trajectory.points.push_back(point);
+    }
+
+    candidate_trajectories_msg->candidate_trajectories.push_back(candidate_trajectory);
+
+    // 各コマンドのGeneratorInfoを追加
+    autoware_internal_planning_msgs::msg::GeneratorInfo generator_info;
+    generator_info.generator_id = autoware_utils_uuid::generate_uuid();
+    generator_info.generator_name.data = "autoware_tensorrt_vad_cmd_" + std::to_string(command_idx);
+    candidate_trajectories_msg->generator_info.push_back(generator_info);
+  }
+
+  candidate_trajectories_publisher_->publish(std::move(candidate_trajectories_msg));
+}
+
+std::optional<autoware_internal_planning_msgs::msg::CandidateTrajectories> VadNode::execute_inference(const VadInputTopicData & vad_topic_data)
+{
+  if (!vad_interface_ptr_ || !vad_model_ptr_) {
+    RCLCPP_ERROR(this->get_logger(), "VAD interface or model not initialized");
+    return std::nullopt;
+  }
+
+  try {
+    // VadInterfaceを通じてVadInputDataに変換
+    // scalingされた状態の画像を含む
+    const auto vad_input = vad_interface_ptr_->convert_input(vad_topic_data, prev_can_bus_);
+
+    // VadModelで推論実行
+    const auto vad_output = vad_model_ptr_->infer(vad_input);
+
+    // VadInterfaceを通じてROS型に変換
+    if (vad_output.has_value()) {
+      // Update prev_can_bus for next frame
+      prev_can_bus_ = vad_input.can_bus_;
+
+      // Publish individual trajectory if available
+      if (!vad_output->predicted_trajectory_.empty()) {
+        publishTrajectory(vad_output->predicted_trajectory_);
+      }
+
+      // Publish candidate trajectories if available
+      if (!vad_output->predicted_trajectories_.empty()) {
+        publishTrajectories(vad_output->predicted_trajectories_);
+      }
+
+      // Return a simple success indicator - we already published the data above
+      auto candidate_trajectories_msg = autoware_internal_planning_msgs::msg::CandidateTrajectories();
+      return std::optional<autoware_internal_planning_msgs::msg::CandidateTrajectories>(candidate_trajectories_msg);
+    }
+  } catch (const std::exception& e) {
+    RCLCPP_ERROR(this->get_logger(), "Error during inference: %s", e.what());
+  }
+
+  return std::nullopt;
+}
+
+void VadNode::publish(const VadInputTopicData & vad_topic_data)
+{
+  try {
+    // VAD推論を実行
+    const auto candidate_trajectories_msg = execute_inference(vad_topic_data);
+
+    // 結果をパブリッシュ
+    if (candidate_trajectories_msg.has_value()) {
+      // We already published in execute_inference, just log success
+      RCLCPP_DEBUG(this->get_logger(), "Published candidate trajectories");
+    } else {
+      RCLCPP_WARN(this->get_logger(), "No valid trajectories to publish");
+    }
+  } catch (const std::exception& e) {
+    RCLCPP_ERROR(this->get_logger(), "Error in publish method: %s", e.what());
+  }
+}
+
+void VadNode::frame_timeout_callback()
+{
+  std::lock_guard<std::mutex> lock(frame_mutex_);
+  
+  if (frame_started_) {
+    // Check how much data we have
+    int valid_images = 0;
+    int valid_camera_infos = 0;
+    
+    for (size_t i = 0; i < current_frame_.images.size(); ++i) {
+      if (current_frame_.images[i]) valid_images++;
+      if (current_frame_.camera_infos[i]) valid_camera_infos++;
+    }
+    
+    RCLCPP_WARN(this->get_logger(), 
+                "Frame timeout reached. Have %d/%d images, %d/%d camera_infos, kinematic_state: %s, imu_raw: %s, tf_static: %s",
+                valid_images, 6, valid_camera_infos, 6,
+                current_frame_.kinematic_state ? "yes" : "no",
+                current_frame_.imu_raw ? "yes" : "no",
+                current_frame_.tf_static ? "yes" : "no");
+    
+    // Reset frame if incomplete
+    reset_current_frame();
+  }
+  
+  // Stop timer until next frame starts
+  frame_timeout_timer_->cancel();
+}
+
 }  // namespace autoware::tensorrt_vad
 
 // Register the component with the ROS2 component system

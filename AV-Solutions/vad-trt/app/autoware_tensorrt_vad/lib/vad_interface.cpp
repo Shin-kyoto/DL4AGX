@@ -200,8 +200,16 @@ CameraImagesData VadInterface::process_image(
   for (int32_t autoware_idx = 0; autoware_idx < 6; ++autoware_idx) {
     const auto &image_msg = images[autoware_idx];
 
-    // OpenCVで画像データをデコード
-    cv::Mat bgr_img = cv::imdecode(cv::Mat(image_msg->data), cv::IMREAD_COLOR); // BGRでデコード
+    // sensor_msgs::msg::Image から cv::Mat を作成
+    cv::Mat bgr_img;
+    if (image_msg->encoding == "bgr8") {
+      // BGR8の場合、そのままデータを使用
+      bgr_img = cv::Mat(image_msg->height, image_msg->width, CV_8UC3, 
+                        const_cast<uint8_t*>(image_msg->data.data()), image_msg->step);
+    } else {
+      throw std::runtime_error("サポートされていない画像エンコーディング: " + image_msg->encoding);
+    }
+
     if (bgr_img.empty()) {
       throw std::runtime_error("画像データのデコードに失敗しました: " + std::to_string(autoware_idx));
     }
