@@ -231,7 +231,6 @@ public:
 
   // ロガーインスタンス
   std::shared_ptr<VadLogger> logger_;
-  // TensorRTロガーインスタンス（VadModelの寿命と同じにする）
   std::unique_ptr<Logger> tensorrt_logger_;
 
 private:
