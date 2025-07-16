@@ -162,7 +162,8 @@ public:
           declare_parameter<std::vector<double>>("interface_params.image_normalization_param_std"),
           declare_parameter<std::vector<double>>("interface_params.vad2base"),
           declare_parameter<std::vector<int64_t>>("interface_params.autoware_to_vad_camera_mapping")
-        )
+        ),
+        trajectory_timestep_(declare_parameter<double>("interface_params.trajectory_timestep", 1.0))
   {
 
     std::vector<double> default_can_bus = this->declare_parameter<std::vector<double>>("interface_params.default_can_bus");
@@ -213,6 +214,19 @@ public:
     auto trajectory_msg =
         std::make_unique<autoware_planning_msgs::msg::Trajectory>();
 
+    // 0秒目の点 (0,0) を追加
+    autoware_planning_msgs::msg::TrajectoryPoint initial_point;
+    initial_point.pose.position.x = 0.0;
+    initial_point.pose.position.y = 0.0;
+    initial_point.pose.position.z = 0.0;
+    initial_point.pose.orientation = createQuaternionFromYaw(0.0);
+    initial_point.longitudinal_velocity_mps = 0.0;
+    initial_point.lateral_velocity_mps = 0.0;
+    initial_point.acceleration_mps2 = 0.0;
+    initial_point.heading_rate_rps = 0.0;
+    initial_point.time_from_start.sec = 0;
+    initial_point.time_from_start.nanosec = 0;
+    trajectory_msg->points.push_back(initial_point);
 
     for (size_t i = 0; i < planning.size(); i += 2) {
       autoware_planning_msgs::msg::TrajectoryPoint point;
@@ -235,14 +249,18 @@ public:
       point.acceleration_mps2 = 0.0;
       point.heading_rate_rps = 0.0;
 
-      // 両方のメッセージに同じポイントを追加
+      // time_from_startを設定（1秒, 2秒, 3秒, 4秒, 5秒, 6秒）
+      size_t point_index = i / 2;
+      double time_sec = (point_index + 1) * trajectory_timestep_;
+      point.time_from_start.sec = static_cast<int32_t>(time_sec);
+      point.time_from_start.nanosec = static_cast<uint32_t>((time_sec - point.time_from_start.sec) * 1e9);
+
       trajectory_msg->points.push_back(point);
     }
 
     // 元のTrajectoryメッセージのヘッダーを設定
     trajectory_msg->header.stamp = this->now();
-    trajectory_msg->header.frame_id = "map";
-
+    trajectory_msg->header.frame_id = "base_link";
 
     // 両方のメッセージを発行
     trajectory_publisher_->publish(std::move(trajectory_msg));
@@ -259,10 +277,24 @@ public:
       
       // ヘッダーを設定
       candidate_trajectory.header.stamp = this->now();
-      candidate_trajectory.header.frame_id = "map";
+      candidate_trajectory.header.frame_id = "base_link";
       
       // generator_idを設定（ユニークなUUID）
       candidate_trajectory.generator_id = autoware_utils_uuid::generate_uuid();
+
+      // 0秒目の点 (0,0) を追加
+      autoware_planning_msgs::msg::TrajectoryPoint initial_point;
+      initial_point.pose.position.x = 0.0;
+      initial_point.pose.position.y = 0.0;
+      initial_point.pose.position.z = 0.0;
+      initial_point.pose.orientation = createQuaternionFromYaw(0.0);
+      initial_point.longitudinal_velocity_mps = 0.0;
+      initial_point.lateral_velocity_mps = 0.0;
+      initial_point.acceleration_mps2 = 0.0;
+      initial_point.heading_rate_rps = 0.0;
+      initial_point.time_from_start.sec = 0;
+      initial_point.time_from_start.nanosec = 0;
+      candidate_trajectory.points.push_back(initial_point);
 
       for (size_t i = 0; i < trajectory.size(); i += 2) {
         autoware_planning_msgs::msg::TrajectoryPoint point;
@@ -284,6 +316,12 @@ public:
         point.lateral_velocity_mps = 0.0;
         point.acceleration_mps2 = 0.0;
         point.heading_rate_rps = 0.0;
+
+        // time_from_startを設定（1秒, 2秒, 3秒, 4秒, 5秒, 6秒）
+        size_t point_index = i / 2;
+        double time_sec = (point_index + 1) * trajectory_timestep_;
+        point.time_from_start.sec = static_cast<int32_t>(time_sec);
+        point.time_from_start.nanosec = static_cast<uint32_t>((time_sec - point.time_from_start.sec) * 1e9);
 
         candidate_trajectory.points.push_back(point);
       }
@@ -349,6 +387,9 @@ private:
 
   // VadConfig
   autoware::tensorrt_vad::VadConfig vad_config_;
+
+  // trajectory_timestep parameter
+  double trajectory_timestep_;
 
   // yamlファイルのパスからNodeOptionsを作成する静的関数
   static rclcpp::NodeOptions
