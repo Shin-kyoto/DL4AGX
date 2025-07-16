@@ -84,6 +84,10 @@ struct VadOutputData
   // planning[0,1] = 1st point (x,y), planning[2,3] = 2nd point (x,y), ...
   std::vector<float> predicted_trajectory_{};  // size: 12 (6 points * 2 coordinates)
 
+  // 複数のコマンドに対応した予測軌道のマップ
+  // key: command index (int32_t), value: trajectory (std::vector<float>)
+  std::map<int32_t, std::vector<float>> predicted_trajectories_{};
+
   // // 検出されたオブジェクト
   // std::vector<std::vector<float>> detected_objects_{};
 
@@ -384,7 +388,24 @@ private:
       planning[i * 2 + 1] += planning[(i-1) * 2 + 1];
     }
     
-    return VadOutputData{planning};
+    // Extract all trajectories for all 3 commands
+    std::map<int32_t, std::vector<float>> all_trajectories;
+    for (int32_t command_idx = 0; command_idx < 3; command_idx++) {
+      std::vector<float> trajectory(
+          ego_fut_preds.begin() + command_idx * 12,
+          ego_fut_preds.begin() + (command_idx + 1) * 12
+      );
+      
+      // cumsum to build trajectory in 3d space
+      for (int32_t i = 1; i < 6; i++) {
+        trajectory[i * 2] += trajectory[(i-1) * 2];
+        trajectory[i * 2 + 1] += trajectory[(i-1) * 2 + 1];
+      }
+      
+      all_trajectories[command_idx] = trajectory;
+    }
+    
+    return VadOutputData{planning, all_trajectories};
   }
 };
 

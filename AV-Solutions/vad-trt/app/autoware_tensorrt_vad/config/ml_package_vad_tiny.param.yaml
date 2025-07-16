@@ -37,6 +37,8 @@
                 -1.0, 0.0, 0.0, 0.0,
                  0.0, 0.0, 1.0, 0.0,
                  0.0, 0.0, 0.0, 1.0]
+      # params for output
+      trajectory_timestep: 1.0 # [s]
     model_params:
       # Engine paths with hierarchical structure
       nets:

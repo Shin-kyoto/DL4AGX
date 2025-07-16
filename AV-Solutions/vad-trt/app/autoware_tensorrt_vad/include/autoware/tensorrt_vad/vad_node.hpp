@@ -23,6 +23,11 @@
 
 #include <autoware_perception_msgs/msg/detected_objects.hpp>
 #include <autoware_planning_msgs/msg/trajectory.hpp>
+#include <autoware_internal_planning_msgs/msg/candidate_trajectories.hpp>
+#include <autoware_internal_planning_msgs/msg/candidate_trajectory.hpp>
+#include <autoware_internal_planning_msgs/msg/generator_info.hpp>
+#include <autoware_planning_msgs/msg/trajectory_point.hpp>
+#include <autoware_utils_uuid/uuid_helper.hpp>
 #include <sensor_msgs/msg/camera_info.hpp>
 #include <sensor_msgs/msg/image.hpp>
 
@@ -66,6 +71,7 @@ private:
 
   // Publishers
   rclcpp::Publisher<autoware_planning_msgs::msg::Trajectory>::SharedPtr trajectory_pub_{nullptr};
+  rclcpp::Publisher<autoware_internal_planning_msgs::msg::CandidateTrajectories>::SharedPtr candidate_trajectories_pub_{nullptr};
   // rclcpp::Publisher<autoware_perception_msgs::msg::DetectedObjects>::SharedPtr detected_objects_pub_{nullptr};
 
   // 推論を実行するメソッド

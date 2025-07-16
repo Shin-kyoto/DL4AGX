@@ -40,7 +40,11 @@
 #include <Eigen/Dense>
 #include <autoware_perception_msgs/msg/detected_objects.hpp>
 #include <autoware_planning_msgs/msg/trajectory.hpp>
+#include <autoware_internal_planning_msgs/msg/candidate_trajectories.hpp>
+#include <autoware_internal_planning_msgs/msg/candidate_trajectory.hpp>
+#include <autoware_internal_planning_msgs/msg/generator_info.hpp>
 #include <autoware_planning_msgs/msg/trajectory_point.hpp>
+#include <autoware_utils_uuid/uuid_helper.hpp>
 #include <geometry_msgs/msg/pose.hpp>
 #include <geometry_msgs/msg/twist.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -157,7 +161,8 @@ public:
           declare_parameter<std::vector<double>>("interface_params.image_normalization_param_std"),
           declare_parameter<std::vector<double>>("interface_params.vad2base"),
           declare_parameter<std::vector<int64_t>>("interface_params.autoware_to_vad_camera_mapping")
-        )
+        ),
+        trajectory_timestep_(declare_parameter<double>("interface_params.trajectory_timestep", 1.0))
   {
 
     std::vector<double> default_can_bus = this->declare_parameter<std::vector<double>>("interface_params.default_can_bus");
@@ -168,6 +173,10 @@ public:
     trajectory_publisher_ =
         this->create_publisher<autoware_planning_msgs::msg::Trajectory>(
             "/planning/vad/trajectory", rclcpp::QoS(1));
+
+    candidate_trajectories_publisher_ =
+        this->create_publisher<autoware_internal_planning_msgs::msg::CandidateTrajectories>(
+            "/planning/vad/trajectories", rclcpp::QoS(1));
 
     objects_publisher_ =
         this->create_publisher<autoware_perception_msgs::msg::DetectedObjects>(
@@ -203,6 +212,20 @@ public:
     auto trajectory_msg =
         std::make_unique<autoware_planning_msgs::msg::Trajectory>();
 
+    // 0秒目の点 (0,0) を追加
+    autoware_planning_msgs::msg::TrajectoryPoint initial_point;
+    initial_point.pose.position.x = 0.0;
+    initial_point.pose.position.y = 0.0;
+    initial_point.pose.position.z = 0.0;
+    initial_point.pose.orientation = createQuaternionFromYaw(0.0);
+    initial_point.longitudinal_velocity_mps = 0.0;
+    initial_point.lateral_velocity_mps = 0.0;
+    initial_point.acceleration_mps2 = 0.0;
+    initial_point.heading_rate_rps = 0.0;
+    initial_point.time_from_start.sec = 0;
+    initial_point.time_from_start.nanosec = 0;
+    trajectory_msg->points.push_back(initial_point);
+
     for (size_t i = 0; i < planning.size(); i += 2) {
       autoware_planning_msgs::msg::TrajectoryPoint point;
 
@@ -224,13 +247,91 @@ public:
       point.acceleration_mps2 = 0.0;
       point.heading_rate_rps = 0.0;
 
+      // time_from_startを設定（1秒, 2秒, 3秒, 4秒, 5秒, 6秒）
+      size_t point_index = i / 2;
+      double time_sec = (point_index + 1) * trajectory_timestep_;
+      point.time_from_start.sec = static_cast<int32_t>(time_sec);
+      point.time_from_start.nanosec = static_cast<uint32_t>((time_sec - point.time_from_start.sec) * 1e9);
+
       trajectory_msg->points.push_back(point);
     }
 
     trajectory_msg->header.stamp = this->now();
-    trajectory_msg->header.frame_id = "map";
+    trajectory_msg->header.frame_id = "base_link";
 
     trajectory_publisher_->publish(std::move(trajectory_msg));
+  }
+
+  void publishTrajectories(const std::map<int32_t, std::vector<float>> &trajectories_map) {
+    // CandidateTrajectories メッセージを作成
+    auto candidate_trajectories_msg =
+        std::make_unique<autoware_internal_planning_msgs::msg::CandidateTrajectories>();
+
+    // 各コマンドの軌道をCandidateTrajectoryとして追加
+    for (const auto& [command_idx, trajectory] : trajectories_map) {
+      autoware_internal_planning_msgs::msg::CandidateTrajectory candidate_trajectory;
+      
+      // ヘッダーを設定
+      candidate_trajectory.header.stamp = this->now();
+      candidate_trajectory.header.frame_id = "base_link";
+      
+      // generator_idを設定（ユニークなUUID）
+      candidate_trajectory.generator_id = autoware_utils_uuid::generate_uuid();
+
+      // 0秒目の点 (0,0) を追加
+      autoware_planning_msgs::msg::TrajectoryPoint initial_point;
+      initial_point.pose.position.x = 0.0;
+      initial_point.pose.position.y = 0.0;
+      initial_point.pose.position.z = 0.0;
+      initial_point.pose.orientation = createQuaternionFromYaw(0.0);
+      initial_point.longitudinal_velocity_mps = 0.0;
+      initial_point.lateral_velocity_mps = 0.0;
+      initial_point.acceleration_mps2 = 0.0;
+      initial_point.heading_rate_rps = 0.0;
+      initial_point.time_from_start.sec = 0;
+      initial_point.time_from_start.nanosec = 0;
+      candidate_trajectory.points.push_back(initial_point);
+
+      for (size_t i = 0; i < trajectory.size(); i += 2) {
+        autoware_planning_msgs::msg::TrajectoryPoint point;
+
+        point.pose.position.x = trajectory[i + 1];
+        point.pose.position.y = -trajectory[i];
+        point.pose.position.z = 0.0;
+
+        if (i + 2 < trajectory.size()) {
+          float ns_dx = trajectory[i + 2] - trajectory[i];
+          float ns_dy = trajectory[i + 3] - trajectory[i + 1];
+          float aw_dx = ns_dy;  // Autowareの座標系に変換
+          float aw_dy = -ns_dx; // Autowareの座標系に変換
+          float yaw = std::atan2(aw_dy, aw_dx);
+          point.pose.orientation = createQuaternionFromYaw(yaw);
+        }
+
+        point.longitudinal_velocity_mps = 0.0;
+        point.lateral_velocity_mps = 0.0;
+        point.acceleration_mps2 = 0.0;
+        point.heading_rate_rps = 0.0;
+
+        // time_from_startを設定（1秒, 2秒, 3秒, 4秒, 5秒, 6秒）
+        size_t point_index = i / 2;
+        double time_sec = (point_index + 1) * trajectory_timestep_;
+        point.time_from_start.sec = static_cast<int32_t>(time_sec);
+        point.time_from_start.nanosec = static_cast<uint32_t>((time_sec - point.time_from_start.sec) * 1e9);
+
+        candidate_trajectory.points.push_back(point);
+      }
+
+      candidate_trajectories_msg->candidate_trajectories.push_back(candidate_trajectory);
+
+      // 各コマンドのGeneratorInfoを追加
+      autoware_internal_planning_msgs::msg::GeneratorInfo generator_info;
+      generator_info.generator_id = autoware_utils_uuid::generate_uuid();
+      generator_info.generator_name.data = "autoware_tensorrt_vad_cmd_" + std::to_string(command_idx);
+      candidate_trajectories_msg->generator_info.push_back(generator_info);
+    }
+
+    candidate_trajectories_publisher_->publish(std::move(candidate_trajectories_msg));
   }
 
   void
@@ -272,6 +373,8 @@ public:
 private:
   rclcpp::Publisher<autoware_planning_msgs::msg::Trajectory>::SharedPtr
       trajectory_publisher_;
+  rclcpp::Publisher<autoware_internal_planning_msgs::msg::CandidateTrajectories>::SharedPtr
+      candidate_trajectories_publisher_;
   rclcpp::Publisher<autoware_perception_msgs::msg::DetectedObjects>::SharedPtr
       objects_publisher_;
   std::vector<
@@ -280,6 +383,9 @@ private:
 
   // VadConfig
   autoware::tensorrt_vad::VadConfig vad_config_;
+
+  // trajectory_timestep parameter
+  double trajectory_timestep_;
 
   // yamlファイルのパスからNodeOptionsを作成する静的関数
   static rclcpp::NodeOptions
@@ -687,6 +793,10 @@ int main(int argc, char **argv) {
     // pred -> frame.planning
     frame.planning = vad_output_data.predicted_trajectory_;
     node->publishTrajectory(frame.planning);
+    
+    // publish all trajectories as CandidateTrajectories
+    node->publishTrajectories(vad_output_data.predicted_trajectories_);
+    
     printf("publish trajectory");
     rclcpp::spin_some(node);
 
