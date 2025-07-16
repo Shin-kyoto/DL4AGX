@@ -64,6 +64,10 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
           "~/output/objects",
           rclcpp::QoS(1));
 
+  // Create QoS profiles for sensor data (best effort for compatibility with typical sensor topics)
+  auto sensor_qos = rclcpp::QoS(1).reliability(rclcpp::ReliabilityPolicy::BestEffort);
+  auto reliable_qos = rclcpp::QoS(1).reliability(rclcpp::ReliabilityPolicy::Reliable);
+
   // Subscribers for each camera
   camera_image_subs_.resize(6);
   for (int32_t i = 0; i < 6; ++i) {
@@ -75,7 +79,7 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
     camera_image_subs_[i] =
         this->create_subscription<sensor_msgs::msg::CompressedImage>(
             "~/input/image" + std::to_string(i),
-            rclcpp::QoS(1), callback);
+            sensor_qos, callback);
   }
 
   // Camera info subscribers
@@ -89,22 +93,24 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
     camera_info_subs_[i] =
         this->create_subscription<sensor_msgs::msg::CameraInfo>(
             "~/input/camera_info" + std::to_string(i),
-            rclcpp::QoS(1), callback);
+            sensor_qos, callback);
   }
 
-  // Odometry subscriber
+  // Odometry subscriber (kinematic state is usually reliable)
   odometry_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
-      "/localization/kinematic_state", rclcpp::QoS(1),
+      "/localization/kinematic_state", reliable_qos,
       std::bind(&VadNode::odometry_callback, this, std::placeholders::_1));
 
-  // IMU subscriber
+  // IMU subscriber (sensor data typically uses best effort)
   imu_sub_ = this->create_subscription<sensor_msgs::msg::Imu>(
-      "/sensing/imu/tamagawa/imu_raw", rclcpp::QoS(1),
+      "/sensing/imu/tamagawa/imu_raw", sensor_qos,
       std::bind(&VadNode::imu_callback, this, std::placeholders::_1));
 
-  // TF static subscriber
+  // TF static subscriber (transient local for persistence)
+  auto tf_static_qos = rclcpp::QoS(1).reliability(rclcpp::ReliabilityPolicy::Reliable)
+                                     .durability(rclcpp::DurabilityPolicy::TransientLocal);
   tf_static_sub_ = this->create_subscription<tf2_msgs::msg::TFMessage>(
-      "/tf_static", rclcpp::QoS(1),
+      "/tf_static", tf_static_qos,
       std::bind(&VadNode::tf_static_callback, this, std::placeholders::_1));
 
   // Load VadConfig
