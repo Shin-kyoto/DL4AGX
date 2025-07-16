@@ -609,12 +609,3 @@ void VadNode::frame_timeout_callback()
 // Register the component with the ROS2 component system
 // NOLINTNEXTLINE(readability-identifier-naming,cppcoreguidelines-avoid-non-const-global-variables)
 RCLCPP_COMPONENTS_REGISTER_NODE(autoware::tensorrt_vad::VadNode)
-
-int main(int argc, char ** argv)
-{
-  rclcpp::init(argc, argv);
-  auto node = std::make_shared<autoware::tensorrt_vad::VadNode>(rclcpp::NodeOptions{});
-  rclcpp::spin(node);
-  rclcpp::shutdown();
-  return 0;
-}
