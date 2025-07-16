@@ -231,16 +231,14 @@ public:
 
   // ロガーインスタンス
   std::shared_ptr<VadLogger> logger_;
-  std::unique_ptr<Logger> tensorrt_logger_;
 
 private:
   // メンバ関数
   std::unique_ptr<nvinfer1::IRuntime, std::function<void(nvinfer1::IRuntime*)>> create_runtime() {
-    // メンバ変数としてtensorrt_logger_を作成・保持
-    tensorrt_logger_ = std::make_unique<Logger>(logger_);
+    static std::unique_ptr<Logger> logger_instance = std::make_unique<Logger>(logger_);
     auto runtime_deleter = []([[maybe_unused]] nvinfer1::IRuntime *runtime) {};
     std::unique_ptr<nvinfer1::IRuntime, decltype(runtime_deleter)> runtime{
-        nvinfer1::createInferRuntime(*tensorrt_logger_), runtime_deleter};
+        nvinfer1::createInferRuntime(*logger_instance), runtime_deleter};
     return runtime;
   }
 
