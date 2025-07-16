@@ -37,6 +37,8 @@
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
 #include <stb/stb_image_resize.h>
 
+#include <opencv2/opencv.hpp>
+
 #include <Eigen/Dense>
 #include <autoware_perception_msgs/msg/detected_objects.hpp>
 #include <autoware_planning_msgs/msg/trajectory.hpp>
@@ -563,21 +565,25 @@ extract_vad_topic_data_from_rosbag(const std::string &bag_path, std::shared_ptr<
           // CompressedImageをImageに変換
           auto image_msg = std::make_shared<sensor_msgs::msg::Image>();
           image_msg->header = msg->header;
-          image_msg->height = msg->format.find("height=") != std::string::npos
-                                  ? std::stoi(msg->format.substr(
-                                        msg->format.find("height=") + 7,
-                                        msg->format.find(";") -
-                                            msg->format.find("height=") - 7))
-                                  : 0;
-          image_msg->width =
-              msg->format.find("width=") != std::string::npos
-                  ? std::stoi(msg->format.substr(
-                        msg->format.find("width=") + 6,
-                        msg->format.find(";") - msg->format.find("width=") - 6))
-                  : 0;
+          
+          // OpenCVで圧縮画像をデコード
+          cv::Mat bgr_img = cv::imdecode(cv::Mat(msg->data), cv::IMREAD_COLOR);
+          if (bgr_img.empty()) {
+            std::cerr << "Failed to decode compressed image for camera " 
+                      << autoware_idx << std::endl;
+            continue;
+          }
+          
+          // デコードした画像からImage メッセージを作成
+          image_msg->height = bgr_img.rows;
+          image_msg->width = bgr_img.cols;
           image_msg->encoding = "bgr8";
-          image_msg->data = msg->data;
-          image_msg->step = image_msg->width * 3;
+          image_msg->step = bgr_img.cols * 3;
+          
+          // ピクセルデータをコピー
+          size_t data_size = bgr_img.rows * bgr_img.cols * 3;
+          image_msg->data.resize(data_size);
+          std::memcpy(image_msg->data.data(), bgr_img.data, data_size);
 
           if (!frame_started) {
             current_frame.stamp = msg->header.stamp;
