@@ -48,11 +48,6 @@
 #include <map>
 #include <mutex>
 
-// Forward declarations for future use
-// #include <cuda_runtime.h>
-// #include <NvInfer.h>
-// #include <stb/stb_image.h>
-
 namespace autoware::tensorrt_vad
 {
 
