@@ -51,7 +51,7 @@
 namespace autoware::tensorrt_vad
 {
 
-class VadNode : public rclcpp::Node, public std::enable_shared_from_this<VadNode>
+class VadNode : public rclcpp::Node
 {
 public:
   explicit VadNode(const rclcpp::NodeOptions & options);
