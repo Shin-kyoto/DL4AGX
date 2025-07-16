@@ -126,7 +126,7 @@ private:
   
   // Timeout timer for frame completion
   rclcpp::TimerBase::SharedPtr frame_timeout_timer_;
-  static constexpr std::chrono::milliseconds FRAME_TIMEOUT{100}; // 100ms timeout
+  static constexpr std::chrono::milliseconds FRAME_TIMEOUT{180}; // 180ms timeout
 
   // 推論を実行するメソッド
   std::optional<autoware_internal_planning_msgs::msg::CandidateTrajectories> execute_inference(const VadInputTopicData & vad_topic_data);
