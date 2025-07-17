@@ -120,6 +120,12 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
   current_frame_.images.resize(6);
   current_frame_.camera_infos.resize(6);
 
+  // Initialize VAD model on first complete frame
+  if (!vad_model_ptr_) {
+    RCLCPP_INFO(this->get_logger(), "Initializing VAD model with first complete frame");
+    initializeVadModel();
+  }
+
   // Initialize timeout timer
   frame_timeout_timer_ = this->create_wall_timer(
     FRAME_TIMEOUT,
@@ -260,17 +266,9 @@ void VadNode::check_and_process_frame()
     
     // Cancel timeout timer since frame is complete
     frame_timeout_timer_->cancel();
-    
-    // Initialize VAD model on first complete frame
-    if (!vad_model_ptr_) {
-      RCLCPP_INFO(this->get_logger(), "Initializing VAD model with first complete frame");
-      initializeVadModel();
-    }
 
-    if (vad_model_ptr_) {
-      // Execute inference and publish results
-      publish(current_frame_);
-    }
+    // Execute inference and publish results
+    publish(current_frame_);
 
     // Reset frame for next data collection
     reset_current_frame();
