@@ -66,20 +66,29 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
 
   // Create QoS profiles for sensor data (best effort for compatibility with typical sensor topics)
   auto sensor_qos = rclcpp::QoS(1).reliability(rclcpp::ReliabilityPolicy::BestEffort);
+  auto camera_info_qos = rclcpp::QoS(10).reliability(rclcpp::ReliabilityPolicy::BestEffort);
   auto reliable_qos = rclcpp::QoS(1).reliability(rclcpp::ReliabilityPolicy::Reliable);
 
   // Subscribers for each camera
   camera_image_subs_.resize(6);
+  std::vector<bool> use_raw_cameras = this->declare_parameter<std::vector<bool>>("node_params.use_raw", std::vector<bool>(6, false));
+  auto resolve_topic_name = [this](const std::string & query) {
+    return this->get_node_topics_interface()->resolve_topic_name(query);
+  };
   for (int32_t i = 0; i < 6; ++i) {
+    const auto transport = use_raw_cameras[i] ? "raw" : "compressed";
     auto callback =
-        [this, i](const sensor_msgs::msg::CompressedImage::SharedPtr msg) {
+        [this, i](const sensor_msgs::msg::Image::ConstSharedPtr msg) {
           this->image_callback(msg, i);
         };
-
-    camera_image_subs_[i] =
-        this->create_subscription<sensor_msgs::msg::CompressedImage>(
-            "~/input/image" + std::to_string(i),
-            sensor_qos, callback);
+    // image_transport::create_subscription を使用
+    const auto image_topic = resolve_topic_name("~/input/image" + std::to_string(i));
+    camera_image_subs_[i] = image_transport::create_subscription(
+        this,
+        image_topic,
+        callback,
+        transport,
+        sensor_qos.get_rmw_qos_profile());
   }
 
   // Camera info subscribers
@@ -93,7 +102,7 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
     camera_info_subs_[i] =
         this->create_subscription<sensor_msgs::msg::CameraInfo>(
             "~/input/camera_info" + std::to_string(i),
-            sensor_qos, callback);
+            camera_info_qos, callback);
   }
 
   // Odometry subscriber (kinematic state is usually reliable)
@@ -137,7 +146,7 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
   RCLCPP_INFO(this->get_logger(), "VAD Node has been initialized - VAD model will be initialized after first callback");
 }
 
-void VadNode::image_callback(const sensor_msgs::msg::CompressedImage::ConstSharedPtr msg, std::size_t camera_id)
+void VadNode::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr msg, std::size_t camera_id)
 {
   // Validate camera_id
   if (camera_id >= 6) {
@@ -147,30 +156,18 @@ void VadNode::image_callback(const sensor_msgs::msg::CompressedImage::ConstShare
 
   std::lock_guard<std::mutex> lock(frame_mutex_);
 
-  try {
-    // Always use cv_bridge to properly decode compressed images
-    cv_bridge::CvImagePtr cv_ptr = cv_bridge::toCvCopy(msg, sensor_msgs::image_encodings::BGR8);
-    auto image_msg = cv_ptr->toImageMsg();
-    
-    // Initialize frame if not started
-    if (!frame_started_) {
-      current_frame_.stamp = msg->header.stamp;
-      frame_started_ = true;
-      // Start timeout timer for this frame
-      frame_timeout_timer_->reset();
-    }
-
-    // Store as ConstSharedPtr
-    current_frame_.images[camera_id] = std::const_pointer_cast<const sensor_msgs::msg::Image>(image_msg);
-    
-    check_and_process_frame();
-  } catch (cv_bridge::Exception& e) {
-    RCLCPP_ERROR(this->get_logger(), "cv_bridge exception: %s", e.what());
-    return;
-  } catch (const std::exception& e) {
-    RCLCPP_ERROR(this->get_logger(), "Exception in image_callback: %s", e.what());
-    return;
+  // Initialize frame if not started
+  if (!frame_started_) {
+    current_frame_.stamp = msg->header.stamp;
+    frame_started_ = true;
+    // Start timeout timer for this frame
+    frame_timeout_timer_->reset();
   }
+
+  // Store as ConstSharedPtr directly
+  current_frame_.images[camera_id] = msg;
+    
+  check_and_process_frame();
 
   RCLCPP_DEBUG(this->get_logger(), "Received image from camera %zu", camera_id);
 }

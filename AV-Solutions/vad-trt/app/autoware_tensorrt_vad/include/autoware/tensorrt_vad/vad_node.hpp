@@ -20,6 +20,7 @@
 #include "autoware/tensorrt_vad/vad_interface_config.hpp"
 #include "ros_vad_logger.hpp"
 
+#include <image_transport/image_transport.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_components/register_node_macro.hpp>
 
@@ -72,7 +73,7 @@ private:
   // Helper function
   geometry_msgs::msg::Quaternion createQuaternionFromYaw(double yaw);
 
-  void image_callback(const sensor_msgs::msg::CompressedImage::ConstSharedPtr msg, std::size_t camera_id);
+  void image_callback(const sensor_msgs::msg::Image::ConstSharedPtr msg, std::size_t camera_id);
   void camera_info_callback(const sensor_msgs::msg::CameraInfo::ConstSharedPtr msg, std::size_t camera_id);
   void odometry_callback(const nav_msgs::msg::Odometry::ConstSharedPtr msg);
   void imu_callback(const sensor_msgs::msg::Imu::ConstSharedPtr msg);
@@ -91,8 +92,8 @@ private:
   // VAD interface config and previous can bus data
   std::vector<float> prev_can_bus_;
 
-  // Subscribers for images (CompressedImage)
-  std::vector<rclcpp::Subscription<sensor_msgs::msg::CompressedImage>::SharedPtr> camera_image_subs_;
+  // Subscribers for images (using image_transport)
+  std::vector<image_transport::Subscriber> camera_image_subs_;
   std::vector<rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr> camera_info_subs_;
 
   // Subscribers for odometry and IMU data
