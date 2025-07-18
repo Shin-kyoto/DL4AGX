@@ -433,6 +433,9 @@ std::vector<autoware_planning_msgs::msg::TrajectoryPoint> VadInterface::create_t
   initial_point.time_from_start.nanosec = 0;
   points.push_back(initial_point);
 
+  double prev_x = 0.0;
+  double prev_y = 0.0;
+
   for (size_t i = 0; i < predicted_trajectory.size(); i += 2) {
     autoware_planning_msgs::msg::TrajectoryPoint point;
 
@@ -451,7 +454,10 @@ std::vector<autoware_planning_msgs::msg::TrajectoryPoint> VadInterface::create_t
       point.pose.orientation = createQuaternionFromYaw(0.0);
     }
 
-    point.longitudinal_velocity_mps = 0.0;
+    // 速度を計算（前の点との距離を時間間隔で割る）
+    auto distance = std::hypot(point.pose.position.x - prev_x, point.pose.position.y - prev_y);
+    point.longitudinal_velocity_mps = static_cast<float>(distance / trajectory_timestep);
+    
     point.lateral_velocity_mps = 0.0;
     point.acceleration_mps2 = 0.0;
     point.heading_rate_rps = 0.0;
@@ -461,6 +467,10 @@ std::vector<autoware_planning_msgs::msg::TrajectoryPoint> VadInterface::create_t
     double time_sec = (point_index + 1) * trajectory_timestep;
     point.time_from_start.sec = static_cast<int32_t>(time_sec);
     point.time_from_start.nanosec = static_cast<uint32_t>((time_sec - point.time_from_start.sec) * 1e9);
+
+    // 次の計算のために現在の位置を保存
+    prev_x = point.pose.position.x;
+    prev_y = point.pose.position.y;
 
     points.push_back(point);
   }
