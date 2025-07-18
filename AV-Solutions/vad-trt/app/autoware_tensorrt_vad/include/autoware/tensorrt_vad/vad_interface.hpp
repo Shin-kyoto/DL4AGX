@@ -177,6 +177,11 @@ private:
 
   // Helper function for trajectory conversion
   geometry_msgs::msg::Quaternion createQuaternionFromYaw(double yaw) const;
+  
+  // Helper function for creating trajectory points from predicted trajectory
+  std::vector<autoware_planning_msgs::msg::TrajectoryPoint> create_trajectory_points(
+    const std::vector<float> & predicted_trajectory,
+    double trajectory_timestep) const;
 };
 
 }  // namespace autoware::tensorrt_vad

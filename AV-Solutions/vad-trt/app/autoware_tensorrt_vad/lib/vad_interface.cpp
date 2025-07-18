@@ -413,6 +413,61 @@ geometry_msgs::msg::Quaternion VadInterface::createQuaternionFromYaw(double yaw)
   return q;
 }
 
+std::vector<autoware_planning_msgs::msg::TrajectoryPoint> VadInterface::create_trajectory_points(
+  const std::vector<float> & predicted_trajectory,
+  double trajectory_timestep) const
+{
+  std::vector<autoware_planning_msgs::msg::TrajectoryPoint> points;
+  
+  // 0秒目の点 (0,0) を追加
+  autoware_planning_msgs::msg::TrajectoryPoint initial_point;
+  initial_point.pose.position.x = 0.0;
+  initial_point.pose.position.y = 0.0;
+  initial_point.pose.position.z = 0.0;
+  initial_point.pose.orientation = createQuaternionFromYaw(0.0);
+  initial_point.longitudinal_velocity_mps = 0.0;
+  initial_point.lateral_velocity_mps = 0.0;
+  initial_point.acceleration_mps2 = 0.0;
+  initial_point.heading_rate_rps = 0.0;
+  initial_point.time_from_start.sec = 0;
+  initial_point.time_from_start.nanosec = 0;
+  points.push_back(initial_point);
+
+  for (size_t i = 0; i < predicted_trajectory.size(); i += 2) {
+    autoware_planning_msgs::msg::TrajectoryPoint point;
+
+    point.pose.position.x = predicted_trajectory[i + 1];
+    point.pose.position.y = -predicted_trajectory[i];
+    point.pose.position.z = 0.0;
+
+    if (i + 2 < predicted_trajectory.size()) {
+      float ns_dx = predicted_trajectory[i + 2] - predicted_trajectory[i];
+      float ns_dy = predicted_trajectory[i + 3] - predicted_trajectory[i + 1];
+      float aw_dx = ns_dy;  // Autowareの座標系に変換
+      float aw_dy = -ns_dx; // Autowareの座標系に変換
+      float yaw = std::atan2(aw_dy, aw_dx);
+      point.pose.orientation = createQuaternionFromYaw(yaw);
+    } else {
+      point.pose.orientation = createQuaternionFromYaw(0.0);
+    }
+
+    point.longitudinal_velocity_mps = 0.0;
+    point.lateral_velocity_mps = 0.0;
+    point.acceleration_mps2 = 0.0;
+    point.heading_rate_rps = 0.0;
+
+    // time_from_startを設定（1秒, 2秒, 3秒, 4秒, 5秒, 6秒）
+    size_t point_index = i / 2;
+    double time_sec = (point_index + 1) * trajectory_timestep;
+    point.time_from_start.sec = static_cast<int32_t>(time_sec);
+    point.time_from_start.nanosec = static_cast<uint32_t>((time_sec - point.time_from_start.sec) * 1e9);
+
+    points.push_back(point);
+  }
+
+  return points;
+}
+
 autoware_internal_planning_msgs::msg::CandidateTrajectories VadInterface::process_candidate_trajectories(
   const std::map<int32_t, std::vector<float>> & predicted_trajectories,
   const rclcpp::Time & stamp,
@@ -432,49 +487,7 @@ autoware_internal_planning_msgs::msg::CandidateTrajectories VadInterface::proces
     // generator_idを設定（ユニークなUUID）
     candidate_trajectory.generator_id = autoware_utils_uuid::generate_uuid();
 
-    // 0秒目の点 (0,0) を追加
-    autoware_planning_msgs::msg::TrajectoryPoint initial_point;
-    initial_point.pose.position.x = 0.0;
-    initial_point.pose.position.y = 0.0;
-    initial_point.pose.position.z = 0.0;
-    initial_point.pose.orientation = createQuaternionFromYaw(0.0);
-    initial_point.longitudinal_velocity_mps = 0.0;
-    initial_point.lateral_velocity_mps = 0.0;
-    initial_point.acceleration_mps2 = 0.0;
-    initial_point.heading_rate_rps = 0.0;
-    initial_point.time_from_start.sec = 0;
-    initial_point.time_from_start.nanosec = 0;
-    candidate_trajectory.points.push_back(initial_point);
-
-    for (size_t i = 0; i < trajectory.size(); i += 2) {
-      autoware_planning_msgs::msg::TrajectoryPoint point;
-
-      point.pose.position.x = trajectory[i + 1];
-      point.pose.position.y = -trajectory[i];
-      point.pose.position.z = 0.0;
-
-      if (i + 2 < trajectory.size()) {
-        float ns_dx = trajectory[i + 2] - trajectory[i];
-        float ns_dy = trajectory[i + 3] - trajectory[i + 1];
-        float aw_dx = ns_dy;  // Autowareの座標系に変換
-        float aw_dy = -ns_dx; // Autowareの座標系に変換
-        float yaw = std::atan2(aw_dy, aw_dx);
-        point.pose.orientation = createQuaternionFromYaw(yaw);
-      }
-
-      point.longitudinal_velocity_mps = 0.0;
-      point.lateral_velocity_mps = 0.0;
-      point.acceleration_mps2 = 0.0;
-      point.heading_rate_rps = 0.0;
-
-      // time_from_startを設定（1秒, 2秒, 3秒, 4秒, 5秒, 6秒）
-      size_t point_index = i / 2;
-      double time_sec = (point_index + 1) * trajectory_timestep;
-      point.time_from_start.sec = static_cast<int32_t>(time_sec);
-      point.time_from_start.nanosec = static_cast<uint32_t>((time_sec - point.time_from_start.sec) * 1e9);
-
-      candidate_trajectory.points.push_back(point);
-    }
+    candidate_trajectory.points = create_trajectory_points(trajectory, trajectory_timestep);
 
     candidate_trajectories_msg.candidate_trajectories.push_back(candidate_trajectory);
 
@@ -499,49 +512,7 @@ autoware_planning_msgs::msg::Trajectory VadInterface::process_trajectory(
   trajectory_msg.header.stamp = stamp;
   trajectory_msg.header.frame_id = "base_link";
 
-  // 0秒目の点 (0,0) を追加
-  autoware_planning_msgs::msg::TrajectoryPoint initial_point;
-  initial_point.pose.position.x = 0.0;
-  initial_point.pose.position.y = 0.0;
-  initial_point.pose.position.z = 0.0;
-  initial_point.pose.orientation = createQuaternionFromYaw(0.0);
-  initial_point.longitudinal_velocity_mps = 0.0;
-  initial_point.lateral_velocity_mps = 0.0;
-  initial_point.acceleration_mps2 = 0.0;
-  initial_point.heading_rate_rps = 0.0;
-  initial_point.time_from_start.sec = 0;
-  initial_point.time_from_start.nanosec = 0;
-  trajectory_msg.points.push_back(initial_point);
-
-  for (size_t i = 0; i < predicted_trajectory.size(); i += 2) {
-    autoware_planning_msgs::msg::TrajectoryPoint point;
-
-    point.pose.position.x = predicted_trajectory[i + 1];
-    point.pose.position.y = -predicted_trajectory[i];
-    point.pose.position.z = 0.0;
-
-    if (i + 2 < predicted_trajectory.size()) {
-      float ns_dx = predicted_trajectory[i + 2] - predicted_trajectory[i];
-      float ns_dy = predicted_trajectory[i + 3] - predicted_trajectory[i + 1];
-      float aw_dx = ns_dy;  // Autowareの座標系に変換
-      float aw_dy = -ns_dx; // Autowareの座標系に変換
-      float yaw = std::atan2(aw_dy, aw_dx);
-      point.pose.orientation = createQuaternionFromYaw(yaw);
-    }
-
-    point.longitudinal_velocity_mps = 0.0;
-    point.lateral_velocity_mps = 0.0;
-    point.acceleration_mps2 = 0.0;
-    point.heading_rate_rps = 0.0;
-
-    // time_from_startを設定（1秒, 2秒, 3秒, 4秒, 5秒, 6秒）
-    size_t point_index = i / 2;
-    double time_sec = (point_index + 1) * trajectory_timestep;
-    point.time_from_start.sec = static_cast<int32_t>(time_sec);
-    point.time_from_start.nanosec = static_cast<uint32_t>((time_sec - point.time_from_start.sec) * 1e9);
-
-    trajectory_msg.points.push_back(point);
-  }
+  trajectory_msg.points = create_trajectory_points(predicted_trajectory, trajectory_timestep);
 
   return trajectory_msg;
 }
