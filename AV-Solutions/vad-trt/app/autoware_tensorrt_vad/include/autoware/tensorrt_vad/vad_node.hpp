@@ -64,14 +64,10 @@ private:
   void initializeVadModel();
 
   // Publisher methods
-  void publishTrajectory(const std::vector<float> & planning);
+  void publishTrajectory(const autoware_planning_msgs::msg::Trajectory & trajectory);
   void publishTrajectories(const autoware_internal_planning_msgs::msg::CandidateTrajectories & candidate_trajectories);
 
   // Conversion methods
-  autoware_internal_planning_msgs::msg::CandidateTrajectories convert_candidate_trajectories(const std::map<int32_t, std::vector<float>> & trajectories_map);
-
-  // Helper function
-  geometry_msgs::msg::Quaternion createQuaternionFromYaw(double yaw);
 
   void image_callback(const sensor_msgs::msg::Image::ConstSharedPtr msg, std::size_t camera_id);
   void camera_info_callback(const sensor_msgs::msg::CameraInfo::ConstSharedPtr msg, std::size_t camera_id);
@@ -128,7 +124,7 @@ private:
   static constexpr std::chrono::milliseconds FRAME_TIMEOUT{180}; // 180ms timeout
 
   // 推論を実行するメソッド
-  std::optional<autoware_internal_planning_msgs::msg::CandidateTrajectories> execute_inference(const VadInputTopicData & vad_topic_data);
+  std::optional<VadOutputTopicData> execute_inference(const VadInputTopicData & vad_topic_data);
   void publish(const VadInputTopicData & vad_topic_data);
 };
 }  // namespace autoware::tensorrt_vad

@@ -59,6 +59,24 @@ VadInputData VadInterface::convert_input(const VadInputTopicData & vad_input_top
   return vad_input_data;
 }
 
+VadOutputTopicData VadInterface::convert_output(
+  const VadOutputData & vad_output_data,
+  const rclcpp::Time & stamp,
+  double trajectory_timestep) const
+{
+  VadOutputTopicData output_topic_data;
+
+  // Convert candidate trajectories
+  output_topic_data.candidate_trajectories = process_candidate_trajectories(
+    vad_output_data.predicted_trajectories_, stamp, trajectory_timestep);
+  
+  // Convert trajectory
+  output_topic_data.trajectory = process_trajectory(
+    vad_output_data.predicted_trajectory_, stamp, trajectory_timestep);
+
+  return output_topic_data;
+}
+
 std::optional<Eigen::Matrix4f> VadInterface::lookup_base2cam(tf2_ros::Buffer & buffer, int32_t autoware_camera_id) const
 {
   std::string target_frame = "base_link";
@@ -385,4 +403,147 @@ Eigen::Quaternionf VadInterface::aw2vad_quaternion(const Eigen::Quaternionf & q_
   return q_v2a * q_aw * q_v2a_inv;
 }
 
-}  // namespace autoware::tensorrt_vad
+geometry_msgs::msg::Quaternion VadInterface::createQuaternionFromYaw(double yaw) const
+{
+  geometry_msgs::msg::Quaternion q{};
+  q.x = 0.0;
+  q.y = 0.0;
+  q.z = std::sin(yaw * 0.5);
+  q.w = std::cos(yaw * 0.5);
+  return q;
+}
+
+autoware_internal_planning_msgs::msg::CandidateTrajectories VadInterface::process_candidate_trajectories(
+  const std::map<int32_t, std::vector<float>> & predicted_trajectories,
+  const rclcpp::Time & stamp,
+  double trajectory_timestep) const
+{
+  // CandidateTrajectories メッセージを作成
+  autoware_internal_planning_msgs::msg::CandidateTrajectories candidate_trajectories_msg;
+
+  // 各コマンドの軌道をCandidateTrajectoryとして追加
+  for (const auto& [command_idx, trajectory] : predicted_trajectories) {
+    autoware_internal_planning_msgs::msg::CandidateTrajectory candidate_trajectory;
+    
+    // ヘッダーを設定
+    candidate_trajectory.header.stamp = stamp;
+    candidate_trajectory.header.frame_id = "base_link";
+    
+    // generator_idを設定（ユニークなUUID）
+    candidate_trajectory.generator_id = autoware_utils_uuid::generate_uuid();
+
+    // 0秒目の点 (0,0) を追加
+    autoware_planning_msgs::msg::TrajectoryPoint initial_point;
+    initial_point.pose.position.x = 0.0;
+    initial_point.pose.position.y = 0.0;
+    initial_point.pose.position.z = 0.0;
+    initial_point.pose.orientation = createQuaternionFromYaw(0.0);
+    initial_point.longitudinal_velocity_mps = 0.0;
+    initial_point.lateral_velocity_mps = 0.0;
+    initial_point.acceleration_mps2 = 0.0;
+    initial_point.heading_rate_rps = 0.0;
+    initial_point.time_from_start.sec = 0;
+    initial_point.time_from_start.nanosec = 0;
+    candidate_trajectory.points.push_back(initial_point);
+
+    for (size_t i = 0; i < trajectory.size(); i += 2) {
+      autoware_planning_msgs::msg::TrajectoryPoint point;
+
+      point.pose.position.x = trajectory[i + 1];
+      point.pose.position.y = -trajectory[i];
+      point.pose.position.z = 0.0;
+
+      if (i + 2 < trajectory.size()) {
+        float ns_dx = trajectory[i + 2] - trajectory[i];
+        float ns_dy = trajectory[i + 3] - trajectory[i + 1];
+        float aw_dx = ns_dy;  // Autowareの座標系に変換
+        float aw_dy = -ns_dx; // Autowareの座標系に変換
+        float yaw = std::atan2(aw_dy, aw_dx);
+        point.pose.orientation = createQuaternionFromYaw(yaw);
+      }
+
+      point.longitudinal_velocity_mps = 0.0;
+      point.lateral_velocity_mps = 0.0;
+      point.acceleration_mps2 = 0.0;
+      point.heading_rate_rps = 0.0;
+
+      // time_from_startを設定（1秒, 2秒, 3秒, 4秒, 5秒, 6秒）
+      size_t point_index = i / 2;
+      double time_sec = (point_index + 1) * trajectory_timestep;
+      point.time_from_start.sec = static_cast<int32_t>(time_sec);
+      point.time_from_start.nanosec = static_cast<uint32_t>((time_sec - point.time_from_start.sec) * 1e9);
+
+      candidate_trajectory.points.push_back(point);
+    }
+
+    candidate_trajectories_msg.candidate_trajectories.push_back(candidate_trajectory);
+
+    // 各コマンドのGeneratorInfoを追加
+    autoware_internal_planning_msgs::msg::GeneratorInfo generator_info;
+    generator_info.generator_id = autoware_utils_uuid::generate_uuid();
+    generator_info.generator_name.data = "autoware_tensorrt_vad_cmd_" + std::to_string(command_idx);
+    candidate_trajectories_msg.generator_info.push_back(generator_info);
+  }
+
+  return candidate_trajectories_msg;
+}
+
+autoware_planning_msgs::msg::Trajectory VadInterface::process_trajectory(
+  const std::vector<float> & predicted_trajectory,
+  const rclcpp::Time & stamp,
+  double trajectory_timestep) const
+{
+  autoware_planning_msgs::msg::Trajectory trajectory_msg;
+
+  // ヘッダーを設定
+  trajectory_msg.header.stamp = stamp;
+  trajectory_msg.header.frame_id = "base_link";
+
+  // 0秒目の点 (0,0) を追加
+  autoware_planning_msgs::msg::TrajectoryPoint initial_point;
+  initial_point.pose.position.x = 0.0;
+  initial_point.pose.position.y = 0.0;
+  initial_point.pose.position.z = 0.0;
+  initial_point.pose.orientation = createQuaternionFromYaw(0.0);
+  initial_point.longitudinal_velocity_mps = 0.0;
+  initial_point.lateral_velocity_mps = 0.0;
+  initial_point.acceleration_mps2 = 0.0;
+  initial_point.heading_rate_rps = 0.0;
+  initial_point.time_from_start.sec = 0;
+  initial_point.time_from_start.nanosec = 0;
+  trajectory_msg.points.push_back(initial_point);
+
+  for (size_t i = 0; i < predicted_trajectory.size(); i += 2) {
+    autoware_planning_msgs::msg::TrajectoryPoint point;
+
+    point.pose.position.x = predicted_trajectory[i + 1];
+    point.pose.position.y = -predicted_trajectory[i];
+    point.pose.position.z = 0.0;
+
+    if (i + 2 < predicted_trajectory.size()) {
+      float ns_dx = predicted_trajectory[i + 2] - predicted_trajectory[i];
+      float ns_dy = predicted_trajectory[i + 3] - predicted_trajectory[i + 1];
+      float aw_dx = ns_dy;  // Autowareの座標系に変換
+      float aw_dy = -ns_dx; // Autowareの座標系に変換
+      float yaw = std::atan2(aw_dy, aw_dx);
+      point.pose.orientation = createQuaternionFromYaw(yaw);
+    }
+
+    point.longitudinal_velocity_mps = 0.0;
+    point.lateral_velocity_mps = 0.0;
+    point.acceleration_mps2 = 0.0;
+    point.heading_rate_rps = 0.0;
+
+    // time_from_startを設定（1秒, 2秒, 3秒, 4秒, 5秒, 6秒）
+    size_t point_index = i / 2;
+    double time_sec = (point_index + 1) * trajectory_timestep;
+    point.time_from_start.sec = static_cast<int32_t>(time_sec);
+    point.time_from_start.nanosec = static_cast<uint32_t>((time_sec - point.time_from_start.sec) * 1e9);
+
+    trajectory_msg.points.push_back(point);
+  }
+
+  return trajectory_msg;
+}
+
+} // namespace autoware::tensorrt_vad

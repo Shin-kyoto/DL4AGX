@@ -369,186 +369,42 @@ void VadNode::loadNetConfigs()
   vad_config_.nets_config.push_back(head_no_prev_config);
 }
 
-geometry_msgs::msg::Quaternion VadNode::createQuaternionFromYaw(double yaw)
-{
-  geometry_msgs::msg::Quaternion q{};
-  q.x = 0.0;
-  q.y = 0.0;
-  q.z = std::sin(yaw * 0.5);
-  q.w = std::cos(yaw * 0.5);
-  return q;
-}
-
-void VadNode::publishTrajectory(const std::vector<float> &planning)
-{
-  auto trajectory_msg =
-      std::make_unique<autoware_planning_msgs::msg::Trajectory>();
-
-  // 0秒目の点 (0,0) を追加
-  autoware_planning_msgs::msg::TrajectoryPoint initial_point;
-  initial_point.pose.position.x = 0.0;
-  initial_point.pose.position.y = 0.0;
-  initial_point.pose.position.z = 0.0;
-  initial_point.pose.orientation = createQuaternionFromYaw(0.0);
-  initial_point.longitudinal_velocity_mps = 0.0;
-  initial_point.lateral_velocity_mps = 0.0;
-  initial_point.acceleration_mps2 = 0.0;
-  initial_point.heading_rate_rps = 0.0;
-  initial_point.time_from_start.sec = 0;
-  initial_point.time_from_start.nanosec = 0;
-  trajectory_msg->points.push_back(initial_point);
-
-  for (size_t i = 0; i < planning.size(); i += 2) {
-    autoware_planning_msgs::msg::TrajectoryPoint point;
-
-    point.pose.position.x = planning[i + 1];
-    point.pose.position.y = -planning[i];
-    point.pose.position.z = 0.0;
-
-    if (i + 2 < planning.size()) {
-      float ns_dx = planning[i + 2] - planning[i];
-      float ns_dy = planning[i + 3] - planning[i + 1];
-      float aw_dx = ns_dy;  // Autowareの座標系に変換
-      float aw_dy = -ns_dx; // Autowareの座標系に変換
-      float yaw = std::atan2(aw_dy, aw_dx);
-      point.pose.orientation = createQuaternionFromYaw(yaw);
-    }
-
-    point.longitudinal_velocity_mps = 0.0;
-    point.lateral_velocity_mps = 0.0;
-    point.acceleration_mps2 = 0.0;
-    point.heading_rate_rps = 0.0;
-
-    // time_from_startを設定（1秒, 2秒, 3秒, 4秒, 5秒, 6秒）
-    size_t point_index = i / 2;
-    double time_sec = (point_index + 1) * trajectory_timestep_;
-    point.time_from_start.sec = static_cast<int32_t>(time_sec);
-    point.time_from_start.nanosec = static_cast<uint32_t>((time_sec - point.time_from_start.sec) * 1e9);
-
-    trajectory_msg->points.push_back(point);
-  }
-
-  trajectory_msg->header.stamp = this->now();
-  trajectory_msg->header.frame_id = "base_link";
-
-  trajectory_publisher_->publish(std::move(trajectory_msg));
-}
-
-autoware_internal_planning_msgs::msg::CandidateTrajectories VadNode::convert_candidate_trajectories(const std::map<int32_t, std::vector<float>> &trajectories_map)
-{
-  // CandidateTrajectories メッセージを作成
-  autoware_internal_planning_msgs::msg::CandidateTrajectories candidate_trajectories_msg;
-
-  // 各コマンドの軌道をCandidateTrajectoryとして追加
-  for (const auto& [command_idx, trajectory] : trajectories_map) {
-    autoware_internal_planning_msgs::msg::CandidateTrajectory candidate_trajectory;
-    
-    // ヘッダーを設定
-    candidate_trajectory.header.stamp = this->now();
-    candidate_trajectory.header.frame_id = "base_link";
-    
-    // generator_idを設定（ユニークなUUID）
-    candidate_trajectory.generator_id = autoware_utils_uuid::generate_uuid();
-
-    // 0秒目の点 (0,0) を追加
-    autoware_planning_msgs::msg::TrajectoryPoint initial_point;
-    initial_point.pose.position.x = 0.0;
-    initial_point.pose.position.y = 0.0;
-    initial_point.pose.position.z = 0.0;
-    initial_point.pose.orientation = createQuaternionFromYaw(0.0);
-    initial_point.longitudinal_velocity_mps = 0.0;
-    initial_point.lateral_velocity_mps = 0.0;
-    initial_point.acceleration_mps2 = 0.0;
-    initial_point.heading_rate_rps = 0.0;
-    initial_point.time_from_start.sec = 0;
-    initial_point.time_from_start.nanosec = 0;
-    candidate_trajectory.points.push_back(initial_point);
-
-    for (size_t i = 0; i < trajectory.size(); i += 2) {
-      autoware_planning_msgs::msg::TrajectoryPoint point;
-
-      point.pose.position.x = trajectory[i + 1];
-      point.pose.position.y = -trajectory[i];
-      point.pose.position.z = 0.0;
-
-      if (i + 2 < trajectory.size()) {
-        float ns_dx = trajectory[i + 2] - trajectory[i];
-        float ns_dy = trajectory[i + 3] - trajectory[i + 1];
-        float aw_dx = ns_dy;  // Autowareの座標系に変換
-        float aw_dy = -ns_dx; // Autowareの座標系に変換
-        float yaw = std::atan2(aw_dy, aw_dx);
-        point.pose.orientation = createQuaternionFromYaw(yaw);
-      }
-
-      point.longitudinal_velocity_mps = 0.0;
-      point.lateral_velocity_mps = 0.0;
-      point.acceleration_mps2 = 0.0;
-      point.heading_rate_rps = 0.0;
-
-      // time_from_startを設定（1秒, 2秒, 3秒, 4秒, 5秒, 6秒）
-      size_t point_index = i / 2;
-      double time_sec = (point_index + 1) * trajectory_timestep_;
-      point.time_from_start.sec = static_cast<int32_t>(time_sec);
-      point.time_from_start.nanosec = static_cast<uint32_t>((time_sec - point.time_from_start.sec) * 1e9);
-
-      candidate_trajectory.points.push_back(point);
-    }
-
-    candidate_trajectories_msg.candidate_trajectories.push_back(candidate_trajectory);
-
-    // 各コマンドのGeneratorInfoを追加
-    autoware_internal_planning_msgs::msg::GeneratorInfo generator_info;
-    generator_info.generator_id = autoware_utils_uuid::generate_uuid();
-    generator_info.generator_name.data = "autoware_tensorrt_vad_cmd_" + std::to_string(command_idx);
-    candidate_trajectories_msg.generator_info.push_back(generator_info);
-  }
-
-  return candidate_trajectories_msg;
-}
-
 void VadNode::publishTrajectories(const autoware_internal_planning_msgs::msg::CandidateTrajectories & candidate_trajectories)
 {
   auto candidate_trajectories_msg = std::make_unique<autoware_internal_planning_msgs::msg::CandidateTrajectories>(candidate_trajectories);
   candidate_trajectories_publisher_->publish(std::move(candidate_trajectories_msg));
 }
 
-std::optional<autoware_internal_planning_msgs::msg::CandidateTrajectories> VadNode::execute_inference(const VadInputTopicData & vad_topic_data)
+void VadNode::publishTrajectory(const autoware_planning_msgs::msg::Trajectory & trajectory)
+{
+  auto trajectory_msg = std::make_unique<autoware_planning_msgs::msg::Trajectory>(trajectory);
+  trajectory_publisher_->publish(std::move(trajectory_msg));
+}
+
+std::optional<VadOutputTopicData> VadNode::execute_inference(const VadInputTopicData & vad_topic_data)
 {
   if (!vad_interface_ptr_ || !vad_model_ptr_) {
     RCLCPP_ERROR(this->get_logger(), "VAD interface or model not initialized");
     return std::nullopt;
   }
 
-  try {
-    // VadInterfaceを通じてVadInputDataに変換
-    // scalingされた状態の画像を含む
-    const auto vad_input = vad_interface_ptr_->convert_input(vad_topic_data, prev_can_bus_);
+  // VadInterfaceを通じてVadInputDataに変換
+  // scalingされた状態の画像を含む
+  const auto vad_input = vad_interface_ptr_->convert_input(vad_topic_data, prev_can_bus_);
 
-    // VadModelで推論実行
-    const auto vad_output = vad_model_ptr_->infer(vad_input);
+  // VadModelで推論実行
+  const auto vad_output = vad_model_ptr_->infer(vad_input);
 
-    // VadInterfaceを通じてROS型に変換
-    if (vad_output.has_value()) {
-      // Update prev_can_bus for next frame
-      prev_can_bus_ = vad_input.can_bus_;
+  // VadInterfaceを通じてROS型に変換
+  if (vad_output.has_value()) {
+    const auto vad_output_topic_data = vad_interface_ptr_->convert_output(
+      *vad_output, this->now(), trajectory_timestep_);
 
-      // Publish individual trajectory if available
-      if (!vad_output->predicted_trajectory_.empty()) {
-        publishTrajectory(vad_output->predicted_trajectory_);
-      }
+    // Update prev_can_bus for next frame
+    prev_can_bus_ = vad_input.can_bus_;
 
-      // Convert candidate trajectories if available
-      if (!vad_output->predicted_trajectories_.empty()) {
-        auto candidate_trajectories_msg = convert_candidate_trajectories(vad_output->predicted_trajectories_);
-        return std::optional<autoware_internal_planning_msgs::msg::CandidateTrajectories>(candidate_trajectories_msg);
-      }
-
-      // Return empty message if no trajectories available
-      auto candidate_trajectories_msg = autoware_internal_planning_msgs::msg::CandidateTrajectories();
-      return std::optional<autoware_internal_planning_msgs::msg::CandidateTrajectories>(candidate_trajectories_msg);
-    }
-  } catch (const std::exception& e) {
-    RCLCPP_ERROR(this->get_logger(), "Error during inference: %s", e.what());
+    // Return VadOutputTopicData
+    return vad_output_topic_data;
   }
 
   return std::nullopt;
@@ -556,19 +412,21 @@ std::optional<autoware_internal_planning_msgs::msg::CandidateTrajectories> VadNo
 
 void VadNode::publish(const VadInputTopicData & vad_topic_data)
 {
-  try {
-    // VAD推論を実行
-    const auto candidate_trajectories_msg = execute_inference(vad_topic_data);
 
-    // 結果をパブリッシュ
-    if (candidate_trajectories_msg.has_value()) {
-      publishTrajectories(candidate_trajectories_msg.value());
-      RCLCPP_DEBUG(this->get_logger(), "Published candidate trajectories");
-    } else {
-      RCLCPP_WARN(this->get_logger(), "No valid trajectories to publish");
-    }
-  } catch (const std::exception& e) {
-    RCLCPP_ERROR(this->get_logger(), "Error in publish method: %s", e.what());
+  // VAD推論を実行
+  const auto vad_output_topic_data = execute_inference(vad_topic_data);
+
+  // 結果をパブリッシュ
+  if (vad_output_topic_data.has_value()) {
+    // Publish individual trajectory using the dedicated method
+    publishTrajectory(vad_output_topic_data.value().trajectory);
+
+    // Publish candidate trajectories
+    publishTrajectories(vad_output_topic_data.value().candidate_trajectories);
+
+    RCLCPP_DEBUG(this->get_logger(), "Published trajectories and candidate trajectories");
+  } else {
+    RCLCPP_WARN(this->get_logger(), "No valid trajectories to publish");
   }
 }
 

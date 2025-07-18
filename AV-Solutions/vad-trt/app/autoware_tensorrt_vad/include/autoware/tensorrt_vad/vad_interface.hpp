@@ -20,6 +20,8 @@
 #include <unordered_map>
 #include <optional>
 #include <tuple>
+#include <map>
+#include <cmath>
 
 #include "vad_interface_config.hpp"
 
@@ -31,6 +33,13 @@
 #include "tf2_msgs/msg/tf_message.hpp"
 #include "tf2_ros/buffer.h"
 #include <tf2_eigen/tf2_eigen.hpp>
+#include "autoware_internal_planning_msgs/msg/candidate_trajectories.hpp"
+#include "autoware_internal_planning_msgs/msg/candidate_trajectory.hpp"
+#include "autoware_internal_planning_msgs/msg/generator_info.hpp"
+#include "autoware_planning_msgs/msg/trajectory.hpp"
+#include "autoware_planning_msgs/msg/trajectory_point.hpp"
+#include "autoware_utils_uuid/uuid_helper.hpp"
+#include "geometry_msgs/msg/quaternion.hpp"
 
 #include "vad_model.hpp" 
 
@@ -73,6 +82,13 @@ struct VadInputTopicData
   }
 };
 
+struct VadOutputTopicData
+{
+  autoware_internal_planning_msgs::msg::CandidateTrajectories candidate_trajectories;
+  autoware_planning_msgs::msg::Trajectory trajectory;
+  // autoware_perception_msgs::msg::DetectedObjects objects;
+};
+
 // 各process_*メソッドの戻り値となるデータ構造
 using CameraImagesData = std::vector<float>;
 using ShiftData = std::vector<float>;
@@ -90,6 +106,22 @@ public:
                         std::shared_ptr<tf2_ros::Buffer> tf_buffer);
 
   VadInputData convert_input(const VadInputTopicData & vad_input_topic_data, const std::vector<float> & prev_can_bus = {});
+  VadOutputTopicData convert_output(
+    const VadOutputData & vad_output_data, 
+    const rclcpp::Time & stamp,
+    double trajectory_timestep) const;
+
+  // Conversion methods for trajectories
+  autoware_internal_planning_msgs::msg::CandidateTrajectories process_candidate_trajectories(
+    const std::map<int32_t, std::vector<float>> & predicted_trajectories,
+    const rclcpp::Time & stamp,
+    double trajectory_timestep) const;
+  
+  autoware_planning_msgs::msg::Trajectory process_trajectory(
+    const std::vector<float> & predicted_trajectory,
+    const rclcpp::Time & stamp,
+    double trajectory_timestep) const;
+
   Lidar2ImgData process_lidar2img(
     const tf2_msgs::msg::TFMessage::ConstSharedPtr & tf_static,
     const std::vector<sensor_msgs::msg::CameraInfo::ConstSharedPtr> & camera_infos,
@@ -142,6 +174,9 @@ private:
 
   std::tuple<float, float, float> aw2vad_xyz(float aw_x, float aw_y, float aw_z) const;
   Eigen::Quaternionf aw2vad_quaternion(const Eigen::Quaternionf & q_aw) const;
+
+  // Helper function for trajectory conversion
+  geometry_msgs::msg::Quaternion createQuaternionFromYaw(double yaw) const;
 };
 
 }  // namespace autoware::tensorrt_vad
