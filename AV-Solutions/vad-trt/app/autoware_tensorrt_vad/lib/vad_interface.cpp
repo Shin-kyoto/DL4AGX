@@ -399,6 +399,14 @@ std::tuple<float, float, float> VadInterface::aw2vad_xyz(float aw_x, float aw_y,
   return {vad_xyz[0], vad_xyz[1], vad_xyz[2]};
 }
 
+std::tuple<float, float, float> VadInterface::vad2aw_xyz(float vad_x, float vad_y, float vad_z) const
+{
+  // VAD base_link座標[x, y, z]をAutoware(base_link)座標に変換
+  Eigen::Vector4f vad_xyz(vad_x, vad_y, vad_z, 1.0f);
+  Eigen::Vector4f aw_xyz = vad2base_ * vad_xyz;
+  return {aw_xyz[0], aw_xyz[1], aw_xyz[2]};
+}
+
 Eigen::Quaternionf VadInterface::aw2vad_quaternion(const Eigen::Quaternionf & q_aw) const
 {
   // base2vad_の回転部分をクォータニオンに変換
@@ -450,10 +458,9 @@ std::vector<autoware_planning_msgs::msg::TrajectoryPoint> VadInterface::create_t
     point.pose.position.z = 0.0;
 
     if (i + 2 < predicted_trajectory.size()) {
-      float ns_dx = predicted_trajectory[i + 2] - predicted_trajectory[i];
-      float ns_dy = predicted_trajectory[i + 3] - predicted_trajectory[i + 1];
-      float aw_dx = ns_dy;  // Autowareの座標系に変換
-      float aw_dy = -ns_dx; // Autowareの座標系に変換
+      float vad_dx = predicted_trajectory[i + 2] - predicted_trajectory[i];
+      float vad_dy = predicted_trajectory[i + 3] - predicted_trajectory[i + 1];
+      auto [aw_dx, aw_dy, aw_dz] = vad2aw_xyz(vad_dx, vad_dy, 0.0f);
       float yaw = std::atan2(aw_dy, aw_dx);
       point.pose.orientation = createQuaternionFromYaw(yaw);
     } else {

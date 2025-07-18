@@ -176,6 +176,7 @@ private:
     const std::vector<float> & prev_can_bus) const;
 
   std::tuple<float, float, float> aw2vad_xyz(float aw_x, float aw_y, float aw_z) const;
+  std::tuple<float, float, float> vad2aw_xyz(float vad_x, float vad_y, float vad_z) const;
   Eigen::Quaternionf aw2vad_quaternion(const Eigen::Quaternionf & q_aw) const;
 
   // Calculate current longitudinal velocity from can_bus data
