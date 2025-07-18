@@ -154,6 +154,9 @@ private:
   Eigen::Matrix4f vad2base_;
   Eigen::Matrix4f base2vad_;
   std::unordered_map<int32_t, int32_t> autoware_to_vad_camera_mapping_;
+  
+  // Current longitudinal velocity for trajectory initial point
+  float current_longitudinal_velocity_mps_;
 
   // --- 内部処理関数 ---
   std::optional<Eigen::Matrix4f> lookup_base2cam(tf2_ros::Buffer & buffer, int32_t autoware_camera_id) const;
@@ -174,6 +177,12 @@ private:
 
   std::tuple<float, float, float> aw2vad_xyz(float aw_x, float aw_y, float aw_z) const;
   Eigen::Quaternionf aw2vad_quaternion(const Eigen::Quaternionf & q_aw) const;
+
+  // Calculate current longitudinal velocity from can_bus data
+  float calculate_current_longitudinal_velocity(
+    const std::vector<float> & can_bus,
+    const std::vector<float> & prev_can_bus,
+    double node_timestep) const;
 
   // Helper function for trajectory conversion
   geometry_msgs::msg::Quaternion createQuaternionFromYaw(double yaw) const;

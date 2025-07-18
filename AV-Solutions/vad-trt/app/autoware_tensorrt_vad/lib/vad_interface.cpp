@@ -22,7 +22,8 @@ VadInterface::VadInterface(const VadInterfaceConfig& config, std::shared_ptr<tf2
     image_normalization_param_mean_(config.image_normalization_param_mean),
     image_normalization_param_std_(config.image_normalization_param_std),
     vad2base_(config.vad2base),
-    base2vad_(config.base2vad)
+    base2vad_(config.base2vad),
+    current_longitudinal_velocity_mps_(0.0f)
 {
   // AutowareカメラインデックスからVADカメラインデックスへのマッピング
   autoware_to_vad_camera_mapping_ = config.autoware_to_vad_camera_mapping;
@@ -49,6 +50,11 @@ VadInputData VadInterface::convert_input(const VadInputTopicData & vad_input_top
     prev_can_bus
   );
   vad_input_data.shift_ = process_shift(vad_input_data.can_bus_, prev_can_bus);
+  
+  // Calculate current longitudinal velocity (node_timestep = 100ms = 0.1s)
+  constexpr double node_timestep = 0.1;
+  current_longitudinal_velocity_mps_ = calculate_current_longitudinal_velocity(
+    vad_input_data.can_bus_, prev_can_bus, node_timestep);
   
   // Process image data
   vad_input_data.camera_images_ = process_image(vad_input_topic_data.images);
@@ -425,7 +431,7 @@ std::vector<autoware_planning_msgs::msg::TrajectoryPoint> VadInterface::create_t
   initial_point.pose.position.y = 0.0;
   initial_point.pose.position.z = 0.0;
   initial_point.pose.orientation = createQuaternionFromYaw(0.0);
-  initial_point.longitudinal_velocity_mps = 0.0;
+  initial_point.longitudinal_velocity_mps = current_longitudinal_velocity_mps_;
   initial_point.lateral_velocity_mps = 0.0;
   initial_point.acceleration_mps2 = 0.0;
   initial_point.heading_rate_rps = 0.0;
@@ -525,6 +531,28 @@ autoware_planning_msgs::msg::Trajectory VadInterface::process_trajectory(
   trajectory_msg.points = create_trajectory_points(predicted_trajectory, trajectory_timestep);
 
   return trajectory_msg;
+}
+
+float VadInterface::calculate_current_longitudinal_velocity(
+  const std::vector<float> & can_bus,
+  const std::vector<float> & prev_can_bus,
+  double node_timestep) const
+{
+  if (prev_can_bus.empty() || can_bus.size() < 3 || prev_can_bus.size() < 3) {
+    return 0.0f; // 前フレームのデータがない場合は0を返す
+  }
+
+  // can_busの位置データから速度を計算 (位置: indices 0, 1)
+  float delta_x = can_bus[0] - prev_can_bus[0];  // x方向の変位
+  float delta_y = can_bus[1] - prev_can_bus[1];  // y方向の変位
+
+  // 3次元での移動距離を計算
+  float distance = std::sqrt(delta_x * delta_x + delta_y * delta_y);
+
+  // 速度 = 距離 / 時間
+  float velocity = distance / static_cast<float>(node_timestep);
+  
+  return velocity;
 }
 
 } // namespace autoware::tensorrt_vad
