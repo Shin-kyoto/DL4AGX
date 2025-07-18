@@ -286,19 +286,15 @@ void VadNode::reset_current_frame()
 
 void VadNode::initializeVadModel()
 {
-  try {
-    // Initialize VAD interface and model
-    auto tf_buffer_shared = std::shared_ptr<tf2_ros::Buffer>(&tf_buffer_, [](tf2_ros::Buffer*){});
-    vad_interface_ptr_ = std::make_unique<VadInterface>(vad_interface_config_, tf_buffer_shared);
-    
-    // Create RosVadLogger using the logger
-    auto ros_logger = std::make_shared<RosVadLogger>(this->get_logger());
-    vad_model_ptr_ = std::make_unique<VadModel<RosVadLogger>>(vad_config_, ros_logger);
-    
-    RCLCPP_INFO(this->get_logger(), "VAD model and interface initialized successfully");
-  } catch (const std::exception& e) {
-    RCLCPP_ERROR(this->get_logger(), "Failed to initialize VAD model: %s", e.what());
-  }
+  // Initialize VAD interface and model
+  auto tf_buffer_shared = std::shared_ptr<tf2_ros::Buffer>(&tf_buffer_, [](tf2_ros::Buffer*){});
+  vad_interface_ptr_ = std::make_unique<VadInterface>(vad_interface_config_, tf_buffer_shared);
+
+  // Create RosVadLogger using the logger
+  auto ros_logger = std::make_shared<RosVadLogger>(this->get_logger());
+  vad_model_ptr_ = std::make_unique<VadModel<RosVadLogger>>(vad_config_, ros_logger);
+
+  RCLCPP_INFO(this->get_logger(), "VAD model and interface initialized successfully");
 }
 
 void VadNode::loadVadConfig()
