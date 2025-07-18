@@ -417,7 +417,7 @@ Eigen::Quaternionf VadInterface::aw2vad_quaternion(const Eigen::Quaternionf & q_
   return q_v2a * q_aw * q_v2a_inv;
 }
 
-geometry_msgs::msg::Quaternion VadInterface::createQuaternionFromYaw(double yaw) const
+geometry_msgs::msg::Quaternion VadInterface::create_quaternion_from_yaw(double yaw) const
 {
   geometry_msgs::msg::Quaternion q{};
   q.x = 0.0;
@@ -438,7 +438,7 @@ std::vector<autoware_planning_msgs::msg::TrajectoryPoint> VadInterface::create_t
   initial_point.pose.position.x = 0.0;
   initial_point.pose.position.y = 0.0;
   initial_point.pose.position.z = 0.0;
-  initial_point.pose.orientation = createQuaternionFromYaw(0.0);
+  initial_point.pose.orientation = create_quaternion_from_yaw(0.0);
   initial_point.longitudinal_velocity_mps = current_longitudinal_velocity_mps_;
   initial_point.lateral_velocity_mps = 0.0;
   initial_point.acceleration_mps2 = 0.0;
@@ -462,9 +462,9 @@ std::vector<autoware_planning_msgs::msg::TrajectoryPoint> VadInterface::create_t
       float vad_dy = predicted_trajectory[i + 3] - predicted_trajectory[i + 1];
       auto [aw_dx, aw_dy, aw_dz] = vad2aw_xyz(vad_dx, vad_dy, 0.0f);
       float yaw = std::atan2(aw_dy, aw_dx);
-      point.pose.orientation = createQuaternionFromYaw(yaw);
+      point.pose.orientation = create_quaternion_from_yaw(yaw);
     } else {
-      point.pose.orientation = createQuaternionFromYaw(0.0);
+      point.pose.orientation = create_quaternion_from_yaw(0.0);
     }
 
     // 速度を計算（前の点との距離を時間間隔で割る）

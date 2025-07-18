@@ -59,13 +59,13 @@ public:
 
 private:
   // Config loading function
-  void loadVadConfig();
-  void loadNetConfigs();
-  void initializeVadModel();
+  void load_vad_config();
+  void load_net_configs();
+  void initialize_vad_model();
 
   // Publisher methods
-  void publishTrajectory(const autoware_planning_msgs::msg::Trajectory & trajectory);
-  void publishTrajectories(const autoware_internal_planning_msgs::msg::CandidateTrajectories & candidate_trajectories);
+  void publish_trajectory(const autoware_planning_msgs::msg::Trajectory & trajectory);
+  void publish_trajectories(const autoware_internal_planning_msgs::msg::CandidateTrajectories & candidate_trajectories);
 
   // Conversion methods
 

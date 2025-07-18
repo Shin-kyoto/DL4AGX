@@ -200,7 +200,7 @@ public:
     }
 
     // VadConfigを読み込み
-    loadVadConfig();
+    load_vad_config();
 
     RCLCPP_INFO(this->get_logger(), "VAD Node has been initialized");
   }
@@ -210,7 +210,7 @@ public:
     return vad_config_;
   }
 
-  void publishTrajectory(const std::vector<float> &planning) {
+  void publish_trajectory(const std::vector<float> &planning) {
     auto trajectory_msg =
         std::make_unique<autoware_planning_msgs::msg::Trajectory>();
 
@@ -219,7 +219,7 @@ public:
     initial_point.pose.position.x = 0.0;
     initial_point.pose.position.y = 0.0;
     initial_point.pose.position.z = 0.0;
-    initial_point.pose.orientation = createQuaternionFromYaw(0.0);
+    initial_point.pose.orientation = create_quaternion_from_yaw(0.0);
     initial_point.longitudinal_velocity_mps = 0.0;
     initial_point.lateral_velocity_mps = 0.0;
     initial_point.acceleration_mps2 = 0.0;
@@ -241,7 +241,7 @@ public:
         float aw_dx = ns_dy;  // Autowareの座標系に変換
         float aw_dy = -ns_dx; // Autowareの座標系に変換
         float yaw = std::atan2(aw_dy, aw_dx);
-        point.pose.orientation = createQuaternionFromYaw(yaw);
+        point.pose.orientation = create_quaternion_from_yaw(yaw);
       }
 
       point.longitudinal_velocity_mps = 0.0;
@@ -264,7 +264,7 @@ public:
     trajectory_publisher_->publish(std::move(trajectory_msg));
   }
 
-  void publishTrajectories(const std::map<int32_t, std::vector<float>> &trajectories_map) {
+  void publish_trajectories(const std::map<int32_t, std::vector<float>> &trajectories_map) {
     // CandidateTrajectories メッセージを作成
     auto candidate_trajectories_msg =
         std::make_unique<autoware_internal_planning_msgs::msg::CandidateTrajectories>();
@@ -285,7 +285,7 @@ public:
       initial_point.pose.position.x = 0.0;
       initial_point.pose.position.y = 0.0;
       initial_point.pose.position.z = 0.0;
-      initial_point.pose.orientation = createQuaternionFromYaw(0.0);
+      initial_point.pose.orientation = create_quaternion_from_yaw(0.0);
       initial_point.longitudinal_velocity_mps = 0.0;
       initial_point.lateral_velocity_mps = 0.0;
       initial_point.acceleration_mps2 = 0.0;
@@ -307,7 +307,7 @@ public:
           float aw_dx = ns_dy;  // Autowareの座標系に変換
           float aw_dy = -ns_dx; // Autowareの座標系に変換
           float yaw = std::atan2(aw_dy, aw_dx);
-          point.pose.orientation = createQuaternionFromYaw(yaw);
+          point.pose.orientation = create_quaternion_from_yaw(yaw);
         }
 
         point.longitudinal_velocity_mps = 0.0;
@@ -352,7 +352,7 @@ public:
       object.kinematics.pose_with_covariance.pose.position.z = det[2];
 
       object.kinematics.pose_with_covariance.pose.orientation =
-          createQuaternionFromYaw(det[6]);
+          create_quaternion_from_yaw(det[6]);
 
       object.shape.dimensions.x = det[3]; // width
       object.shape.dimensions.y = det[4]; // length
@@ -402,7 +402,7 @@ private:
     return node_options;
   }
 
-  void loadVadConfig() {
+  void load_vad_config() {
     // このノード自体からパラメータを読み込み
     vad_config_.plugins_path =
         this->declare_parameter<std::string>("model_params.plugins_path", "");
@@ -410,10 +410,10 @@ private:
         this->declare_parameter<int>("model_params.warm_up_num", 20);
 
     // ネットワーク設定の読み込み
-    loadNetConfigs();
+    load_net_configs();
   }
 
-  void loadNetConfigs() {
+  void load_net_configs() {
     // 階層構造でネットワーク設定を読み込み
 
     // backbone設定
@@ -477,7 +477,7 @@ private:
                  camera_index);
   }
 
-  geometry_msgs::msg::Quaternion createQuaternionFromYaw(double yaw) {
+  geometry_msgs::msg::Quaternion create_quaternion_from_yaw(double yaw) {
     geometry_msgs::msg::Quaternion q;
     q.x = 0.0;
     q.y = 0.0;
@@ -798,10 +798,10 @@ int main(int argc, char **argv) {
 
     // pred -> frame.planning
     frame.planning = vad_output_data.predicted_trajectory_;
-    node->publishTrajectory(frame.planning);
+    node->publish_trajectory(frame.planning);
     
     // publish all trajectories as CandidateTrajectories
-    node->publishTrajectories(vad_output_data.predicted_trajectories_);
+    node->publish_trajectories(vad_output_data.predicted_trajectories_);
     
     printf("publish trajectory");
     rclcpp::spin_some(node);

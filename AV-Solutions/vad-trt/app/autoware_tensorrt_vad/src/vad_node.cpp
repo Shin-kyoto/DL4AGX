@@ -123,7 +123,7 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
       std::bind(&VadNode::tf_static_callback, this, std::placeholders::_1));
 
   // Load VadConfig
-  loadVadConfig();
+  load_vad_config();
 
   // Initialize current frame structure
   current_frame_.images.resize(6);
@@ -132,7 +132,7 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
   // Initialize VAD model on first complete frame
   if (!vad_model_ptr_) {
     RCLCPP_INFO(this->get_logger(), "Initializing VAD model with first complete frame");
-    initializeVadModel();
+    initialize_vad_model();
   }
 
   // Initialize timeout timer
@@ -284,7 +284,7 @@ void VadNode::reset_current_frame()
   frame_started_ = false;
 }
 
-void VadNode::initializeVadModel()
+void VadNode::initialize_vad_model()
 {
   // Initialize VAD interface and model
   auto tf_buffer_shared = std::shared_ptr<tf2_ros::Buffer>(&tf_buffer_, [](tf2_ros::Buffer*){});
@@ -297,7 +297,7 @@ void VadNode::initializeVadModel()
   RCLCPP_INFO(this->get_logger(), "VAD model and interface initialized successfully");
 }
 
-void VadNode::loadVadConfig()
+void VadNode::load_vad_config()
 {
   // Load VAD config parameters
   vad_config_.plugins_path =
@@ -306,10 +306,10 @@ void VadNode::loadVadConfig()
       this->declare_parameter<int>("model_params.warm_up_num", 20);
 
   // Load network configurations
-  loadNetConfigs();
+  load_net_configs();
 }
 
-void VadNode::loadNetConfigs()
+void VadNode::load_net_configs()
 {
   // Load network configurations
   
@@ -365,13 +365,13 @@ void VadNode::loadNetConfigs()
   vad_config_.nets_config.push_back(head_no_prev_config);
 }
 
-void VadNode::publishTrajectories(const autoware_internal_planning_msgs::msg::CandidateTrajectories & candidate_trajectories)
+void VadNode::publish_trajectories(const autoware_internal_planning_msgs::msg::CandidateTrajectories & candidate_trajectories)
 {
   auto candidate_trajectories_msg = std::make_unique<autoware_internal_planning_msgs::msg::CandidateTrajectories>(candidate_trajectories);
   candidate_trajectories_publisher_->publish(std::move(candidate_trajectories_msg));
 }
 
-void VadNode::publishTrajectory(const autoware_planning_msgs::msg::Trajectory & trajectory)
+void VadNode::publish_trajectory(const autoware_planning_msgs::msg::Trajectory & trajectory)
 {
   auto trajectory_msg = std::make_unique<autoware_planning_msgs::msg::Trajectory>(trajectory);
   trajectory_publisher_->publish(std::move(trajectory_msg));
@@ -415,10 +415,10 @@ void VadNode::publish(const VadInputTopicData & vad_topic_data)
   // 結果をパブリッシュ
   if (vad_output_topic_data.has_value()) {
     // Publish individual trajectory using the dedicated method
-    publishTrajectory(vad_output_topic_data.value().trajectory);
+    publish_trajectory(vad_output_topic_data.value().trajectory);
 
     // Publish candidate trajectories
-    publishTrajectories(vad_output_topic_data.value().candidate_trajectories);
+    publish_trajectories(vad_output_topic_data.value().candidate_trajectories);
 
     RCLCPP_DEBUG(this->get_logger(), "Published trajectories and candidate trajectories");
   } else {

@@ -186,7 +186,7 @@ private:
     double node_timestep) const;
 
   // Helper function for trajectory conversion
-  geometry_msgs::msg::Quaternion createQuaternionFromYaw(double yaw) const;
+  geometry_msgs::msg::Quaternion create_quaternion_from_yaw(double yaw) const;
   
   // Helper function for creating trajectory points from predicted trajectory
   std::vector<autoware_planning_msgs::msg::TrajectoryPoint> create_trajectory_points(
