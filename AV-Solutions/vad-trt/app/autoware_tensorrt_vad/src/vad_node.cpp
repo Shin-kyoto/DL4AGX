@@ -146,12 +146,12 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
 
   // Odometry subscriber (kinematic state is usually reliable)
   odometry_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
-      "/localization/kinematic_state", reliable_qos,
+      "~/input/kinematic_state", reliable_qos,
       std::bind(&VadNode::odometry_callback, this, std::placeholders::_1));
 
   // IMU subscriber (sensor data typically uses best effort)
   imu_sub_ = this->create_subscription<sensor_msgs::msg::Imu>(
-      "/sensing/imu/tamagawa/imu_raw", sensor_qos,
+      "~/input/imu_raw", sensor_qos,
       std::bind(&VadNode::imu_callback, this, std::placeholders::_1));
 
   // TF static subscriber (transient local for persistence)
