@@ -62,6 +62,8 @@ private:
   void load_vad_config();
   void load_net_configs();
   void initialize_vad_model();
+  void create_camera_image_subscribers(const rclcpp::QoS& sensor_qos);
+  void create_camera_info_subscribers(const rclcpp::QoS& camera_info_qos);
 
   // Publisher methods
   void publish_trajectory(const autoware_planning_msgs::msg::Trajectory & trajectory);

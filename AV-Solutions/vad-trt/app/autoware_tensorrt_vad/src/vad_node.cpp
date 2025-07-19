@@ -107,40 +107,10 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
   auto reliable_qos = rclcpp::QoS(1).reliability(rclcpp::ReliabilityPolicy::Reliable);
 
   // Subscribers for each camera
-  camera_image_subs_.resize(num_cameras_);
-  std::vector<bool> use_raw_cameras = this->declare_parameter<std::vector<bool>>("node_params.use_raw", std::vector<bool>(num_cameras_, false));
-  auto resolve_topic_name = [this](const std::string & query) {
-    return this->get_node_topics_interface()->resolve_topic_name(query);
-  };
-  for (int32_t i = 0; i < num_cameras_; ++i) {
-    const auto transport = use_raw_cameras[i] ? "raw" : "compressed";
-    auto callback =
-        [this, i](const sensor_msgs::msg::Image::ConstSharedPtr msg) {
-          this->image_callback(msg, i);
-        };
-    // image_transport::create_subscription を使用
-    const auto image_topic = resolve_topic_name("~/input/image" + std::to_string(i));
-    camera_image_subs_[i] = image_transport::create_subscription(
-        this,
-        image_topic,
-        callback,
-        transport,
-        sensor_qos.get_rmw_qos_profile());
-  }
+  create_camera_image_subscribers(sensor_qos);
 
-  // Camera info subscribers
-  camera_info_subs_.resize(num_cameras_);
-  for (int32_t i = 0; i < num_cameras_; ++i) {
-    auto callback =
-        [this, i](const sensor_msgs::msg::CameraInfo::SharedPtr msg) {
-          this->camera_info_callback(msg, i);
-        };
-
-    camera_info_subs_[i] =
-        this->create_subscription<sensor_msgs::msg::CameraInfo>(
-            "~/input/camera_info" + std::to_string(i),
-            camera_info_qos, callback);
-  }
+  // Subscribers for camera info
+  create_camera_info_subscribers(camera_info_qos);
 
   // Odometry subscriber (kinematic state is usually reliable)
   odometry_sub_ = this->create_subscription<nav_msgs::msg::Odometry>(
@@ -477,6 +447,46 @@ void VadNode::frame_timeout_callback()
   
   // Stop timer until next frame starts
   frame_timeout_timer_->cancel();
+}
+
+void VadNode::create_camera_image_subscribers(const rclcpp::QoS& sensor_qos)
+{
+  camera_image_subs_.resize(num_cameras_);
+  std::vector<bool> use_raw_cameras = this->declare_parameter<std::vector<bool>>("node_params.use_raw", std::vector<bool>(num_cameras_, false));
+  auto resolve_topic_name = [this](const std::string & query) {
+    return this->get_node_topics_interface()->resolve_topic_name(query);
+  };
+  for (int32_t i = 0; i < num_cameras_; ++i) {
+    const auto transport = use_raw_cameras[i] ? "raw" : "compressed";
+    auto callback =
+        [this, i](const sensor_msgs::msg::Image::ConstSharedPtr msg) {
+          this->image_callback(msg, i);
+        };
+    // image_transport::create_subscription を使用
+    const auto image_topic = resolve_topic_name("~/input/image" + std::to_string(i));
+    camera_image_subs_[i] = image_transport::create_subscription(
+        this,
+        image_topic,
+        callback,
+        transport,
+        sensor_qos.get_rmw_qos_profile());
+  }
+}
+
+void VadNode::create_camera_info_subscribers(const rclcpp::QoS& camera_info_qos)
+{
+  camera_info_subs_.resize(num_cameras_);
+  for (int32_t i = 0; i < num_cameras_; ++i) {
+    auto callback =
+        [this, i](const sensor_msgs::msg::CameraInfo::SharedPtr msg) {
+          this->camera_info_callback(msg, i);
+        };
+
+    camera_info_subs_[i] =
+        this->create_subscription<sensor_msgs::msg::CameraInfo>(
+            "~/input/camera_info" + std::to_string(i),
+            camera_info_qos, callback);
+  }
 }
 
 }  // namespace autoware::tensorrt_vad
