@@ -81,7 +81,9 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
       declare_parameter<std::vector<int64_t>>("interface_params.autoware_to_vad_camera_mapping")
     ),
     tf_buffer_(this->get_clock()),
+    num_cameras_(declare_parameter<int32_t>("node_params.num_cameras")),
     trajectory_timestep_(declare_parameter<double>("interface_params.trajectory_timestep", 1.0)),
+    current_frame_(num_cameras_),
     frame_started_(false)
 {
   // Initialize prev_can_bus from parameters
@@ -109,12 +111,12 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
   auto reliable_qos = rclcpp::QoS(1).reliability(rclcpp::ReliabilityPolicy::Reliable);
 
   // Subscribers for each camera
-  camera_image_subs_.resize(6);
-  std::vector<bool> use_raw_cameras = this->declare_parameter<std::vector<bool>>("node_params.use_raw", std::vector<bool>(6, false));
+  camera_image_subs_.resize(num_cameras_);
+  std::vector<bool> use_raw_cameras = this->declare_parameter<std::vector<bool>>("node_params.use_raw", std::vector<bool>(num_cameras_, false));
   auto resolve_topic_name = [this](const std::string & query) {
     return this->get_node_topics_interface()->resolve_topic_name(query);
   };
-  for (int32_t i = 0; i < 6; ++i) {
+  for (int32_t i = 0; i < num_cameras_; ++i) {
     const auto transport = use_raw_cameras[i] ? "raw" : "compressed";
     auto callback =
         [this, i](const sensor_msgs::msg::Image::ConstSharedPtr msg) {
@@ -131,8 +133,8 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
   }
 
   // Camera info subscribers
-  camera_info_subs_.resize(6);
-  for (int32_t i = 0; i < 6; ++i) {
+  camera_info_subs_.resize(num_cameras_);
+  for (int32_t i = 0; i < num_cameras_; ++i) {
     auto callback =
         [this, i](const sensor_msgs::msg::CameraInfo::SharedPtr msg) {
           this->camera_info_callback(msg, i);
@@ -164,10 +166,6 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
   // Load VadConfig
   load_vad_config();
 
-  // Initialize current frame structure
-  current_frame_.images.resize(6);
-  current_frame_.camera_infos.resize(6);
-
   // Initialize VAD model on first complete frame
   if (!vad_model_ptr_) {
     RCLCPP_INFO(this->get_logger(), "Initializing VAD model with first complete frame");
@@ -188,8 +186,8 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
 void VadNode::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr msg, std::size_t camera_id)
 {
   // Validate camera_id
-  if (camera_id >= 6) {
-    RCLCPP_ERROR(this->get_logger(), "Invalid camera_id: %zu. Expected 0-5", camera_id);
+  if (static_cast<int32_t>(camera_id) >= num_cameras_) {
+    RCLCPP_ERROR(this->get_logger(), "Invalid camera_id: %zu. Expected 0-%d", camera_id, num_cameras_ - 1);
     return;
   }
 
@@ -214,8 +212,8 @@ void VadNode::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr msg, 
 void VadNode::camera_info_callback(const sensor_msgs::msg::CameraInfo::ConstSharedPtr msg, std::size_t camera_id)
 {
   // Validate camera_id
-  if (camera_id >= 6) {
-    RCLCPP_ERROR(this->get_logger(), "Invalid camera_id: %zu. Expected 0-5", camera_id);
+  if (static_cast<int32_t>(camera_id) >= num_cameras_) {
+    RCLCPP_ERROR(this->get_logger(), "Invalid camera_id: %zu. Expected 0-%d", camera_id, num_cameras_ - 1);
     return;
   }
 
@@ -313,13 +311,7 @@ void VadNode::check_and_process_frame()
 
 void VadNode::reset_current_frame()
 {
-  current_frame_.images.clear();
-  current_frame_.images.resize(6);
-  current_frame_.camera_infos.clear();
-  current_frame_.camera_infos.resize(6);
-  current_frame_.kinematic_state.reset();
-  current_frame_.imu_raw.reset();
-  current_frame_.tf_static.reset();
+  current_frame_.reset();
   frame_started_ = false;
 }
 
@@ -482,7 +474,7 @@ void VadNode::frame_timeout_callback()
     
     RCLCPP_WARN(this->get_logger(), 
                 "Frame timeout reached. Have %d/%d images, %d/%d camera_infos, kinematic_state: %s, imu_raw: %s, tf_static: %s",
-                valid_images, 6, valid_camera_infos, 6,
+                valid_images, num_cameras_, valid_camera_infos, num_cameras_,
                 current_frame_.kinematic_state ? "yes" : "no",
                 current_frame_.imu_raw ? "yes" : "no",
                 current_frame_.tf_static ? "yes" : "no");

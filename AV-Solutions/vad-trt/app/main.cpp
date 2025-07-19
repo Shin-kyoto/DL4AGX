@@ -680,7 +680,7 @@ extract_vad_topic_data_from_rosbag(const std::string &bag_path, std::shared_ptr<
         vad_topic_data_list.push_back(current_frame);
 
         // 次のフレームの準備
-        current_frame = autoware::tensorrt_vad::VadInputTopicData();
+        current_frame = autoware::tensorrt_vad::VadInputTopicData(6);
         frame_started = false;
       }
     }

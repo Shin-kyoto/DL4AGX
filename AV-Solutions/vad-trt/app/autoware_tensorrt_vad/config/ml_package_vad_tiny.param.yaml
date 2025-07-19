@@ -1,5 +1,7 @@
 /**:
   ros__parameters:
+    node_params:
+      num_cameras: 6
     interface_params:
       # # awsim
       input_image_width: 1920

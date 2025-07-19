@@ -85,6 +85,9 @@ private:
   tf2_ros::Buffer tf_buffer_;
   tf2_ros::TransformListener tf_listener_{tf_buffer_};
 
+  // Number of cameras (configured via parameter)
+  int32_t num_cameras_;
+
   // VAD interface config and previous can bus data
   std::vector<float> prev_can_bus_;
 

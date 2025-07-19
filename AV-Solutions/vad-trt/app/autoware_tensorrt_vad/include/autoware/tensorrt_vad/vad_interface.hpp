@@ -68,17 +68,41 @@ struct VadInputTopicData
   // IMUデータ（/sensing/imu/tamagawa/imu_raw などから）
   sensor_msgs::msg::Imu::ConstSharedPtr imu_raw;
 
+private:
+  int32_t num_cameras_;
+
+public:
+  // コンストラクタ：カメラ数を指定してベクターを初期化
+  explicit VadInputTopicData(int32_t num_cameras) : num_cameras_(num_cameras) {
+    images.resize(num_cameras_);
+    camera_infos.resize(num_cameras_);
+  }
+
   // フレームが完成しているかをチェック
   bool is_complete() const {
-    if (images.size() != 6 || camera_infos.size() != 6) return false;
+    if (static_cast<int32_t>(images.size()) != num_cameras_ || 
+        static_cast<int32_t>(camera_infos.size()) != num_cameras_) {
+      return false;
+    }
     
-    for (int32_t i = 0; i < 6; ++i) {
+    for (int32_t i = 0; i < num_cameras_; ++i) {
       if (!images[i] || !camera_infos[i]) return false;
     }
     
     return tf_static != nullptr && 
            kinematic_state != nullptr && 
            imu_raw != nullptr;
+  }
+
+  // フレームをリセットする
+  void reset() {
+    images.clear();
+    images.resize(num_cameras_);
+    camera_infos.clear();
+    camera_infos.resize(num_cameras_);
+    kinematic_state.reset();
+    imu_raw.reset();
+    tf_static.reset();
   }
 };
 
