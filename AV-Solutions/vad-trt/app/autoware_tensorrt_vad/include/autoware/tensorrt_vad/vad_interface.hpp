@@ -109,18 +109,21 @@ public:
   VadOutputTopicData convert_output(
     const VadOutputData & vad_output_data, 
     const rclcpp::Time & stamp,
-    double trajectory_timestep) const;
+    double trajectory_timestep,
+    const Eigen::Matrix4f & base2map_transform) const;
 
   // Conversion methods for trajectories
   autoware_internal_planning_msgs::msg::CandidateTrajectories process_candidate_trajectories(
     const std::map<int32_t, std::vector<float>> & predicted_trajectories,
     const rclcpp::Time & stamp,
-    double trajectory_timestep) const;
+    double trajectory_timestep,
+    const Eigen::Matrix4f & base2map_transform) const;
   
   autoware_planning_msgs::msg::Trajectory process_trajectory(
     const std::vector<float> & predicted_trajectory,
     const rclcpp::Time & stamp,
-    double trajectory_timestep) const;
+    double trajectory_timestep,
+    const Eigen::Matrix4f & base2map_transform) const;
 
   Lidar2ImgData process_lidar2img(
     const tf2_msgs::msg::TFMessage::ConstSharedPtr & tf_static,
@@ -191,7 +194,8 @@ private:
   // Helper function for creating trajectory points from predicted trajectory
   std::vector<autoware_planning_msgs::msg::TrajectoryPoint> create_trajectory_points(
     const std::vector<float> & predicted_trajectory,
-    double trajectory_timestep) const;
+    double trajectory_timestep,
+    const Eigen::Matrix4f & base2map_transform) const;
 };
 
 }  // namespace autoware::tensorrt_vad
