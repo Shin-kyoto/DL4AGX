@@ -88,9 +88,6 @@ private:
   // Number of cameras (configured via parameter)
   int32_t num_cameras_;
 
-  // VAD interface config and previous can bus data
-  std::vector<float> prev_can_bus_;
-
   // Subscribers for images (using image_transport)
   std::vector<image_transport::Subscriber> camera_image_subs_;
   std::vector<rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr> camera_info_subs_;

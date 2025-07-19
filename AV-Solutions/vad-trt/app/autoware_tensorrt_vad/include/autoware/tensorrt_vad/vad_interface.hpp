@@ -129,7 +129,7 @@ public:
   explicit VadInterface(const VadInterfaceConfig& config, 
                         std::shared_ptr<tf2_ros::Buffer> tf_buffer);
 
-  VadInputData convert_input(const VadInputTopicData & vad_input_topic_data, const std::vector<float> & prev_can_bus = {});
+  VadInputData convert_input(const VadInputTopicData & vad_input_topic_data);
   VadOutputTopicData convert_output(
     const VadOutputData & vad_output_data, 
     const rclcpp::Time & stamp,
@@ -184,6 +184,9 @@ private:
   
   // Current longitudinal velocity for trajectory initial point
   float current_longitudinal_velocity_mps_;
+  
+  // Previous can_bus data for velocity calculation and other processes
+  std::vector<float> prev_can_bus_;
 
   // --- 内部処理関数 ---
   std::optional<Eigen::Matrix4f> lookup_base2cam(tf2_ros::Buffer & buffer, int32_t autoware_camera_id) const;

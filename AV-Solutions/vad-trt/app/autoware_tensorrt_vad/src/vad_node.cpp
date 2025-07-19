@@ -75,6 +75,7 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
       declare_parameter<double>("interface_params.default_patch_angle"),
       declare_parameter<int32_t>("model_params.default_command"),
       declare_parameter<std::vector<double>>("interface_params.default_shift"),
+      declare_parameter<std::vector<double>>("interface_params.default_can_bus"),
       declare_parameter<std::vector<double>>("interface_params.image_normalization_param_mean"),
       declare_parameter<std::vector<double>>("interface_params.image_normalization_param_std"),
       declare_parameter<std::vector<double>>("interface_params.vad2base"),
@@ -86,11 +87,6 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
     current_frame_(num_cameras_),
     frame_started_(false)
 {
-  // Initialize prev_can_bus from parameters
-  std::vector<double> default_can_bus = this->declare_parameter<std::vector<double>>("interface_params.default_can_bus");
-  prev_can_bus_.clear();
-  for (auto v : default_can_bus) prev_can_bus_.push_back(static_cast<float>(v));
-
   // Publishers
   trajectory_publisher_ =
       this->create_publisher<autoware_planning_msgs::msg::Trajectory>(
@@ -417,7 +413,7 @@ std::optional<VadOutputTopicData> VadNode::execute_inference(const VadInputTopic
 
   // VadInterfaceを通じてVadInputDataに変換
   // scalingされた状態の画像を含む
-  const auto vad_input = vad_interface_ptr_->convert_input(vad_topic_data, prev_can_bus_);
+  const auto vad_input = vad_interface_ptr_->convert_input(vad_topic_data);
 
   // VadModelで推論実行
   const auto vad_output = vad_model_ptr_->infer(vad_input);
@@ -427,10 +423,6 @@ std::optional<VadOutputTopicData> VadNode::execute_inference(const VadInputTopic
   if (vad_output.has_value()) {
     const auto vad_output_topic_data = vad_interface_ptr_->convert_output(
       *vad_output, this->now(), trajectory_timestep_, base2map_transform);
-
-    // Update prev_can_bus for next frame
-    prev_can_bus_ = vad_input.can_bus_;
-
     // Return VadOutputTopicData
     return vad_output_topic_data;
   }

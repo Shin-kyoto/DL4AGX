@@ -144,7 +144,6 @@ convert_normalized_to_rgb(const std::vector<float> &normalized_data) {
 class VADNode : public rclcpp::Node {
 public:
   autoware::tensorrt_vad::VadInterfaceConfig vad_interface_config_;
-  std::vector<float> prev_can_bus_;
 
   VADNode(const std::vector<std::string> &yaml_config_paths)
       : Node("vad_node", createNodeOptions(yaml_config_paths)),
@@ -159,6 +158,7 @@ public:
           declare_parameter<double>("interface_params.default_patch_angle"),
           declare_parameter<int32_t>("model_params.default_command"),
           declare_parameter<std::vector<double>>("interface_params.default_shift"),
+          declare_parameter<std::vector<double>>("interface_params.default_can_bus"),
           declare_parameter<std::vector<double>>("interface_params.image_normalization_param_mean"),
           declare_parameter<std::vector<double>>("interface_params.image_normalization_param_std"),
           declare_parameter<std::vector<double>>("interface_params.vad2base"),
@@ -166,11 +166,6 @@ public:
         ),
         trajectory_timestep_(declare_parameter<double>("interface_params.trajectory_timestep", 1.0))
   {
-
-    std::vector<double> default_can_bus = this->declare_parameter<std::vector<double>>("interface_params.default_can_bus");
-    // default_can_bus: copy and convert
-    prev_can_bus_.clear();
-    for (auto v : default_can_bus) prev_can_bus_.push_back(static_cast<float>(v));
     // Publishers
     trajectory_publisher_ =
         this->create_publisher<autoware_planning_msgs::msg::Trajectory>(
@@ -544,7 +539,7 @@ extract_vad_topic_data_from_rosbag(const std::string &bag_path, std::shared_ptr<
     rosbag2_cpp::readers::SequentialReader reader;
     reader.open(storage_options, converter_options);
 
-    autoware::tensorrt_vad::VadInputTopicData current_frame;
+    autoware::tensorrt_vad::VadInputTopicData current_frame(6);
     bool frame_started = false;
 
     while (reader.has_next()) {
@@ -748,17 +743,11 @@ int main(int argc, char **argv) {
 
   
   // フレームごとに処理
-  std::vector<float> prev_can_bus = node->prev_can_bus_;
   for (int32_t frame_id = 1; frame_id <= vad_topic_data_list.size(); frame_id++) {
     std::string frame_dir = data_dir + std::to_string(frame_id) + "/";
 
-    // VadInterfaceを使用してVadInputTopicDataをVadInputDataに変換（古いprev_can_busを使用）
-    auto vad_input_data = vad_interface.convert_input(
-        vad_topic_data_list[frame_id - 1],
-        prev_can_bus);
-
-    // 前フレームのcan_busデータを更新（次のフレーム用）
-    prev_can_bus = vad_input_data.can_bus_;
+    // VadInterfaceを使用してVadInputTopicDataをVadInputDataに変換
+    auto vad_input_data = vad_interface.convert_input(vad_topic_data_list[frame_id - 1]);
 
     // VadModelのinfer関数を使用
     auto inference_result = vad_model.infer(vad_input_data);

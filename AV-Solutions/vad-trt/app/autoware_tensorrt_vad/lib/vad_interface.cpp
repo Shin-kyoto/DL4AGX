@@ -23,13 +23,14 @@ VadInterface::VadInterface(const VadInterfaceConfig& config, std::shared_ptr<tf2
     image_normalization_param_std_(config.image_normalization_param_std),
     vad2base_(config.vad2base),
     base2vad_(config.base2vad),
-    current_longitudinal_velocity_mps_(0.0f)
+    current_longitudinal_velocity_mps_(0.0f),
+    prev_can_bus_(config.default_can_bus)
 {
   // AutowareカメラインデックスからVADカメラインデックスへのマッピング
   autoware_to_vad_camera_mapping_ = config.autoware_to_vad_camera_mapping;
 }
 
-VadInputData VadInterface::convert_input(const VadInputTopicData & vad_input_topic_data, const std::vector<float> & prev_can_bus)
+VadInputData VadInterface::convert_input(const VadInputTopicData & vad_input_topic_data)
 {
   VadInputData vad_input_data;
 
@@ -47,20 +48,23 @@ VadInputData VadInterface::convert_input(const VadInputTopicData & vad_input_top
   vad_input_data.can_bus_ = process_can_bus(
     vad_input_topic_data.kinematic_state,
     vad_input_topic_data.imu_raw,
-    prev_can_bus
+    prev_can_bus_
   );
-  vad_input_data.shift_ = process_shift(vad_input_data.can_bus_, prev_can_bus);
+  vad_input_data.shift_ = process_shift(vad_input_data.can_bus_, prev_can_bus_);
   
   // Calculate current longitudinal velocity (node_timestep = 100ms = 0.1s)
   constexpr double node_timestep = 0.1;
   current_longitudinal_velocity_mps_ = calculate_current_longitudinal_velocity(
-    vad_input_data.can_bus_, prev_can_bus, node_timestep);
+    vad_input_data.can_bus_, prev_can_bus_, node_timestep);
   
   // Process image data
   vad_input_data.camera_images_ = process_image(vad_input_topic_data.images);
   
   // Set default command
   vad_input_data.command_ = default_command_;
+  
+  // Update prev_can_bus_ for next iteration
+  prev_can_bus_ = vad_input_data.can_bus_;
   
   return vad_input_data;
 }
