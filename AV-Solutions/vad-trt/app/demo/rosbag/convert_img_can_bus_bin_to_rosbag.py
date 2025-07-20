@@ -6,6 +6,7 @@ import numpy as np
 import cv2
 
 from sensor_msgs.msg import CompressedImage, PointCloud2, PointField
+from geometry_msgs.msg import AccelWithCovarianceStamped
 from std_msgs.msg import Header
 from builtin_interfaces.msg import Time
 import rosbag2_py
@@ -13,8 +14,8 @@ from tf2_msgs.msg import TFMessage
 from rclpy.time import Time as RclpyTime
 import tf2_ros
 from pyquaternion import Quaternion
-from convert_can_bus_bin_to_rosbag import convert_bin_to_imu, convert_bin_to_kinematic_state, write_to_rosbag, convert_bin_to_transform_matrix, create_camera_info_messages
-from convert_can_bus_bin_to_rosbag import ns2aw_kinematic_state, ns2aw_imu, get_base_link_to_vad_base_link_transform_matrix
+from convert_can_bus_bin_to_rosbag import convert_bin_to_acceleration, convert_bin_to_kinematic_state, write_to_rosbag, convert_bin_to_transform_matrix, create_camera_info_messages
+from convert_can_bus_bin_to_rosbag import ns2aw_kinematic_state, ns2aw_acceleration, get_base_link_to_vad_base_link_transform_matrix
 
 def main():
     parser = argparse.ArgumentParser(
@@ -29,7 +30,7 @@ def main():
 
     input_dir = config.get("input_dir", "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/data/demo_data")
     n_frames = config.get("n_frames", 30)
-    output_file = config.get("output_file", "output_bag.ns-0717")
+    output_file = config.get("output_file", "output_bag.ns-0720")
     topic_template = config.get("topic", "/sensing/camera/camera{i}/image_rect_color/compressed")
     image_format = config.get("image_format", "jpeg")
     init_time = config.get("init_time", 1752738404)
@@ -52,9 +53,9 @@ def main():
     )
     writer.open(storage_options, converter_options)
 
-    # カメラ/IMU/運動学状態/camera_info/tf_static用QoSプロファイル定義（既存バッグと一致）
+    # カメラ/acceleration/運動学状態/camera_info/tf_static用QoSプロファイル定義（実際のAutowareのQoSに合わせる）
     camera_image_qos_profile = "- history: 1\n  depth: 5\n  reliability: 2\n  durability: 2\n  deadline:\n    sec: 9223372036\n    nsec: 854775807\n  lifespan:\n    sec: 9223372036\n    nsec: 854775807\n  liveliness: 1\n  liveliness_lease_duration:\n    sec: 9223372036\n    nsec: 854775807\n  avoid_ros_namespace_conventions: false"
-    imu_qos_profile = "- history: 1\n  depth: 1000\n  reliability: 1\n  durability: 2\n  deadline:\n    sec: 9223372036\n    nsec: 854775807\n  lifespan:\n    sec: 9223372036\n    nsec: 854775807\n  liveliness: 1\n  liveliness_lease_duration:\n    sec: 9223372036\n    nsec: 854775807\n  avoid_ros_namespace_conventions: false"
+    acceleration_qos_profile = "- history: 1\n  depth: 10\n  reliability: 1\n  durability: 2\n  deadline:\n    sec: 9223372036\n    nsec: 854775807\n  lifespan:\n    sec: 9223372036\n    nsec: 854775807\n  liveliness: 1\n  liveliness_lease_duration:\n    sec: 9223372036\n    nsec: 854775807\n  avoid_ros_namespace_conventions: false"
     kinematic_state_qos_profile = "- history: 1\n  depth: 1\n  reliability: 1\n  durability: 2\n  deadline:\n    sec: 9223372036\n    nsec: 854775807\n  lifespan:\n    sec: 9223372036\n    nsec: 854775807\n  liveliness: 1\n  liveliness_lease_duration:\n    sec: 9223372036\n    nsec: 854775807\n  avoid_ros_namespace_conventions: false"
     camera_info_qos_profile = "- history: 1\n  depth: 5\n  reliability: 2\n  durability: 2\n  deadline:\n    sec: 9223372036\n    nsec: 854775807\n  lifespan:\n    sec: 9223372036\n    nsec: 854775807\n  liveliness: 1\n  liveliness_lease_duration:\n    sec: 9223372036\n    nsec: 854775807\n  avoid_ros_namespace_conventions: false"
     tf_static_qos_profile = "- history: 1\n  depth: 1\n  reliability: 1\n  durability: 3\n  deadline:\n    sec: 2147483647\n    nsec: 4294967295\n  lifespan:\n    sec: 2147483647\n    nsec: 4294967295\n  liveliness: 1\n  liveliness_lease_duration:\n    sec: 2147483647\n    nsec: 4294967295\n  avoid_ros_namespace_conventions: false"
@@ -76,13 +77,13 @@ def main():
 
     # CANバス関連トピックの作成
     can_bus_topics = [
-        ("/sensing/imu/tamagawa/imu_raw", "sensor_msgs/msg/Imu"),
+        ("/localization/acceleration", "geometry_msgs/msg/AccelWithCovarianceStamped"),
         ("/localization/kinematic_state", "nav_msgs/msg/Odometry")
     ]
     
     for topic_name, topic_type in can_bus_topics:
-        # IMUと運動学状態は個別QoSを使用
-        qos = imu_qos_profile if topic_name.endswith("imu_raw") else kinematic_state_qos_profile
+        # accelerationと運動学状態は個別QoSを使用
+        qos = acceleration_qos_profile if topic_name.endswith("acceleration") else kinematic_state_qos_profile
         topic_info = rosbag2_py.TopicMetadata(
             name=topic_name,
             type=topic_type,
@@ -96,7 +97,7 @@ def main():
         name="/sensing/lidar/concatenated/pointcloud",
         type="sensor_msgs/msg/PointCloud2",
         serialization_format="cdr",
-        offered_qos_profiles=imu_qos_profile  # 一般的に信頼性重視
+        offered_qos_profiles=acceleration_qos_profile  # 一般的に信頼性重視
     )
     writer.create_topic(lidar_topic_metadata)
 
@@ -152,10 +153,10 @@ def main():
             nanosec=int((base_timestamp - int(base_timestamp)) * 1e9)
         )
 
-        # IMUメッセージの処理 - nuScenes → Autoware 座標変換を適用
-        imu_msg = convert_bin_to_imu(can_bus_data, ros_timestamp)
-        imu_msg = ns2aw_imu(imu_msg)  # 座標変換を適用
-        write_to_rosbag(writer, "/sensing/imu/tamagawa/imu_raw", imu_msg, ros_timestamp)
+        # accelerationメッセージの処理 - nuScenes → Autoware 座標変換を適用
+        accel_msg = convert_bin_to_acceleration(can_bus_data, ros_timestamp)
+        accel_msg = ns2aw_acceleration(accel_msg)  # 座標変換を適用
+        write_to_rosbag(writer, "/localization/acceleration", accel_msg, ros_timestamp)
         
         # 運動学状態メッセージの処理 - nuScenes → Autoware 座標変換を適用
         kinematic_msg = convert_bin_to_kinematic_state(can_bus_data, ros_timestamp)

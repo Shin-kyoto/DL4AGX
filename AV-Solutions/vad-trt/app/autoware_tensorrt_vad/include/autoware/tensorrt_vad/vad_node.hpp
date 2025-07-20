@@ -35,6 +35,7 @@
 #include <sensor_msgs/msg/image.hpp>
 #include <sensor_msgs/msg/compressed_image.hpp>
 #include <sensor_msgs/msg/imu.hpp>
+#include <geometry_msgs/msg/accel_with_covariance_stamped.hpp>
 #include <nav_msgs/msg/odometry.hpp>
 #include <geometry_msgs/msg/quaternion.hpp>
 
@@ -73,7 +74,7 @@ private:
   void image_callback(const sensor_msgs::msg::Image::ConstSharedPtr msg, std::size_t camera_id);
   void camera_info_callback(const sensor_msgs::msg::CameraInfo::ConstSharedPtr msg, std::size_t camera_id);
   void odometry_callback(const nav_msgs::msg::Odometry::ConstSharedPtr msg);
-  void imu_callback(const sensor_msgs::msg::Imu::ConstSharedPtr msg);
+  void acceleration_callback(const geometry_msgs::msg::AccelWithCovarianceStamped::ConstSharedPtr msg);
   void tf_static_callback(const tf2_msgs::msg::TFMessage::ConstSharedPtr msg);
 
   // Helper functions for data synchronization
@@ -92,9 +93,9 @@ private:
   std::vector<image_transport::Subscriber> camera_image_subs_;
   std::vector<rclcpp::Subscription<sensor_msgs::msg::CameraInfo>::SharedPtr> camera_info_subs_;
 
-  // Subscribers for odometry and IMU data
+  // Subscribers for odometry and acceleration data
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odometry_sub_;
-  rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub_;
+  rclcpp::Subscription<geometry_msgs::msg::AccelWithCovarianceStamped>::SharedPtr acceleration_sub_;
   rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr tf_static_sub_;
 
   // VAD model
