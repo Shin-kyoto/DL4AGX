@@ -309,7 +309,7 @@ def get_base_link_to_vad_base_link_transform_matrix() -> np.ndarray:
     """
     base_link_to_vad_base_link = np.array([[0, -1, 0,  0],
                                             [1, 0, 0, 0],
-                                            [0, 0, 1, 0],
+                                            [0, 0, 1, -1.2],
                                             [0, 0, 0, 1]], dtype=np.float32)
     return base_link_to_vad_base_link
 
