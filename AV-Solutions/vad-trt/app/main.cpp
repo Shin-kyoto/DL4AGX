@@ -65,7 +65,7 @@
 
 #include <nav_msgs/msg/odometry.hpp>
 #include <sensor_msgs/msg/camera_info.hpp>
-#include <sensor_msgs/msg/imu.hpp>
+#include <geometry_msgs/msg/accel_with_covariance_stamped.hpp>
 
 using json = nlohmann::json;
 namespace fs = std::filesystem;
@@ -653,11 +653,11 @@ extract_vad_topic_data_from_rosbag(const std::string &bag_path, std::shared_ptr<
         current_frame.kinematic_state = msg;
       }
 
-      // IMUトピックの処理
-      if (bag_message->topic_name == "/sensing/imu/tamagawa/imu_raw") {
-        auto msg = std::make_shared<sensor_msgs::msg::Imu>();
+      // Accelerationトピックの処理
+      if (bag_message->topic_name == "/localization/acceleration") {
+        auto msg = std::make_shared<geometry_msgs::msg::AccelWithCovarianceStamped>();
         rclcpp::SerializedMessage serialized_msg(*bag_message->serialized_data);
-        rclcpp::Serialization<sensor_msgs::msg::Imu>().deserialize_message(
+        rclcpp::Serialization<geometry_msgs::msg::AccelWithCovarianceStamped>().deserialize_message(
             &serialized_msg, msg.get());
 
         if (!frame_started) {
@@ -667,7 +667,7 @@ extract_vad_topic_data_from_rosbag(const std::string &bag_path, std::shared_ptr<
           frame_started = true;
         }
 
-        current_frame.imu_raw = msg;
+        current_frame.acceleration = msg;
       }
 
       // フレームが完成したらリストに追加

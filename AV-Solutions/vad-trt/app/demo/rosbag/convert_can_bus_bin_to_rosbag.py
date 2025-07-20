@@ -7,8 +7,8 @@ from pyquaternion import Quaternion
 from nuscenes.eval.common.utils import quaternion_yaw
 
 # ROS2 関連のインポート
-from sensor_msgs.msg import Imu, CameraInfo
-from geometry_msgs.msg import TransformStamped
+from sensor_msgs.msg import CameraInfo
+from geometry_msgs.msg import TransformStamped, AccelWithCovarianceStamped
 from tf2_msgs.msg import TFMessage
 from builtin_interfaces.msg import Time
 from rclpy.serialization import serialize_message, deserialize_message
@@ -118,67 +118,40 @@ def ns2aw_kinematic_state(kinematic_msg: Odometry) -> Odometry:
     
     return aw_msg
 
-def ns2aw_imu(imu_msg: Imu) -> Imu:
+def ns2aw_acceleration(accel_msg: AccelWithCovarianceStamped) -> AccelWithCovarianceStamped:
     """
-    Convert IMU message from nuScenes to Autoware coordinate system.
+    Convert acceleration message from nuScenes to Autoware coordinate system.
     
     Args:
-        imu_msg: IMU message in nuScenes coordinate system
+        accel_msg: Acceleration message in nuScenes coordinate system
         
     Returns:
-        Imu: Converted message in Autoware coordinate system
+        AccelWithCovarianceStamped: Converted message in Autoware coordinate system
     """
     # Create a deep copy to avoid modifying the original message
-    aw_msg = Imu()
-    aw_msg.header = imu_msg.header
+    aw_msg = AccelWithCovarianceStamped()
+    aw_msg.header = accel_msg.header
     
     # Transform linear accelerations
-    ns_ax = imu_msg.linear_acceleration.x
-    ns_ay = imu_msg.linear_acceleration.y
+    ns_ax = accel_msg.accel.accel.linear.x
+    ns_ay = accel_msg.accel.accel.linear.y
     aw_ax, aw_ay = ns2aw_xy(ns_ax, ns_ay)
     
-    aw_msg.linear_acceleration.x = aw_ax
-    aw_msg.linear_acceleration.y = aw_ay
-    aw_msg.linear_acceleration.z = imu_msg.linear_acceleration.z
+    aw_msg.accel.accel.linear.x = aw_ax
+    aw_msg.accel.accel.linear.y = aw_ay
+    aw_msg.accel.accel.linear.z = accel_msg.accel.accel.linear.z
     
-    # Transform angular velocities
-    ns_wx = imu_msg.angular_velocity.x
-    ns_wy = imu_msg.angular_velocity.y
-    aw_wx, aw_wy = ns2aw_xy(ns_wx, ns_wy)
+    # Transform angular accelerations
+    ns_aax = accel_msg.accel.accel.angular.x
+    ns_aay = accel_msg.accel.accel.angular.y
+    aw_aax, aw_aay = ns2aw_xy(ns_aax, ns_aay)
     
-    aw_msg.angular_velocity.x = aw_wx
-    aw_msg.angular_velocity.y = aw_wy
-    aw_msg.angular_velocity.z = imu_msg.angular_velocity.z  # Yaw rate stays the same
+    aw_msg.accel.accel.angular.x = aw_aax
+    aw_msg.accel.accel.angular.y = aw_aay
+    aw_msg.accel.accel.angular.z = accel_msg.accel.accel.angular.z
     
-    # Transform orientation quaternion if it exists
-    if imu_msg.orientation.x != 0 or imu_msg.orientation.y != 0 or imu_msg.orientation.z != 0 or imu_msg.orientation.w != 0:
-        # Create a Quaternion from the original message
-        q_ns = Quaternion(
-            w=imu_msg.orientation.w,
-            x=imu_msg.orientation.x,
-            y=imu_msg.orientation.y,
-            z=imu_msg.orientation.z
-        )
-        
-        # Create a 90-degree rotation around Z-axis (yaw)
-        q_rotation = Quaternion(axis=[0, 0, 1], angle=np.pi/2)
-        
-        # Apply the rotation
-        q_aw = q_rotation * q_ns
-        
-        # Set the transformed quaternion
-        aw_msg.orientation.x = q_aw.x
-        aw_msg.orientation.y = q_aw.y
-        aw_msg.orientation.z = q_aw.z
-        aw_msg.orientation.w = q_aw.w
-    else:
-        # If orientation is not set, copy the original values
-        aw_msg.orientation = imu_msg.orientation
-    
-    # Copy covariance matrices
-    aw_msg.linear_acceleration_covariance = imu_msg.linear_acceleration_covariance
-    aw_msg.angular_velocity_covariance = imu_msg.angular_velocity_covariance
-    aw_msg.orientation_covariance = imu_msg.orientation_covariance
+    # Copy covariance matrix
+    aw_msg.accel.covariance = accel_msg.accel.covariance
     
     return aw_msg
 
@@ -204,9 +177,9 @@ def calculate_patch_angle_rad(can_bus_rotation_quaternion):
     patch_angle_rad = patch_angle_deg / 180 * np.pi
     return patch_angle_rad
 
-def convert_bin_to_imu(can_bus_data: np.ndarray, timestamp: Time, frame_id: str = "imu_link") -> Imu:
+def convert_bin_to_acceleration(can_bus_data: np.ndarray, timestamp: Time, frame_id: str = "base_link") -> AccelWithCovarianceStamped:
     """
-    CAN busデータから/sensing/imu/tamagawa/imu_rawトピックへの変換
+    CAN busデータから/localization/accelerationトピックへの変換
     
     Args:
         can_bus_data: CANバスデータ
@@ -214,43 +187,34 @@ def convert_bin_to_imu(can_bus_data: np.ndarray, timestamp: Time, frame_id: str 
         frame_id: フレームID
         
     Returns:
-        Imu: 変換されたIMUメッセージ
+        AccelWithCovarianceStamped: 変換された加速度メッセージ
     """
-    # can_bus[7:9] = 加速度(x,y)
-    # can_bus[12] = ego_w（yaw角速度）
+    # can_bus[7:9] = 加速度(x,y,z)
     
     # 加速度の取得（float型に明示的に変換）
     accel_x = float(can_bus_data[7])
     accel_y = float(can_bus_data[8])
     accel_z = float(can_bus_data[9])
     
-    # 角速度の取得（float型に明示的に変換）
-    # TODO(Shin-kyoto): これで良いのかを確認する
-    angular_velocity_z = float(can_bus_data[12])  # Yaw角速度
-    angular_velocity_x = float(can_bus_data[10])
-    angular_velocity_y = float(can_bus_data[11])
-    
-    # IMUメッセージの作成
-    imu_msg = Imu()
-    imu_msg.header.stamp = timestamp
-    imu_msg.header.frame_id = frame_id
+    # AccelWithCovarianceStampedメッセージの作成
+    accel_msg = AccelWithCovarianceStamped()
+    accel_msg.header.stamp = timestamp
+    accel_msg.header.frame_id = frame_id
     
     # 線形加速度の設定
-    imu_msg.linear_acceleration.x = accel_x
-    imu_msg.linear_acceleration.y = accel_y
-    imu_msg.linear_acceleration.z = accel_z
+    accel_msg.accel.accel.linear.x = accel_x
+    accel_msg.accel.accel.linear.y = accel_y
+    accel_msg.accel.accel.linear.z = accel_z
     
-    # 角速度の設定
-    imu_msg.angular_velocity.x = angular_velocity_x
-    imu_msg.angular_velocity.y = angular_velocity_y
-    imu_msg.angular_velocity.z = angular_velocity_z
+    # 角加速度は0に設定（CAN busからは取得できない）
+    accel_msg.accel.accel.angular.x = 0.0
+    accel_msg.accel.accel.angular.y = 0.0
+    accel_msg.accel.accel.angular.z = 0.0
     
     # 共分散行列の設定（不明な場合は-1で埋める）
-    imu_msg.linear_acceleration_covariance = [-1.0] * 9
-    imu_msg.angular_velocity_covariance = [-1.0] * 9
-    imu_msg.orientation_covariance = [-1.0] * 9
+    accel_msg.accel.covariance = [-1.0] * 36
     
-    return imu_msg
+    return accel_msg
 
 def convert_bin_to_kinematic_state(can_bus_data: np.ndarray, timestamp: Time, frame_id: str = "base_link") -> Odometry:
     """
@@ -611,24 +575,32 @@ def main():
     # バッグファイルのオープン
     writer.open(storage_options, converter_options)
     
-    # メタデータの作成と登録
-    camera_topic_types = []
-    for autoware_camera_id in range(6):
-        camera_topic_types.append((f"/sensing/camera/camera{autoware_camera_id}/camera_info", "sensor_msgs/msg/CameraInfo"))
-    topic_types = [
-        ("/sensing/imu/tamagawa/imu_raw", "sensor_msgs/msg/Imu"),
-        ("/localization/kinematic_state", "nav_msgs/msg/Odometry"),
-        ("/tf_static", "tf2_msgs/msg/TFMessage"),
-    ] + camera_topic_types
+    # QoSプロファイルの定義（実際のAutowareのQoSに合わせる）
+    acceleration_qos_profile = "- history: 1\n  depth: 10\n  reliability: 1\n  durability: 2\n  deadline:\n    sec: 9223372036\n    nsec: 854775807\n  lifespan:\n    sec: 9223372036\n    nsec: 854775807\n  liveliness: 1\n  liveliness_lease_duration:\n    sec: 9223372036\n    nsec: 854775807\n  avoid_ros_namespace_conventions: false"
+    kinematic_state_qos_profile = "- history: 1\n  depth: 1\n  reliability: 1\n  durability: 2\n  deadline:\n    sec: 9223372036\n    nsec: 854775807\n  lifespan:\n    sec: 9223372036\n    nsec: 854775807\n  liveliness: 1\n  liveliness_lease_duration:\n    sec: 9223372036\n    nsec: 854775807\n  avoid_ros_namespace_conventions: false"
+    tf_static_qos_profile = "- history: 1\n  depth: 1\n  reliability: 1\n  durability: 3\n  deadline:\n    sec: 2147483647\n    nsec: 4294967295\n  lifespan:\n    sec: 2147483647\n    nsec: 4294967295\n  liveliness: 1\n  liveliness_lease_duration:\n    sec: 2147483647\n    nsec: 4294967295\n  avoid_ros_namespace_conventions: false"
+    camera_info_qos_profile = "- history: 1\n  depth: 5\n  reliability: 2\n  durability: 2\n  deadline:\n    sec: 9223372036\n    nsec: 854775807\n  lifespan:\n    sec: 9223372036\n    nsec: 854775807\n  liveliness: 1\n  liveliness_lease_duration:\n    sec: 9223372036\n    nsec: 854775807\n  avoid_ros_namespace_conventions: false"
     
-    # トピックの情報を登録
-    for topic_name, topic_type in topic_types:
-        topic_info = rosbag2_py._storage.TopicMetadata(
+    # メタデータの作成と登録
+    topic_types_with_qos = [
+        ("/localization/acceleration", "geometry_msgs/msg/AccelWithCovarianceStamped", acceleration_qos_profile),
+        ("/localization/kinematic_state", "nav_msgs/msg/Odometry", kinematic_state_qos_profile),
+        ("/tf_static", "tf2_msgs/msg/TFMessage", tf_static_qos_profile),
+    ]
+    
+    # camera_infoトピックを追加
+    for autoware_camera_id in range(6):
+        topic_types_with_qos.append((f"/sensing/camera/camera{autoware_camera_id}/camera_info", "sensor_msgs/msg/CameraInfo", camera_info_qos_profile))
+    
+    # トピックの情報を登録（新しいAPIを使用してQoSを明示的に設定）
+    for topic_name, topic_type, qos_profile in topic_types_with_qos:
+        topic_metadata = rosbag2_py.TopicMetadata(
             name=topic_name,
             type=topic_type,
-            serialization_format="cdr"
+            serialization_format="cdr",
+            offered_qos_profiles=qos_profile
         )
-        writer.create_topic(topic_info)
+        writer.create_topic(topic_metadata)
     
     # 各フレームのデータ処理
     can_bus_data_dict: dict[int, np.ndarray] = {}
@@ -686,10 +658,10 @@ def main():
 
 
         # 各トピックへの変換と書き込み        
-        # 1. IMUの変換と書き込み
-        imu_msg = convert_bin_to_imu(can_bus_data, ros_timestamp)
-        imu_msg = ns2aw_imu(imu_msg)
-        write_to_rosbag(writer, "/sensing/imu/tamagawa/imu_raw", imu_msg, ros_timestamp)
+        # 1. 加速度の変換と書き込み
+        accel_msg = convert_bin_to_acceleration(can_bus_data, ros_timestamp)
+        accel_msg = ns2aw_acceleration(accel_msg)
+        write_to_rosbag(writer, "/localization/acceleration", accel_msg, ros_timestamp)
         
         # 2. 運動学状態の変換と書き込み
         kinematic_msg = convert_bin_to_kinematic_state(can_bus_data, ros_timestamp)
@@ -845,18 +817,18 @@ def reconstruct_can_bus_from_rosbag(bag_file: str, init_time: float, cycle_time_
             reconstructed_data[frame_id]["pitch_rate"] = ns_wy
             reconstructed_data[frame_id]["yaw_rate"] = msg.twist.twist.angular.z  # Yaw rate stays the same
         
-        elif topic_name == "/sensing/imu/tamagawa/imu_raw":
-            msg = deserialize_message(data, Imu)
+        elif topic_name == "/localization/acceleration":
+            msg = deserialize_message(data, AccelWithCovarianceStamped)
             
             # 加速度情報を取得 - AutowareからnuScenesに変換
-            aw_ax = msg.linear_acceleration.x
-            aw_ay = msg.linear_acceleration.y
+            aw_ax = msg.accel.accel.linear.x
+            aw_ay = msg.accel.accel.linear.y
             ns_ax, ns_ay = aw2ns_xy(aw_ax, aw_ay)
             
             reconstructed_data[frame_id]["acceleration"] = [
                 ns_ax,
                 ns_ay,
-                msg.linear_acceleration.z,
+                msg.accel.accel.linear.z,
             ]
     
     # 各フレームのデータを can_bus 形式に変換
