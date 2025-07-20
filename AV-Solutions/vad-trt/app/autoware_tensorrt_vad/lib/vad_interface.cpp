@@ -47,7 +47,7 @@ VadInputData VadInterface::convert_input(const VadInputTopicData & vad_input_top
   // Process can_bus and shift data
   vad_input_data.can_bus_ = process_can_bus(
     vad_input_topic_data.kinematic_state,
-    vad_input_topic_data.imu_raw,
+    vad_input_topic_data.acceleration,
     prev_can_bus_
   );
   vad_input_data.shift_ = process_shift(vad_input_data.can_bus_, prev_can_bus_);
@@ -281,7 +281,7 @@ CameraImagesData VadInterface::process_image(
 
 CanBusData VadInterface::process_can_bus(
   const nav_msgs::msg::Odometry::ConstSharedPtr & kinematic_state,
-  const sensor_msgs::msg::Imu::ConstSharedPtr & imu_raw,
+  const geometry_msgs::msg::AccelWithCovarianceStamped::ConstSharedPtr & acceleration,
   const std::vector<float> & prev_can_bus) const
 {
   CanBusData can_bus(18, 0.0f);
@@ -314,9 +314,9 @@ CanBusData VadInterface::process_can_bus(
 
   // Apply Autoware to VAD base_link coordinate transformation to acceleration
   auto [vad_ax, vad_ay, vad_az] =
-      aw2vad_xyz(imu_raw->linear_acceleration.x,
-                imu_raw->linear_acceleration.y,
-                imu_raw->linear_acceleration.z);
+      aw2vad_xyz(acceleration->accel.accel.linear.x,
+                acceleration->accel.accel.linear.y,
+                acceleration->accel.accel.linear.z);
 
   // acceleration (7:10)
   can_bus[7] = vad_ax;

@@ -30,6 +30,7 @@
 #include "sensor_msgs/msg/camera_info.hpp"
 #include "sensor_msgs/msg/imu.hpp"
 #include "nav_msgs/msg/odometry.hpp"
+#include "geometry_msgs/msg/accel_with_covariance_stamped.hpp"
 #include "tf2_msgs/msg/tf_message.hpp"
 #include "tf2_ros/buffer.h"
 #include <tf2_eigen/tf2_eigen.hpp>
@@ -65,8 +66,8 @@ struct VadInputTopicData
   // 車両の運動状態データ（/localization/kinematic_state などから）
   nav_msgs::msg::Odometry::ConstSharedPtr kinematic_state;
 
-  // IMUデータ（/sensing/imu/tamagawa/imu_raw などから）
-  sensor_msgs::msg::Imu::ConstSharedPtr imu_raw;
+  // 加速度データ（/localization/acceleration から）
+  geometry_msgs::msg::AccelWithCovarianceStamped::ConstSharedPtr acceleration;
 
 private:
   int32_t num_cameras_;
@@ -91,7 +92,7 @@ public:
     
     return tf_static != nullptr && 
            kinematic_state != nullptr && 
-           imu_raw != nullptr;
+           acceleration != nullptr;
   }
 
   // フレームをリセットする
@@ -101,7 +102,7 @@ public:
     camera_infos.clear();
     camera_infos.resize(num_cameras_);
     kinematic_state.reset();
-    imu_raw.reset();
+    acceleration.reset();
     tf_static.reset();
   }
 };
@@ -156,7 +157,7 @@ public:
 
   CanBusData process_can_bus(
     const nav_msgs::msg::Odometry::ConstSharedPtr & kinematic_state,
-    const sensor_msgs::msg::Imu::ConstSharedPtr & imu_raw,
+    const geometry_msgs::msg::AccelWithCovarianceStamped::ConstSharedPtr & acceleration,
     const std::vector<float> & prev_can_bus) const;
 
   ShiftData process_shift(

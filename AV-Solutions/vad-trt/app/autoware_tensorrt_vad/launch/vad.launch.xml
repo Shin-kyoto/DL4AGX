@@ -19,7 +19,7 @@
   <arg name="image5" default="/sensing/camera/camera5/image_rect_color"/>
 
   <arg name="kinematic_state" default="/localization/kinematic_state"/>
-  <arg name="imu_raw" default="/sensing/imu/tamagawa/imu_raw"/>
+  <arg name="acceleration" default="/localization/acceleration"/>
 
   <arg name="output/objects" default="perception/object_recognition/detection/vad/objects"/>
   <arg name="output/trajectory" default="planning/vad/trajectory"/>
@@ -47,7 +47,7 @@
     <remap from="~/input/image5" to="$(var image5)"/>
     
     <remap from="~/input/kinematic_state" to="$(var kinematic_state)"/>
-    <remap from="~/input/imu_raw" to="$(var imu_raw)"/>
+    <remap from="~/input/acceleration" to="$(var acceleration)"/>
   </node>
 
   <!-- Rviz for individual node testing-->

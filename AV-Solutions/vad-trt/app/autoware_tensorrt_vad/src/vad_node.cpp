@@ -19,6 +19,7 @@
 #include <rclcpp_components/register_node_macro.hpp>
 #include <cv_bridge/cv_bridge.h>
 #include <sensor_msgs/image_encodings.hpp>
+#include <geometry_msgs/msg/accel_with_covariance_stamped.hpp>
 
 namespace autoware::tensorrt_vad
 {
@@ -117,10 +118,10 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
       "~/input/kinematic_state", reliable_qos,
       std::bind(&VadNode::odometry_callback, this, std::placeholders::_1));
 
-  // IMU subscriber (sensor data typically uses best effort)
-  imu_sub_ = this->create_subscription<sensor_msgs::msg::Imu>(
-      "~/input/imu_raw", sensor_qos,
-      std::bind(&VadNode::imu_callback, this, std::placeholders::_1));
+  // Acceleration subscriber (sensor data typically uses best effort)
+  acceleration_sub_ = this->create_subscription<geometry_msgs::msg::AccelWithCovarianceStamped>(
+      "~/input/acceleration", sensor_qos,
+      std::bind(&VadNode::acceleration_callback, this, std::placeholders::_1));
 
   // TF static subscriber (transient local for persistence)
   auto tf_static_qos = rclcpp::QoS(1).reliability(rclcpp::ReliabilityPolicy::Reliable)
@@ -217,7 +218,7 @@ void VadNode::odometry_callback(const nav_msgs::msg::Odometry::ConstSharedPtr ms
   RCLCPP_DEBUG(this->get_logger(), "Received odometry data");
 }
 
-void VadNode::imu_callback(const sensor_msgs::msg::Imu::ConstSharedPtr msg)
+void VadNode::acceleration_callback(const geometry_msgs::msg::AccelWithCovarianceStamped::ConstSharedPtr msg)
 {
   std::lock_guard<std::mutex> lock(frame_mutex_);
 
@@ -229,10 +230,10 @@ void VadNode::imu_callback(const sensor_msgs::msg::Imu::ConstSharedPtr msg)
     frame_timeout_timer_->reset();
   }
 
-  current_frame_.imu_raw = msg;
+  current_frame_.acceleration = msg;
   check_and_process_frame();
 
-  RCLCPP_DEBUG(this->get_logger(), "Received IMU data");
+  RCLCPP_DEBUG(this->get_logger(), "Received acceleration data");
 }
 
 void VadNode::tf_static_callback(const tf2_msgs::msg::TFMessage::ConstSharedPtr msg)
@@ -435,10 +436,10 @@ void VadNode::frame_timeout_callback()
     }
     
     RCLCPP_WARN(this->get_logger(), 
-                "Frame timeout reached. Have %d/%d images, %d/%d camera_infos, kinematic_state: %s, imu_raw: %s, tf_static: %s",
+                "Frame timeout reached. Have %d/%d images, %d/%d camera_infos, kinematic_state: %s, acceleration: %s, tf_static: %s",
                 valid_images, num_cameras_, valid_camera_infos, num_cameras_,
                 current_frame_.kinematic_state ? "yes" : "no",
-                current_frame_.imu_raw ? "yes" : "no",
+                current_frame_.acceleration ? "yes" : "no",
                 current_frame_.tf_static ? "yes" : "no");
     
     // Reset frame if incomplete
