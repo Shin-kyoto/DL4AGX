@@ -22,13 +22,15 @@ VadInterface::VadInterface(const VadInterfaceConfig& config, std::shared_ptr<tf2
     image_normalization_param_mean_(config.image_normalization_param_mean),
     image_normalization_param_std_(config.image_normalization_param_std),
     vad2base_(config.vad2base),
-    base2vad_(config.base2vad)
+    base2vad_(config.base2vad),
+    current_longitudinal_velocity_mps_(0.0f),
+    prev_can_bus_(config.default_can_bus)
 {
   // AutowareカメラインデックスからVADカメラインデックスへのマッピング
   autoware_to_vad_camera_mapping_ = config.autoware_to_vad_camera_mapping;
 }
 
-VadInputData VadInterface::convert_input(const VadInputTopicData & vad_input_topic_data, const std::vector<float> & prev_can_bus)
+VadInputData VadInterface::convert_input(const VadInputTopicData & vad_input_topic_data)
 {
   VadInputData vad_input_data;
 
@@ -46,9 +48,14 @@ VadInputData VadInterface::convert_input(const VadInputTopicData & vad_input_top
   vad_input_data.can_bus_ = process_can_bus(
     vad_input_topic_data.kinematic_state,
     vad_input_topic_data.imu_raw,
-    prev_can_bus
+    prev_can_bus_
   );
-  vad_input_data.shift_ = process_shift(vad_input_data.can_bus_, prev_can_bus);
+  vad_input_data.shift_ = process_shift(vad_input_data.can_bus_, prev_can_bus_);
+  
+  // Calculate current longitudinal velocity (node_timestep = 100ms = 0.1s)
+  constexpr double node_timestep = 0.1;
+  current_longitudinal_velocity_mps_ = calculate_current_longitudinal_velocity(
+    vad_input_data.can_bus_, prev_can_bus_, node_timestep);
   
   // Process image data
   vad_input_data.camera_images_ = process_image(vad_input_topic_data.images);
@@ -56,7 +63,29 @@ VadInputData VadInterface::convert_input(const VadInputTopicData & vad_input_top
   // Set default command
   vad_input_data.command_ = default_command_;
   
+  // Update prev_can_bus_ for next iteration
+  prev_can_bus_ = vad_input_data.can_bus_;
+  
   return vad_input_data;
+}
+
+VadOutputTopicData VadInterface::convert_output(
+  const VadOutputData & vad_output_data,
+  const rclcpp::Time & stamp,
+  double trajectory_timestep,
+  const Eigen::Matrix4f & base2map_transform) const
+{
+  VadOutputTopicData output_topic_data;
+
+  // Convert candidate trajectories
+  output_topic_data.candidate_trajectories = process_candidate_trajectories(
+    vad_output_data.predicted_trajectories_, stamp, trajectory_timestep, base2map_transform);
+  
+  // Convert trajectory
+  output_topic_data.trajectory = process_trajectory(
+    vad_output_data.predicted_trajectory_, stamp, trajectory_timestep, base2map_transform);
+
+  return output_topic_data;
 }
 
 std::optional<Eigen::Matrix4f> VadInterface::lookup_base2cam(tf2_ros::Buffer & buffer, int32_t autoware_camera_id) const
@@ -200,8 +229,16 @@ CameraImagesData VadInterface::process_image(
   for (int32_t autoware_idx = 0; autoware_idx < 6; ++autoware_idx) {
     const auto &image_msg = images[autoware_idx];
 
-    // OpenCVで画像データをデコード
-    cv::Mat bgr_img = cv::imdecode(cv::Mat(image_msg->data), cv::IMREAD_COLOR); // BGRでデコード
+    // sensor_msgs::msg::Image から cv::Mat を作成
+    cv::Mat bgr_img;
+    if (image_msg->encoding == "bgr8") {
+      // BGR8の場合、そのままデータを使用
+      bgr_img = cv::Mat(image_msg->height, image_msg->width, CV_8UC3, 
+                        const_cast<uint8_t*>(image_msg->data.data()), image_msg->step);
+    } else {
+      throw std::runtime_error("サポートされていない画像エンコーディング: " + image_msg->encoding);
+    }
+
     if (bgr_img.empty()) {
       throw std::runtime_error("画像データのデコードに失敗しました: " + std::to_string(autoware_idx));
     }
@@ -367,6 +404,14 @@ std::tuple<float, float, float> VadInterface::aw2vad_xyz(float aw_x, float aw_y,
   return {vad_xyz[0], vad_xyz[1], vad_xyz[2]};
 }
 
+std::tuple<float, float, float> VadInterface::vad2aw_xyz(float vad_x, float vad_y, float vad_z) const
+{
+  // VAD base_link座標[x, y, z]をAutoware(base_link)座標に変換
+  Eigen::Vector4f vad_xyz(vad_x, vad_y, vad_z, 1.0f);
+  Eigen::Vector4f aw_xyz = vad2base_ * vad_xyz;
+  return {aw_xyz[0], aw_xyz[1], aw_xyz[2]};
+}
+
 Eigen::Quaternionf VadInterface::aw2vad_quaternion(const Eigen::Quaternionf & q_aw) const
 {
   // base2vad_の回転部分をクォータニオンに変換
@@ -377,4 +422,171 @@ Eigen::Quaternionf VadInterface::aw2vad_quaternion(const Eigen::Quaternionf & q_
   return q_v2a * q_aw * q_v2a_inv;
 }
 
-}  // namespace autoware::tensorrt_vad
+geometry_msgs::msg::Quaternion VadInterface::create_quaternion_from_yaw(double yaw) const
+{
+  geometry_msgs::msg::Quaternion q{};
+  q.x = 0.0;
+  q.y = 0.0;
+  q.z = std::sin(yaw * 0.5);
+  q.w = std::cos(yaw * 0.5);
+  return q;
+}
+
+std::vector<autoware_planning_msgs::msg::TrajectoryPoint> VadInterface::create_trajectory_points(
+  const std::vector<float> & predicted_trajectory,
+  double trajectory_timestep,
+  const Eigen::Matrix4f & base2map_transform) const
+{
+  std::vector<autoware_planning_msgs::msg::TrajectoryPoint> points;
+  
+  // base座標系の方向ベクトルをmap座標系に変換する関数内関数
+  auto transform_direction_to_map = [&base2map_transform](float base_dx, float base_dy) -> float {
+    Eigen::Vector3f base_direction(base_dx, base_dy, 0.0f);
+    Eigen::Vector3f map_direction = base2map_transform.block<3, 3>(0, 0) * base_direction;
+    return std::atan2(map_direction.y(), map_direction.x());
+  };
+  
+  // 0秒目の点 (0,0) を追加
+  autoware_planning_msgs::msg::TrajectoryPoint initial_point;
+  Eigen::Vector4f init_ego_position = base2map_transform * Eigen::Vector4f(0.0, 0.0, 0.0, 1.0);
+  initial_point.pose.position.x = init_ego_position[0];
+  initial_point.pose.position.y = init_ego_position[1];
+  initial_point.pose.position.z = init_ego_position[2];
+  // 初期方向もmap座標系に変換（base座標系でx方向を向いている場合）
+  initial_point.pose.orientation = create_quaternion_from_yaw(transform_direction_to_map(1.0f, 0.0f));
+  initial_point.longitudinal_velocity_mps = 2.5;
+  initial_point.lateral_velocity_mps = 0.0;
+  initial_point.acceleration_mps2 = 0.0;
+  initial_point.heading_rate_rps = 0.0;
+  initial_point.time_from_start.sec = 0;
+  initial_point.time_from_start.nanosec = 0;
+  points.push_back(initial_point);
+
+  double prev_x = init_ego_position[0];
+  double prev_y = init_ego_position[1];
+  auto prev_orientation = initial_point.pose.orientation;
+
+  for (size_t i = 0; i < predicted_trajectory.size(); i += 2) {
+    autoware_planning_msgs::msg::TrajectoryPoint point;
+
+    float vad_x = predicted_trajectory[i];
+    float vad_y = predicted_trajectory[i + 1];
+
+    auto [aw_x, aw_y, aw_z] = vad2aw_xyz(vad_x, vad_y, 0.0f);
+    Eigen::Vector4f base_link_position(aw_x, aw_y, 0.0, 1.0);
+    Eigen::Vector4f map_position = base2map_transform * base_link_position;
+
+    point.pose.position.x = map_position[0];
+    point.pose.position.y = map_position[1];
+    point.pose.position.z = map_position[2];
+
+    if (i + 2 < predicted_trajectory.size()) {
+      float vad_dx = predicted_trajectory[i + 2] - predicted_trajectory[i];
+      float vad_dy = predicted_trajectory[i + 3] - predicted_trajectory[i + 1];
+      auto [aw_dx, aw_dy, aw_dz] = vad2aw_xyz(vad_dx, vad_dy, 0.0f);
+      
+      float yaw = transform_direction_to_map(aw_dx, aw_dy);
+      point.pose.orientation = create_quaternion_from_yaw(yaw);
+    } else {
+      point.pose.orientation = prev_orientation;
+    }
+
+    // 速度を計算（前の点との距離を時間間隔で割る）
+    auto distance = std::hypot(point.pose.position.x - prev_x, point.pose.position.y - prev_y);
+    point.longitudinal_velocity_mps = static_cast<float>(distance / trajectory_timestep);
+    
+    point.lateral_velocity_mps = 0.0;
+    point.acceleration_mps2 = 0.0;
+    point.heading_rate_rps = 0.0;
+
+    // time_from_startを設定（1秒, 2秒, 3秒, 4秒, 5秒, 6秒）
+    size_t point_index = i / 2;
+    double time_sec = (point_index + 1) * trajectory_timestep;
+    point.time_from_start.sec = static_cast<int32_t>(time_sec);
+    point.time_from_start.nanosec = static_cast<uint32_t>((time_sec - point.time_from_start.sec) * 1e9);
+
+    // 次の計算のために現在の位置を保存
+    prev_x = point.pose.position.x;
+    prev_y = point.pose.position.y;
+    prev_orientation = point.pose.orientation;
+
+    points.push_back(point);
+  }
+
+  return points;
+}
+
+autoware_internal_planning_msgs::msg::CandidateTrajectories VadInterface::process_candidate_trajectories(
+  const std::map<int32_t, std::vector<float>> & predicted_trajectories,
+  const rclcpp::Time & stamp,
+  double trajectory_timestep,
+  const Eigen::Matrix4f & base2map_transform) const
+{
+  // CandidateTrajectories メッセージを作成
+  autoware_internal_planning_msgs::msg::CandidateTrajectories candidate_trajectories_msg;
+
+  // 各コマンドの軌道をCandidateTrajectoryとして追加
+  for (const auto& [command_idx, trajectory] : predicted_trajectories) {
+    autoware_internal_planning_msgs::msg::CandidateTrajectory candidate_trajectory;
+    
+    // ヘッダーを設定
+    candidate_trajectory.header.stamp = stamp;
+    candidate_trajectory.header.frame_id = "map";
+    
+    // generator_idを設定（ユニークなUUID）
+    candidate_trajectory.generator_id = autoware_utils_uuid::generate_uuid();
+
+    candidate_trajectory.points = create_trajectory_points(trajectory, trajectory_timestep, base2map_transform);
+
+    candidate_trajectories_msg.candidate_trajectories.push_back(candidate_trajectory);
+
+    // 各コマンドのGeneratorInfoを追加
+    autoware_internal_planning_msgs::msg::GeneratorInfo generator_info;
+    generator_info.generator_id = autoware_utils_uuid::generate_uuid();
+    generator_info.generator_name.data = "autoware_tensorrt_vad_cmd_" + std::to_string(command_idx);
+    candidate_trajectories_msg.generator_info.push_back(generator_info);
+  }
+
+  return candidate_trajectories_msg;
+}
+
+autoware_planning_msgs::msg::Trajectory VadInterface::process_trajectory(
+  const std::vector<float> & predicted_trajectory,
+  const rclcpp::Time & stamp,
+  double trajectory_timestep,
+  const Eigen::Matrix4f & base2map_transform) const
+{
+  autoware_planning_msgs::msg::Trajectory trajectory_msg;
+
+  // ヘッダーを設定
+  trajectory_msg.header.stamp = stamp;
+  trajectory_msg.header.frame_id = "map";
+
+  trajectory_msg.points = create_trajectory_points(predicted_trajectory, trajectory_timestep, base2map_transform);
+
+  return trajectory_msg;
+}
+
+float VadInterface::calculate_current_longitudinal_velocity(
+  const std::vector<float> & can_bus,
+  const std::vector<float> & prev_can_bus,
+  double node_timestep) const
+{
+  if (prev_can_bus.empty() || can_bus.size() < 3 || prev_can_bus.size() < 3) {
+    return 0.0f; // 前フレームのデータがない場合は0を返す
+  }
+
+  // can_busの位置データから速度を計算 (位置: indices 0, 1)
+  float delta_x = can_bus[0] - prev_can_bus[0];  // x方向の変位
+  float delta_y = can_bus[1] - prev_can_bus[1];  // y方向の変位
+
+  // 3次元での移動距離を計算
+  float distance = std::sqrt(delta_x * delta_x + delta_y * delta_y);
+
+  // 速度 = 距離 / 時間
+  float velocity = distance / static_cast<float>(node_timestep);
+  
+  return velocity;
+}
+
+} // namespace autoware::tensorrt_vad

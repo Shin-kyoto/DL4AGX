@@ -73,6 +73,7 @@ TEST(VadLidar2ImgTest, DummyInputOutput)
     double default_patch_angle = -1.0353195667266846;
     int32_t default_command = 0;
     std::vector<double> default_shift = {0.0, 0.0};
+    std::vector<double> default_can_bus = {-42274.0312, 89140.4531, 6.92498255, -0.00156072155, -0.0132345976, -0.475291312, 0.879727542, 0.158691406, -2.24609375, -9.72595215, 0.0, 0.0, 0.00481297961, 0.0, 2.15303349, 0.0, 5.19237747, 303.230896};
     std::vector<double> image_normalization_param_mean = {103.530, 116.280, 123.675};
     std::vector<double> image_normalization_param_std = {1.0, 1.0, 1.0};
     std::vector<double> vad2base = {
@@ -96,6 +97,7 @@ TEST(VadLidar2ImgTest, DummyInputOutput)
         default_patch_angle,
         default_command,
         default_shift,
+        default_can_bus,
         image_normalization_param_mean,
         image_normalization_param_std,
         vad2base,

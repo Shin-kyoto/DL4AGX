@@ -6,3 +6,4 @@ lib/stb/
 log/
 install/
 msgs_ws/
+autoware_tensorrt_vad/script

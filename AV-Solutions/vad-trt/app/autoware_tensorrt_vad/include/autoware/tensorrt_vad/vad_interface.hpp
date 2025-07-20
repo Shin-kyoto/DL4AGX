@@ -20,6 +20,8 @@
 #include <unordered_map>
 #include <optional>
 #include <tuple>
+#include <map>
+#include <cmath>
 
 #include "vad_interface_config.hpp"
 
@@ -31,6 +33,13 @@
 #include "tf2_msgs/msg/tf_message.hpp"
 #include "tf2_ros/buffer.h"
 #include <tf2_eigen/tf2_eigen.hpp>
+#include "autoware_internal_planning_msgs/msg/candidate_trajectories.hpp"
+#include "autoware_internal_planning_msgs/msg/candidate_trajectory.hpp"
+#include "autoware_internal_planning_msgs/msg/generator_info.hpp"
+#include "autoware_planning_msgs/msg/trajectory.hpp"
+#include "autoware_planning_msgs/msg/trajectory_point.hpp"
+#include "autoware_utils_uuid/uuid_helper.hpp"
+#include "geometry_msgs/msg/quaternion.hpp"
 
 #include "vad_model.hpp" 
 
@@ -59,11 +68,24 @@ struct VadInputTopicData
   // IMUデータ（/sensing/imu/tamagawa/imu_raw などから）
   sensor_msgs::msg::Imu::ConstSharedPtr imu_raw;
 
+private:
+  int32_t num_cameras_;
+
+public:
+  // コンストラクタ：カメラ数を指定してベクターを初期化
+  explicit VadInputTopicData(int32_t num_cameras) : num_cameras_(num_cameras) {
+    images.resize(num_cameras_);
+    camera_infos.resize(num_cameras_);
+  }
+
   // フレームが完成しているかをチェック
   bool is_complete() const {
-    if (images.size() != 6 || camera_infos.size() != 6) return false;
+    if (static_cast<int32_t>(images.size()) != num_cameras_ || 
+        static_cast<int32_t>(camera_infos.size()) != num_cameras_) {
+      return false;
+    }
     
-    for (int32_t i = 0; i < 6; ++i) {
+    for (int32_t i = 0; i < num_cameras_; ++i) {
       if (!images[i] || !camera_infos[i]) return false;
     }
     
@@ -71,6 +93,24 @@ struct VadInputTopicData
            kinematic_state != nullptr && 
            imu_raw != nullptr;
   }
+
+  // フレームをリセットする
+  void reset() {
+    images.clear();
+    images.resize(num_cameras_);
+    camera_infos.clear();
+    camera_infos.resize(num_cameras_);
+    kinematic_state.reset();
+    imu_raw.reset();
+    tf_static.reset();
+  }
+};
+
+struct VadOutputTopicData
+{
+  autoware_internal_planning_msgs::msg::CandidateTrajectories candidate_trajectories;
+  autoware_planning_msgs::msg::Trajectory trajectory;
+  // autoware_perception_msgs::msg::DetectedObjects objects;
 };
 
 // 各process_*メソッドの戻り値となるデータ構造
@@ -89,7 +129,26 @@ public:
   explicit VadInterface(const VadInterfaceConfig& config, 
                         std::shared_ptr<tf2_ros::Buffer> tf_buffer);
 
-  VadInputData convert_input(const VadInputTopicData & vad_input_topic_data, const std::vector<float> & prev_can_bus = {});
+  VadInputData convert_input(const VadInputTopicData & vad_input_topic_data);
+  VadOutputTopicData convert_output(
+    const VadOutputData & vad_output_data, 
+    const rclcpp::Time & stamp,
+    double trajectory_timestep,
+    const Eigen::Matrix4f & base2map_transform) const;
+
+  // Conversion methods for trajectories
+  autoware_internal_planning_msgs::msg::CandidateTrajectories process_candidate_trajectories(
+    const std::map<int32_t, std::vector<float>> & predicted_trajectories,
+    const rclcpp::Time & stamp,
+    double trajectory_timestep,
+    const Eigen::Matrix4f & base2map_transform) const;
+  
+  autoware_planning_msgs::msg::Trajectory process_trajectory(
+    const std::vector<float> & predicted_trajectory,
+    const rclcpp::Time & stamp,
+    double trajectory_timestep,
+    const Eigen::Matrix4f & base2map_transform) const;
+
   Lidar2ImgData process_lidar2img(
     const tf2_msgs::msg::TFMessage::ConstSharedPtr & tf_static,
     const std::vector<sensor_msgs::msg::CameraInfo::ConstSharedPtr> & camera_infos,
@@ -122,6 +181,12 @@ private:
   Eigen::Matrix4f vad2base_;
   Eigen::Matrix4f base2vad_;
   std::unordered_map<int32_t, int32_t> autoware_to_vad_camera_mapping_;
+  
+  // Current longitudinal velocity for trajectory initial point
+  float current_longitudinal_velocity_mps_;
+  
+  // Previous can_bus data for velocity calculation and other processes
+  std::vector<float> prev_can_bus_;
 
   // --- 内部処理関数 ---
   std::optional<Eigen::Matrix4f> lookup_base2cam(tf2_ros::Buffer & buffer, int32_t autoware_camera_id) const;
@@ -141,7 +206,23 @@ private:
     const std::vector<float> & prev_can_bus) const;
 
   std::tuple<float, float, float> aw2vad_xyz(float aw_x, float aw_y, float aw_z) const;
+  std::tuple<float, float, float> vad2aw_xyz(float vad_x, float vad_y, float vad_z) const;
   Eigen::Quaternionf aw2vad_quaternion(const Eigen::Quaternionf & q_aw) const;
+
+  // Calculate current longitudinal velocity from can_bus data
+  float calculate_current_longitudinal_velocity(
+    const std::vector<float> & can_bus,
+    const std::vector<float> & prev_can_bus,
+    double node_timestep) const;
+
+  // Helper function for trajectory conversion
+  geometry_msgs::msg::Quaternion create_quaternion_from_yaw(double yaw) const;
+  
+  // Helper function for creating trajectory points from predicted trajectory
+  std::vector<autoware_planning_msgs::msg::TrajectoryPoint> create_trajectory_points(
+    const std::vector<float> & predicted_trajectory,
+    double trajectory_timestep,
+    const Eigen::Matrix4f & base2map_transform) const;
 };
 
 }  // namespace autoware::tensorrt_vad

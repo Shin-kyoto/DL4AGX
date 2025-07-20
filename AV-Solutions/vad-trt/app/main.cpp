@@ -37,6 +37,8 @@
 #define STB_IMAGE_RESIZE_IMPLEMENTATION
 #include <stb/stb_image_resize.h>
 
+#include <opencv2/opencv.hpp>
+
 #include <Eigen/Dense>
 #include <autoware_perception_msgs/msg/detected_objects.hpp>
 #include <autoware_planning_msgs/msg/trajectory.hpp>
@@ -142,7 +144,6 @@ convert_normalized_to_rgb(const std::vector<float> &normalized_data) {
 class VADNode : public rclcpp::Node {
 public:
   autoware::tensorrt_vad::VadInterfaceConfig vad_interface_config_;
-  std::vector<float> prev_can_bus_;
 
   VADNode(const std::vector<std::string> &yaml_config_paths)
       : Node("vad_node", createNodeOptions(yaml_config_paths)),
@@ -157,6 +158,7 @@ public:
           declare_parameter<double>("interface_params.default_patch_angle"),
           declare_parameter<int32_t>("model_params.default_command"),
           declare_parameter<std::vector<double>>("interface_params.default_shift"),
+          declare_parameter<std::vector<double>>("interface_params.default_can_bus"),
           declare_parameter<std::vector<double>>("interface_params.image_normalization_param_mean"),
           declare_parameter<std::vector<double>>("interface_params.image_normalization_param_std"),
           declare_parameter<std::vector<double>>("interface_params.vad2base"),
@@ -164,11 +166,6 @@ public:
         ),
         trajectory_timestep_(declare_parameter<double>("interface_params.trajectory_timestep", 1.0))
   {
-
-    std::vector<double> default_can_bus = this->declare_parameter<std::vector<double>>("interface_params.default_can_bus");
-    // default_can_bus: copy and convert
-    prev_can_bus_.clear();
-    for (auto v : default_can_bus) prev_can_bus_.push_back(static_cast<float>(v));
     // Publishers
     trajectory_publisher_ =
         this->create_publisher<autoware_planning_msgs::msg::Trajectory>(
@@ -198,7 +195,7 @@ public:
     }
 
     // VadConfigを読み込み
-    loadVadConfig();
+    load_vad_config();
 
     RCLCPP_INFO(this->get_logger(), "VAD Node has been initialized");
   }
@@ -208,7 +205,7 @@ public:
     return vad_config_;
   }
 
-  void publishTrajectory(const std::vector<float> &planning) {
+  void publish_trajectory(const std::vector<float> &planning) {
     auto trajectory_msg =
         std::make_unique<autoware_planning_msgs::msg::Trajectory>();
 
@@ -217,7 +214,7 @@ public:
     initial_point.pose.position.x = 0.0;
     initial_point.pose.position.y = 0.0;
     initial_point.pose.position.z = 0.0;
-    initial_point.pose.orientation = createQuaternionFromYaw(0.0);
+    initial_point.pose.orientation = create_quaternion_from_yaw(0.0);
     initial_point.longitudinal_velocity_mps = 0.0;
     initial_point.lateral_velocity_mps = 0.0;
     initial_point.acceleration_mps2 = 0.0;
@@ -239,7 +236,7 @@ public:
         float aw_dx = ns_dy;  // Autowareの座標系に変換
         float aw_dy = -ns_dx; // Autowareの座標系に変換
         float yaw = std::atan2(aw_dy, aw_dx);
-        point.pose.orientation = createQuaternionFromYaw(yaw);
+        point.pose.orientation = create_quaternion_from_yaw(yaw);
       }
 
       point.longitudinal_velocity_mps = 0.0;
@@ -262,7 +259,7 @@ public:
     trajectory_publisher_->publish(std::move(trajectory_msg));
   }
 
-  void publishTrajectories(const std::map<int32_t, std::vector<float>> &trajectories_map) {
+  void publish_trajectories(const std::map<int32_t, std::vector<float>> &trajectories_map) {
     // CandidateTrajectories メッセージを作成
     auto candidate_trajectories_msg =
         std::make_unique<autoware_internal_planning_msgs::msg::CandidateTrajectories>();
@@ -283,7 +280,7 @@ public:
       initial_point.pose.position.x = 0.0;
       initial_point.pose.position.y = 0.0;
       initial_point.pose.position.z = 0.0;
-      initial_point.pose.orientation = createQuaternionFromYaw(0.0);
+      initial_point.pose.orientation = create_quaternion_from_yaw(0.0);
       initial_point.longitudinal_velocity_mps = 0.0;
       initial_point.lateral_velocity_mps = 0.0;
       initial_point.acceleration_mps2 = 0.0;
@@ -305,7 +302,7 @@ public:
           float aw_dx = ns_dy;  // Autowareの座標系に変換
           float aw_dy = -ns_dx; // Autowareの座標系に変換
           float yaw = std::atan2(aw_dy, aw_dx);
-          point.pose.orientation = createQuaternionFromYaw(yaw);
+          point.pose.orientation = create_quaternion_from_yaw(yaw);
         }
 
         point.longitudinal_velocity_mps = 0.0;
@@ -350,7 +347,7 @@ public:
       object.kinematics.pose_with_covariance.pose.position.z = det[2];
 
       object.kinematics.pose_with_covariance.pose.orientation =
-          createQuaternionFromYaw(det[6]);
+          create_quaternion_from_yaw(det[6]);
 
       object.shape.dimensions.x = det[3]; // width
       object.shape.dimensions.y = det[4]; // length
@@ -400,7 +397,7 @@ private:
     return node_options;
   }
 
-  void loadVadConfig() {
+  void load_vad_config() {
     // このノード自体からパラメータを読み込み
     vad_config_.plugins_path =
         this->declare_parameter<std::string>("model_params.plugins_path", "");
@@ -408,10 +405,10 @@ private:
         this->declare_parameter<int>("model_params.warm_up_num", 20);
 
     // ネットワーク設定の読み込み
-    loadNetConfigs();
+    load_net_configs();
   }
 
-  void loadNetConfigs() {
+  void load_net_configs() {
     // 階層構造でネットワーク設定を読み込み
 
     // backbone設定
@@ -475,7 +472,7 @@ private:
                  camera_index);
   }
 
-  geometry_msgs::msg::Quaternion createQuaternionFromYaw(double yaw) {
+  geometry_msgs::msg::Quaternion create_quaternion_from_yaw(double yaw) {
     geometry_msgs::msg::Quaternion q;
     q.x = 0.0;
     q.y = 0.0;
@@ -542,7 +539,7 @@ extract_vad_topic_data_from_rosbag(const std::string &bag_path, std::shared_ptr<
     rosbag2_cpp::readers::SequentialReader reader;
     reader.open(storage_options, converter_options);
 
-    autoware::tensorrt_vad::VadInputTopicData current_frame;
+    autoware::tensorrt_vad::VadInputTopicData current_frame(6);
     bool frame_started = false;
 
     while (reader.has_next()) {
@@ -563,21 +560,25 @@ extract_vad_topic_data_from_rosbag(const std::string &bag_path, std::shared_ptr<
           // CompressedImageをImageに変換
           auto image_msg = std::make_shared<sensor_msgs::msg::Image>();
           image_msg->header = msg->header;
-          image_msg->height = msg->format.find("height=") != std::string::npos
-                                  ? std::stoi(msg->format.substr(
-                                        msg->format.find("height=") + 7,
-                                        msg->format.find(";") -
-                                            msg->format.find("height=") - 7))
-                                  : 0;
-          image_msg->width =
-              msg->format.find("width=") != std::string::npos
-                  ? std::stoi(msg->format.substr(
-                        msg->format.find("width=") + 6,
-                        msg->format.find(";") - msg->format.find("width=") - 6))
-                  : 0;
+          
+          // OpenCVで圧縮画像をデコード
+          cv::Mat bgr_img = cv::imdecode(cv::Mat(msg->data), cv::IMREAD_COLOR);
+          if (bgr_img.empty()) {
+            std::cerr << "Failed to decode compressed image for camera " 
+                      << autoware_idx << std::endl;
+            continue;
+          }
+          
+          // デコードした画像からImage メッセージを作成
+          image_msg->height = bgr_img.rows;
+          image_msg->width = bgr_img.cols;
           image_msg->encoding = "bgr8";
-          image_msg->data = msg->data;
-          image_msg->step = image_msg->width * 3;
+          image_msg->step = bgr_img.cols * 3;
+          
+          // ピクセルデータをコピー
+          size_t data_size = bgr_img.rows * bgr_img.cols * 3;
+          image_msg->data.resize(data_size);
+          std::memcpy(image_msg->data.data(), bgr_img.data, data_size);
 
           if (!frame_started) {
             current_frame.stamp = msg->header.stamp;
@@ -674,7 +675,7 @@ extract_vad_topic_data_from_rosbag(const std::string &bag_path, std::shared_ptr<
         vad_topic_data_list.push_back(current_frame);
 
         // 次のフレームの準備
-        current_frame = autoware::tensorrt_vad::VadInputTopicData();
+        current_frame = autoware::tensorrt_vad::VadInputTopicData(6);
         frame_started = false;
       }
     }
@@ -742,17 +743,11 @@ int main(int argc, char **argv) {
 
   
   // フレームごとに処理
-  std::vector<float> prev_can_bus = node->prev_can_bus_;
   for (int32_t frame_id = 1; frame_id <= vad_topic_data_list.size(); frame_id++) {
     std::string frame_dir = data_dir + std::to_string(frame_id) + "/";
 
-    // VadInterfaceを使用してVadInputTopicDataをVadInputDataに変換（古いprev_can_busを使用）
-    auto vad_input_data = vad_interface.convert_input(
-        vad_topic_data_list[frame_id - 1],
-        prev_can_bus);
-
-    // 前フレームのcan_busデータを更新（次のフレーム用）
-    prev_can_bus = vad_input_data.can_bus_;
+    // VadInterfaceを使用してVadInputTopicDataをVadInputDataに変換
+    auto vad_input_data = vad_interface.convert_input(vad_topic_data_list[frame_id - 1]);
 
     // VadModelのinfer関数を使用
     auto inference_result = vad_model.infer(vad_input_data);
@@ -792,10 +787,10 @@ int main(int argc, char **argv) {
 
     // pred -> frame.planning
     frame.planning = vad_output_data.predicted_trajectory_;
-    node->publishTrajectory(frame.planning);
+    node->publish_trajectory(frame.planning);
     
     // publish all trajectories as CandidateTrajectories
-    node->publishTrajectories(vad_output_data.predicted_trajectories_);
+    node->publish_trajectories(vad_output_data.predicted_trajectories_);
     
     printf("publish trajectory");
     rclcpp::spin_some(node);
