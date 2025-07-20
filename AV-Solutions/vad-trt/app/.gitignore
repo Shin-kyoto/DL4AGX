@@ -7,3 +7,6 @@ log/
 install/
 msgs_ws/
 autoware_tensorrt_vad/script
+.kiro
+*copilot-instructions.md
+*.zip
