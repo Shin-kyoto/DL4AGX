@@ -64,6 +64,8 @@ std::pair<Eigen::Matrix4f, Eigen::Matrix4f> get_transform_matrix(
 
 VadNode::VadNode(const rclcpp::NodeOptions & options) 
   : Node("vad_node", options), 
+    tf_buffer_(this->get_clock()),
+    num_cameras_(declare_parameter<int32_t>("node_params.num_cameras")),
     vad_interface_config_(
       declare_parameter<int32_t>("interface_params.input_image_width"),
       declare_parameter<int32_t>("interface_params.input_image_height"),
@@ -81,8 +83,6 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
       declare_parameter<std::vector<double>>("interface_params.vad2base"),
       declare_parameter<std::vector<int64_t>>("interface_params.autoware_to_vad_camera_mapping")
     ),
-    tf_buffer_(this->get_clock()),
-    num_cameras_(declare_parameter<int32_t>("node_params.num_cameras")),
     trajectory_timestep_(declare_parameter<double>("interface_params.trajectory_timestep", 1.0)),
     current_frame_(num_cameras_),
     frame_started_(false)

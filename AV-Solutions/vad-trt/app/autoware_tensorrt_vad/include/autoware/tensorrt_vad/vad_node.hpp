@@ -69,8 +69,7 @@ private:
   void publish_trajectory(const autoware_planning_msgs::msg::Trajectory & trajectory);
   void publish_trajectories(const autoware_internal_planning_msgs::msg::CandidateTrajectories & candidate_trajectories);
 
-  // Conversion methods
-
+  // Callback methods
   void image_callback(const sensor_msgs::msg::Image::ConstSharedPtr msg, std::size_t camera_id);
   void camera_info_callback(const sensor_msgs::msg::CameraInfo::ConstSharedPtr msg, std::size_t camera_id);
   void odometry_callback(const nav_msgs::msg::Odometry::ConstSharedPtr msg);
@@ -82,8 +81,7 @@ private:
   void reset_current_frame();
   void frame_timeout_callback();
 
-  // Member variables in declaration order to match constructor initialization
-  VadInterfaceConfig vad_interface_config_;
+  // tf Members
   tf2_ros::Buffer tf_buffer_;
   tf2_ros::TransformListener tf_listener_{tf_buffer_};
 
@@ -99,14 +97,14 @@ private:
   rclcpp::Subscription<sensor_msgs::msg::Imu>::SharedPtr imu_sub_;
   rclcpp::Subscription<tf2_msgs::msg::TFMessage>::SharedPtr tf_static_sub_;
 
-  // VAD model - 具体的なロガー型を指定
+  // VAD model
   std::unique_ptr<VadModel<RosVadLogger>> vad_model_ptr_{};
+  VadConfig vad_config_;
 
   // VAD interface
   std::unique_ptr<VadInterface> vad_interface_ptr_{};
+  VadInterfaceConfig vad_interface_config_;
 
-  // VAD config
-  VadConfig vad_config_;
 
   // trajectory_timestep parameter
   double trajectory_timestep_;
