@@ -1,0 +1,91 @@
+# AWSIM Topic Publisher Configuration
+
+# Topics to subscribe to
+subscribe:
+  camera_topic: "/sensing/camera/image_raw"
+  tf_topic: "/tf_static"
+
+# Topics to publish
+publish:
+  camera_topics:
+    - "/sensing/camera/camera1/image_rect_color/compressed"
+    - "/sensing/camera/camera2/image_rect_color/compressed"
+    - "/sensing/camera/camera3/image_rect_color/compressed"
+    - "/sensing/camera/camera4/image_rect_color/compressed"
+    - "/sensing/camera/camera5/image_rect_color/compressed"
+  
+  camera_info_topics:
+    - "/sensing/camera/camera0/camera_info"
+    - "/sensing/camera/camera1/camera_info"
+    - "/sensing/camera/camera2/camera_info"
+    - "/sensing/camera/camera3/camera_info"
+    - "/sensing/camera/camera4/camera_info"
+    - "/sensing/camera/camera5/camera_info"
+
+# Camera configuration
+camera:
+  image_size:
+    width: 1920
+    height: 1080
+  
+  # Camera intrinsic matrix K (3x3 flattened to 9 elements) - common for all cameras
+  k_matrix: [1257.86253, 0.0, 827.241063, 0.0, 1257.86253, 450.915498, 0.0, 0.0, 1.0]
+
+# TF configuration
+# Note: tf2_echo shows base_link -> camera_optical_link transform
+# TF static stores the inverse transform: camera_optical_link -> base_link
+tf:
+  camera_optical_links:
+    camera0/camera_optical_link:
+      x: -0.355
+      y: 0.000
+      z: -0.436
+      qx: -0.485
+      qy: -0.487
+      qz: 0.519
+      qw: 0.508
+    
+    camera1/camera_optical_link:
+      x: -0.281
+      y: -0.000
+      z: -1.016
+      qx: 0.510
+      qy: -0.510
+      qz: 0.494
+      qw: -0.486
+    
+    camera2/camera_optical_link:
+      x: -0.350
+      y: -0.099
+      z: -0.539
+      qx: -0.193
+      qy: -0.665
+      qz: 0.685
+      qw: 0.226
+    
+    camera3/camera_optical_link:
+      x: -0.287
+      y: 0.209
+      z: -0.434
+      qx: 0.128
+      qy: -0.694
+      qz: 0.701
+      qw: -0.100
+    
+    camera4/camera_optical_link:
+      x: -0.331
+      y: -0.038
+      z: -0.613
+      qx: -0.672
+      qy: -0.177
+      qz: 0.219
+      qw: 0.685
+    
+    camera5/camera_optical_link:
+      x: -0.298
+      y: -0.095
+      z: -0.460
+      qx: -0.691
+      qy: 0.154
+      qz: -0.122
+      qw: 0.695
