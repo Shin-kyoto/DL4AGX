@@ -11,7 +11,8 @@
   <arg name="camera_info4" default="/sensing/camera/camera4/camera_info"/>
   <arg name="camera_info5" default="/sensing/camera/camera5/camera_info"/>
 
-  <arg name="image0" default="/sensing/camera/camera0/image_rect_color"/>
+  <!-- <arg name="image0" default="/sensing/camera/camera0/image_rect_color"/> -->
+  <arg name="image0" default="/sensing/camera/image_raw"/>
   <arg name="image1" default="/sensing/camera/camera1/image_rect_color"/>
   <arg name="image2" default="/sensing/camera/camera2/image_rect_color"/>
   <arg name="image3" default="/sensing/camera/camera3/image_rect_color"/>
@@ -19,7 +20,7 @@
   <arg name="image5" default="/sensing/camera/camera5/image_rect_color"/>
 
   <arg name="kinematic_state" default="/localization/kinematic_state"/>
-  <arg name="imu_raw" default="/sensing/imu/tamagawa/imu_raw"/>
+  <arg name="imu_raw" default="/sensing/imu/imu_raw"/>
 
   <arg name="output/objects" default="perception/object_recognition/detection/vad/objects"/>
   <arg name="output/trajectory" default="planning/vad/trajectory"/>

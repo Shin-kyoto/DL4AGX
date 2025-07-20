@@ -1,8 +1,8 @@
 /**:
   ros__parameters:
     node_params:
-      use_raw: [false, false, false, false, false, false] # per camera: if true, use raw image data, otherwise use compressed images
+      use_raw: [true, false, false, false, false, false] # per camera: if true, use raw image data, otherwise use compressed images
     model_params:
       plugins_path: "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/libplugins.so"
       warm_up_num: 20
-      default_command: 2  # 0: TURN RIGHT, 1: TURN LEFT, 2: KEEP FORWARD
+      default_command: 0  # 0: TURN RIGHT, 1: TURN LEFT, 2: KEEP FORWARD

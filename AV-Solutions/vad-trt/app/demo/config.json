@@ -2,9 +2,9 @@
   "project": "vadv1",
   "warm_up": 20,
   "n_frames": 30,
-  "lidar_z_compensation": 1.4,
+  "lidar_z_compensation": 1.2,
   "visualization": {
-    "init_lidar_y": 1.6,
+    "init_lidar_y": 1.0,
     "ground_height": -0.3
   },
   "plugins": ["home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/libplugins.so"],
