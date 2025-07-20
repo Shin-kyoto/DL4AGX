@@ -29,10 +29,10 @@ def main():
 
     input_dir = config.get("input_dir", "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/data/demo_data")
     n_frames = config.get("n_frames", 30)
-    output_file = config.get("output_file", "output_bag.ns-0708")
+    output_file = config.get("output_file", "output_bag.ns-0717")
     topic_template = config.get("topic", "/sensing/camera/camera{i}/image_rect_color/compressed")
     image_format = config.get("image_format", "jpeg")
-    init_time = config.get("init_time", 1672531200)
+    init_time = config.get("init_time", 1752738404)
     cycle_time_ms = config.get("cycle_time_ms", 100)
 
     cameras = config.get("cameras", [])
@@ -52,8 +52,16 @@ def main():
     )
     writer.open(storage_options, converter_options)
 
+    # カメラ/IMU/運動学状態/camera_info/tf_static用QoSプロファイル定義（既存バッグと一致）
+    camera_image_qos_profile = "- history: 1\n  depth: 5\n  reliability: 2\n  durability: 2\n  deadline:\n    sec: 9223372036\n    nsec: 854775807\n  lifespan:\n    sec: 9223372036\n    nsec: 854775807\n  liveliness: 1\n  liveliness_lease_duration:\n    sec: 9223372036\n    nsec: 854775807\n  avoid_ros_namespace_conventions: false"
+    imu_qos_profile = "- history: 1\n  depth: 1000\n  reliability: 1\n  durability: 2\n  deadline:\n    sec: 9223372036\n    nsec: 854775807\n  lifespan:\n    sec: 9223372036\n    nsec: 854775807\n  liveliness: 1\n  liveliness_lease_duration:\n    sec: 9223372036\n    nsec: 854775807\n  avoid_ros_namespace_conventions: false"
+    kinematic_state_qos_profile = "- history: 1\n  depth: 1\n  reliability: 1\n  durability: 2\n  deadline:\n    sec: 9223372036\n    nsec: 854775807\n  lifespan:\n    sec: 9223372036\n    nsec: 854775807\n  liveliness: 1\n  liveliness_lease_duration:\n    sec: 9223372036\n    nsec: 854775807\n  avoid_ros_namespace_conventions: false"
+    camera_info_qos_profile = "- history: 1\n  depth: 5\n  reliability: 2\n  durability: 2\n  deadline:\n    sec: 9223372036\n    nsec: 854775807\n  lifespan:\n    sec: 9223372036\n    nsec: 854775807\n  liveliness: 1\n  liveliness_lease_duration:\n    sec: 9223372036\n    nsec: 854775807\n  avoid_ros_namespace_conventions: false"
+    tf_static_qos_profile = "- history: 1\n  depth: 1\n  reliability: 1\n  durability: 3\n  deadline:\n    sec: 2147483647\n    nsec: 4294967295\n  lifespan:\n    sec: 2147483647\n    nsec: 4294967295\n  liveliness: 1\n  liveliness_lease_duration:\n    sec: 2147483647\n    nsec: 4294967295\n  avoid_ros_namespace_conventions: false"
+
     # カメラトピックの作成
     topics = {}
+    
     for cam in cameras:
         autoware_index = cam["autoware"]
         topic_name = topic_template.format(i=autoware_index)
@@ -61,7 +69,8 @@ def main():
         topic_metadata = rosbag2_py.TopicMetadata(
             name=topic_name,
             type="sensor_msgs/msg/CompressedImage",
-            serialization_format="cdr"
+            serialization_format="cdr",
+            offered_qos_profiles=camera_image_qos_profile
         )
         writer.create_topic(topic_metadata)
 
@@ -72,10 +81,13 @@ def main():
     ]
     
     for topic_name, topic_type in can_bus_topics:
+        # IMUと運動学状態は個別QoSを使用
+        qos = imu_qos_profile if topic_name.endswith("imu_raw") else kinematic_state_qos_profile
         topic_info = rosbag2_py.TopicMetadata(
             name=topic_name,
             type=topic_type,
-            serialization_format="cdr"
+            serialization_format="cdr",
+            offered_qos_profiles=qos
         )
         writer.create_topic(topic_info)
 
@@ -83,7 +95,8 @@ def main():
     lidar_topic_metadata = rosbag2_py.TopicMetadata(
         name="/sensing/lidar/concatenated/pointcloud",
         type="sensor_msgs/msg/PointCloud2",
-        serialization_format="cdr"
+        serialization_format="cdr",
+        offered_qos_profiles=imu_qos_profile  # 一般的に信頼性重視
     )
     writer.create_topic(lidar_topic_metadata)
 
@@ -91,7 +104,8 @@ def main():
     tf_static_topic_metadata = rosbag2_py.TopicMetadata(
         name="/tf_static",
         type="tf2_msgs/msg/TFMessage",
-        serialization_format="cdr"
+        serialization_format="cdr",
+        offered_qos_profiles=tf_static_qos_profile
     )
     writer.create_topic(tf_static_topic_metadata)
 
@@ -100,7 +114,8 @@ def main():
         camera_info_topic_metadata = rosbag2_py.TopicMetadata(
             name=f"/sensing/camera/camera{autoware_camera_id}/camera_info",
             type="sensor_msgs/msg/CameraInfo",
-            serialization_format="cdr"
+            serialization_format="cdr",
+            offered_qos_profiles=camera_info_qos_profile
         )
         writer.create_topic(camera_info_topic_metadata)
 
@@ -241,8 +256,8 @@ def main():
 
             cam_img = arr[vad_index]
             cam_img = cam_img * std[:, None, None] + mean[:, None, None]
-            # cam_imgのwidthを1600, heightを960に変換
-            cam_img = cv2.resize(cam_img.transpose(1, 2, 0), (1600, 960))
+            # cam_imgのwidthを1653, heightを940に変換
+            cam_img = cv2.resize(cam_img.transpose(1, 2, 0), (1653, 940))
             cam_img = np.clip(cam_img, 0, 255).astype(np.uint8)
 
             ret, jpeg_encoded = cv2.imencode(".jpg", cam_img)
@@ -251,13 +266,13 @@ def main():
                 continue
             jpeg_bytes = jpeg_encoded.tobytes()
 
+            
             msg = CompressedImage()
             msg.header = Header()
             msg.header.stamp = cam_ros_timestamp
-            msg.header.frame_id = f"camera{autoware_index}"
+            msg.header.frame_id = f"camera{autoware_index}/camera_optical_link"
             msg.format = image_format
             msg.data = jpeg_bytes
-
             write_to_rosbag(writer, topic_name, msg, cam_ros_timestamp)
             print(f"Frame {frame}, camera {cam['name']} processed")
 
