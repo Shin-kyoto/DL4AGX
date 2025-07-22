@@ -78,7 +78,6 @@ private:
   void tf_static_callback(const tf2_msgs::msg::TFMessage::ConstSharedPtr msg);
 
   // Helper functions for data synchronization
-  void check_and_process_frame();
   void reset_current_frame();
   void frame_timeout_callback();
 
@@ -126,7 +125,8 @@ private:
 
   // 推論を実行するメソッド
   std::optional<VadOutputTopicData> execute_inference(const VadInputTopicData & vad_topic_data);
-  void publish(const VadInputTopicData & vad_topic_data);
+  std::optional<VadOutputTopicData> trigger_inference();
+  void publish(const VadOutputTopicData & vad_output_topic_data);
 };
 }  // namespace autoware::tensorrt_vad
 

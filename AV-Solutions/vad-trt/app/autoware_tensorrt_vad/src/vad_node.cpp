@@ -171,7 +171,10 @@ void VadNode::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr msg, 
   // Store as ConstSharedPtr directly
   current_frame_.images[camera_id] = msg;
     
-  check_and_process_frame();
+  auto vad_output_topic_data = trigger_inference();
+  if (vad_output_topic_data.has_value()) {
+    publish(vad_output_topic_data.value());
+  }
 
   RCLCPP_DEBUG(this->get_logger(), "Received image from camera %zu", camera_id);
 }
@@ -195,7 +198,10 @@ void VadNode::camera_info_callback(const sensor_msgs::msg::CameraInfo::ConstShar
   }
 
   current_frame_.camera_infos[camera_id] = msg;
-  check_and_process_frame();
+  auto vad_output_topic_data = trigger_inference();
+  if (vad_output_topic_data.has_value()) {
+    publish(vad_output_topic_data.value());
+  }
 
   RCLCPP_DEBUG(this->get_logger(), "Received camera info from camera %zu", camera_id);
 }
@@ -213,7 +219,10 @@ void VadNode::odometry_callback(const nav_msgs::msg::Odometry::ConstSharedPtr ms
   }
 
   current_frame_.kinematic_state = msg;
-  check_and_process_frame();
+  auto vad_output_topic_data = trigger_inference();
+  if (vad_output_topic_data.has_value()) {
+    publish(vad_output_topic_data.value());
+  }
 
   RCLCPP_DEBUG(this->get_logger(), "Received odometry data");
 }
@@ -231,7 +240,10 @@ void VadNode::acceleration_callback(const geometry_msgs::msg::AccelWithCovarianc
   }
 
   current_frame_.acceleration = msg;
-  check_and_process_frame();
+  auto vad_output_topic_data = trigger_inference();
+  if (vad_output_topic_data.has_value()) {
+    publish(vad_output_topic_data.value());
+  }
 
   RCLCPP_DEBUG(this->get_logger(), "Received acceleration data");
 }
@@ -255,12 +267,15 @@ void VadNode::tf_static_callback(const tf2_msgs::msg::TFMessage::ConstSharedPtr 
     tf_buffer_.setTransform(transform, "default_authority", true);
   }
 
-  check_and_process_frame();
+  auto vad_output_topic_data = trigger_inference();
+  if (vad_output_topic_data.has_value()) {
+    publish(vad_output_topic_data.value());
+  }
 
   RCLCPP_DEBUG(this->get_logger(), "Received TF static data");
 }
 
-void VadNode::check_and_process_frame()
+std::optional<VadOutputTopicData> VadNode::trigger_inference()
 {
   // Use the built-in is_complete() method to check if we have all required data
   if (current_frame_.is_complete()) {
@@ -268,12 +283,16 @@ void VadNode::check_and_process_frame()
     // Cancel timeout timer since frame is complete
     frame_timeout_timer_->cancel();
 
-    // Execute inference and publish results
-    publish(current_frame_);
+    // Execute inference
+    auto vad_output_topic_data = execute_inference(current_frame_);
 
     // Reset frame for next data collection
     reset_current_frame();
+
+    return vad_output_topic_data;
   }
+  
+  return std::nullopt;
 }
 
 void VadNode::reset_current_frame()
@@ -401,24 +420,15 @@ std::optional<VadOutputTopicData> VadNode::execute_inference(const VadInputTopic
   return std::nullopt;
 }
 
-void VadNode::publish(const VadInputTopicData & vad_topic_data)
+void VadNode::publish(const VadOutputTopicData & vad_output_topic_data)
 {
+  // Publish individual trajectory using the dedicated method
+  publish_trajectory(vad_output_topic_data.trajectory);
 
-  // VAD推論を実行
-  const auto vad_output_topic_data = execute_inference(vad_topic_data);
+  // Publish candidate trajectories
+  publish_trajectories(vad_output_topic_data.candidate_trajectories);
 
-  // 結果をパブリッシュ
-  if (vad_output_topic_data.has_value()) {
-    // Publish individual trajectory using the dedicated method
-    publish_trajectory(vad_output_topic_data.value().trajectory);
-
-    // Publish candidate trajectories
-    publish_trajectories(vad_output_topic_data.value().candidate_trajectories);
-
-    RCLCPP_DEBUG(this->get_logger(), "Published trajectories and candidate trajectories");
-  } else {
-    RCLCPP_WARN(this->get_logger(), "No valid trajectories to publish");
-  }
+  RCLCPP_DEBUG(this->get_logger(), "Published trajectories and candidate trajectories");
 }
 
 void VadNode::frame_timeout_callback()
