@@ -198,10 +198,6 @@ void VadNode::camera_info_callback(const sensor_msgs::msg::CameraInfo::ConstShar
   }
 
   current_frame_.camera_infos[camera_id] = msg;
-  auto vad_output_topic_data = trigger_inference();
-  if (vad_output_topic_data.has_value()) {
-    publish(vad_output_topic_data.value());
-  }
 
   RCLCPP_DEBUG(this->get_logger(), "Received camera info from camera %zu", camera_id);
 }
@@ -219,10 +215,6 @@ void VadNode::odometry_callback(const nav_msgs::msg::Odometry::ConstSharedPtr ms
   }
 
   current_frame_.kinematic_state = msg;
-  auto vad_output_topic_data = trigger_inference();
-  if (vad_output_topic_data.has_value()) {
-    publish(vad_output_topic_data.value());
-  }
 
   RCLCPP_DEBUG(this->get_logger(), "Received odometry data");
 }
@@ -240,10 +232,6 @@ void VadNode::acceleration_callback(const geometry_msgs::msg::AccelWithCovarianc
   }
 
   current_frame_.acceleration = msg;
-  auto vad_output_topic_data = trigger_inference();
-  if (vad_output_topic_data.has_value()) {
-    publish(vad_output_topic_data.value());
-  }
 
   RCLCPP_DEBUG(this->get_logger(), "Received acceleration data");
 }
@@ -265,11 +253,6 @@ void VadNode::tf_static_callback(const tf2_msgs::msg::TFMessage::ConstSharedPtr 
   // Register transforms in tf_buffer
   for (const auto &transform : msg->transforms) {
     tf_buffer_.setTransform(transform, "default_authority", true);
-  }
-
-  auto vad_output_topic_data = trigger_inference();
-  if (vad_output_topic_data.has_value()) {
-    publish(vad_output_topic_data.value());
   }
 
   RCLCPP_DEBUG(this->get_logger(), "Received TF static data");
