@@ -85,7 +85,7 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
       declare_parameter<std::vector<int64_t>>("interface_params.autoware_to_vad_camera_mapping")
     ),
     trajectory_timestep_(declare_parameter<double>("interface_params.trajectory_timestep", 1.0)),
-    current_frame_(num_cameras_),
+    vad_input_topic_data_current_frame_(num_cameras_),
     frame_started_(false)
 {
   // Publishers
@@ -162,14 +162,14 @@ void VadNode::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr msg, 
 
   // Initialize frame if not started
   if (!frame_started_) {
-    current_frame_.stamp = msg->header.stamp;
+    vad_input_topic_data_current_frame_.stamp = msg->header.stamp;
     frame_started_ = true;
     // Start timeout timer for this frame
     frame_timeout_timer_->reset();
   }
 
   // Store as ConstSharedPtr directly
-  current_frame_.images[camera_id] = msg;
+  vad_input_topic_data_current_frame_.images[camera_id] = msg;
     
   auto vad_output_topic_data = trigger_inference();
   if (vad_output_topic_data.has_value()) {
@@ -191,13 +191,13 @@ void VadNode::camera_info_callback(const sensor_msgs::msg::CameraInfo::ConstShar
 
   // Initialize frame if not started
   if (!frame_started_) {
-    current_frame_.stamp = msg->header.stamp;
+    vad_input_topic_data_current_frame_.stamp = msg->header.stamp;
     frame_started_ = true;
     // Start timeout timer for this frame
     frame_timeout_timer_->reset();
   }
 
-  current_frame_.camera_infos[camera_id] = msg;
+  vad_input_topic_data_current_frame_.camera_infos[camera_id] = msg;
 
   RCLCPP_DEBUG(this->get_logger(), "Received camera info from camera %zu", camera_id);
 }
@@ -208,13 +208,13 @@ void VadNode::odometry_callback(const nav_msgs::msg::Odometry::ConstSharedPtr ms
 
   // Initialize frame if not started
   if (!frame_started_) {
-    current_frame_.stamp = msg->header.stamp;
+    vad_input_topic_data_current_frame_.stamp = msg->header.stamp;
     frame_started_ = true;
     // Start timeout timer for this frame
     frame_timeout_timer_->reset();
   }
 
-  current_frame_.kinematic_state = msg;
+  vad_input_topic_data_current_frame_.kinematic_state = msg;
 
   RCLCPP_DEBUG(this->get_logger(), "Received odometry data");
 }
@@ -225,13 +225,13 @@ void VadNode::acceleration_callback(const geometry_msgs::msg::AccelWithCovarianc
 
   // Initialize frame if not started
   if (!frame_started_) {
-    current_frame_.stamp = msg->header.stamp;
+    vad_input_topic_data_current_frame_.stamp = msg->header.stamp;
     frame_started_ = true;
     // Start timeout timer for this frame
     frame_timeout_timer_->reset();
   }
 
-  current_frame_.acceleration = msg;
+  vad_input_topic_data_current_frame_.acceleration = msg;
 
   RCLCPP_DEBUG(this->get_logger(), "Received acceleration data");
 }
@@ -242,13 +242,13 @@ void VadNode::tf_static_callback(const tf2_msgs::msg::TFMessage::ConstSharedPtr 
 
   // Initialize frame if not started (though tf_static typically comes first)
   if (!frame_started_) {
-    current_frame_.stamp = rclcpp::Time(0);  // tf_static doesn't have timestamp
+    vad_input_topic_data_current_frame_.stamp = rclcpp::Time(0);  // tf_static doesn't have timestamp
     frame_started_ = true;
     // Start timeout timer for this frame
     frame_timeout_timer_->reset();
   }
 
-  current_frame_.tf_static = msg;
+  vad_input_topic_data_current_frame_.tf_static = msg;
 
   // Register transforms in tf_buffer
   for (const auto &transform : msg->transforms) {
@@ -261,13 +261,13 @@ void VadNode::tf_static_callback(const tf2_msgs::msg::TFMessage::ConstSharedPtr 
 std::optional<VadOutputTopicData> VadNode::trigger_inference()
 {
   // Use the built-in is_complete() method to check if we have all required data
-  if (current_frame_.is_complete()) {
+  if (vad_input_topic_data_current_frame_.is_complete()) {
     
     // Cancel timeout timer since frame is complete
     frame_timeout_timer_->cancel();
 
     // Execute inference
-    auto vad_output_topic_data = execute_inference(current_frame_);
+    auto vad_output_topic_data = execute_inference(vad_input_topic_data_current_frame_);
 
     // Reset frame for next data collection
     reset_current_frame();
@@ -280,7 +280,7 @@ std::optional<VadOutputTopicData> VadNode::trigger_inference()
 
 void VadNode::reset_current_frame()
 {
-  current_frame_.reset();
+  vad_input_topic_data_current_frame_.reset();
   frame_started_ = false;
 }
 
@@ -391,7 +391,7 @@ std::optional<VadOutputTopicData> VadNode::execute_inference(const VadInputTopic
   // VadModelで推論実行
   const auto vad_output = vad_model_ptr_->infer(vad_input);
 
-  const auto [base2map_transform, map2base_transform] = get_transform_matrix(*current_frame_.kinematic_state);
+  const auto [base2map_transform, map2base_transform] = get_transform_matrix(*vad_input_topic_data_current_frame_.kinematic_state);
   // VadInterfaceを通じてROS型に変換
   if (vad_output.has_value()) {
     const auto vad_output_topic_data = vad_interface_ptr_->convert_output(
@@ -423,17 +423,17 @@ void VadNode::frame_timeout_callback()
     int valid_images = 0;
     int valid_camera_infos = 0;
     
-    for (size_t i = 0; i < current_frame_.images.size(); ++i) {
-      if (current_frame_.images[i]) valid_images++;
-      if (current_frame_.camera_infos[i]) valid_camera_infos++;
+    for (size_t i = 0; i < vad_input_topic_data_current_frame_.images.size(); ++i) {
+      if (vad_input_topic_data_current_frame_.images[i]) valid_images++;
+      if (vad_input_topic_data_current_frame_.camera_infos[i]) valid_camera_infos++;
     }
     
     RCLCPP_WARN(this->get_logger(), 
                 "Frame timeout reached. Have %d/%d images, %d/%d camera_infos, kinematic_state: %s, acceleration: %s, tf_static: %s",
                 valid_images, num_cameras_, valid_camera_infos, num_cameras_,
-                current_frame_.kinematic_state ? "yes" : "no",
-                current_frame_.acceleration ? "yes" : "no",
-                current_frame_.tf_static ? "yes" : "no");
+                vad_input_topic_data_current_frame_.kinematic_state ? "yes" : "no",
+                vad_input_topic_data_current_frame_.acceleration ? "yes" : "no",
+                vad_input_topic_data_current_frame_.tf_static ? "yes" : "no");
     
     // Reset frame if incomplete
     reset_current_frame();

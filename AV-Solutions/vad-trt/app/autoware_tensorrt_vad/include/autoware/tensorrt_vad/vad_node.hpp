@@ -115,7 +115,7 @@ private:
   rclcpp::Publisher<autoware_perception_msgs::msg::DetectedObjects>::SharedPtr objects_publisher_;
 
   // Current frame data accumulation
-  VadInputTopicData current_frame_;
+  VadInputTopicData vad_input_topic_data_current_frame_;
   bool frame_started_;
   std::mutex frame_mutex_;
   
