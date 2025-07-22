@@ -138,14 +138,6 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
     initialize_vad_model();
   }
 
-  // Initialize timeout timer
-  frame_timeout_timer_ = this->create_wall_timer(
-    FRAME_TIMEOUT,
-    std::bind(&VadNode::frame_timeout_callback, this));
-  
-  // Start timer as stopped initially
-  frame_timeout_timer_->cancel();
-
   RCLCPP_INFO(this->get_logger(), "VAD Node has been initialized - VAD model will be initialized after first callback");
 }
 
@@ -155,12 +147,6 @@ void VadNode::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr msg, 
   if (static_cast<int32_t>(camera_id) >= num_cameras_) {
     RCLCPP_ERROR(this->get_logger(), "Invalid camera_id: %zu. Expected 0-%d", camera_id, num_cameras_ - 1);
     return;
-  }
-
-  // Initialize frame if not started and set image data
-  if (!vad_input_topic_data_current_frame_.is_frame_started()) {
-    // Start timeout timer for this frame
-    frame_timeout_timer_->reset();
   }
 
   vad_input_topic_data_current_frame_.set_image(camera_id, msg);
@@ -181,12 +167,6 @@ void VadNode::camera_info_callback(const sensor_msgs::msg::CameraInfo::ConstShar
     return;
   }
 
-  // Initialize frame if not started and set camera info data
-  if (!vad_input_topic_data_current_frame_.is_frame_started()) {
-    // Start timeout timer for this frame
-    frame_timeout_timer_->reset();
-  }
-
   vad_input_topic_data_current_frame_.set_camera_info(camera_id, msg);
 
   RCLCPP_DEBUG(this->get_logger(), "Received camera info from camera %zu", camera_id);
@@ -194,12 +174,6 @@ void VadNode::camera_info_callback(const sensor_msgs::msg::CameraInfo::ConstShar
 
 void VadNode::odometry_callback(const nav_msgs::msg::Odometry::ConstSharedPtr msg)
 {
-  // Initialize frame if not started and set kinematic state data
-  if (!vad_input_topic_data_current_frame_.is_frame_started()) {
-    // Start timeout timer for this frame
-    frame_timeout_timer_->reset();
-  }
-
   vad_input_topic_data_current_frame_.set_kinematic_state(msg);
 
   RCLCPP_DEBUG(this->get_logger(), "Received odometry data");
@@ -207,12 +181,6 @@ void VadNode::odometry_callback(const nav_msgs::msg::Odometry::ConstSharedPtr ms
 
 void VadNode::acceleration_callback(const geometry_msgs::msg::AccelWithCovarianceStamped::ConstSharedPtr msg)
 {
-  // Initialize frame if not started and set acceleration data
-  if (!vad_input_topic_data_current_frame_.is_frame_started()) {
-    // Start timeout timer for this frame
-    frame_timeout_timer_->reset();
-  }
-
   vad_input_topic_data_current_frame_.set_acceleration(msg);
 
   RCLCPP_DEBUG(this->get_logger(), "Received acceleration data");
@@ -233,9 +201,6 @@ std::optional<VadOutputTopicData> VadNode::trigger_inference()
   // Use the built-in is_complete() method to check if we have all required data
   if (vad_input_topic_data_current_frame_.is_complete()) {
     
-    // Cancel timeout timer since frame is complete
-    frame_timeout_timer_->cancel();
-
     // Execute inference
     auto vad_output_topic_data = execute_inference(vad_input_topic_data_current_frame_);
 
@@ -377,32 +342,6 @@ void VadNode::publish(const VadOutputTopicData & vad_output_topic_data)
   publish_trajectories(vad_output_topic_data.candidate_trajectories);
 
   RCLCPP_DEBUG(this->get_logger(), "Published trajectories and candidate trajectories");
-}
-
-void VadNode::frame_timeout_callback()
-{  
-  if (vad_input_topic_data_current_frame_.is_frame_started()) {
-    // Check how much data we have
-    int valid_images = 0;
-    int valid_camera_infos = 0;
-    
-    for (size_t i = 0; i < vad_input_topic_data_current_frame_.images.size(); ++i) {
-      if (vad_input_topic_data_current_frame_.images[i]) valid_images++;
-      if (vad_input_topic_data_current_frame_.camera_infos[i]) valid_camera_infos++;
-    }
-    
-    RCLCPP_WARN(this->get_logger(), 
-                "Frame timeout reached. Have %d/%d images, %d/%d camera_infos, kinematic_state: %s, acceleration: %s",
-                valid_images, num_cameras_, valid_camera_infos, num_cameras_,
-                vad_input_topic_data_current_frame_.kinematic_state ? "yes" : "no",
-                vad_input_topic_data_current_frame_.acceleration ? "yes" : "no");
-    
-    // Reset frame if incomplete
-    vad_input_topic_data_current_frame_.reset();
-  }
-  
-  // Stop timer until next frame starts
-  frame_timeout_timer_->cancel();
 }
 
 void VadNode::create_camera_image_subscribers(const rclcpp::QoS& sensor_qos)

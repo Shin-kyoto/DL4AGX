@@ -76,9 +76,6 @@ private:
   void acceleration_callback(const geometry_msgs::msg::AccelWithCovarianceStamped::ConstSharedPtr msg);
   void tf_static_callback(const tf2_msgs::msg::TFMessage::ConstSharedPtr msg);
 
-  // Helper functions for data synchronization
-  void frame_timeout_callback();
-
   // tf Members
   tf2_ros::Buffer tf_buffer_;
   tf2_ros::TransformListener tf_listener_{tf_buffer_};
@@ -115,10 +112,6 @@ private:
   // Current frame data accumulation
   VadInputTopicData vad_input_topic_data_current_frame_;
   
-  // Timeout timer for frame completion
-  rclcpp::TimerBase::SharedPtr frame_timeout_timer_;
-  static constexpr std::chrono::milliseconds FRAME_TIMEOUT{180}; // 180ms timeout
-
   // 推論を実行するメソッド
   std::optional<VadOutputTopicData> execute_inference(const VadInputTopicData & vad_topic_data);
   std::optional<VadOutputTopicData> trigger_inference();
