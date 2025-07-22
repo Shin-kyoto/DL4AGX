@@ -105,7 +105,7 @@ TEST(VadLidar2ImgTest, DummyInputOutput)
     VadInterface vad_interface(vad_interface_config, tf_buffer);
     float scale_width = static_cast<float>(target_image_width) / static_cast<float>(input_image_width);
     float scale_height = static_cast<float>(target_image_height) / static_cast<float>(input_image_height);
-    auto result = vad_interface.process_lidar2img(tf_static, camera_infos, scale_width, scale_height);
+    auto result = vad_interface.process_lidar2img(camera_infos, scale_width, scale_height);
     ASSERT_EQ(result.size(), expected.size());
     for (size_t i = 0; i < expected.size(); ++i) {
         EXPECT_NEAR(result[i], expected[i], 1e-2);

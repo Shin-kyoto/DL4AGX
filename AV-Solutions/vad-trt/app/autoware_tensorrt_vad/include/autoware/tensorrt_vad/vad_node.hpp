@@ -48,7 +48,6 @@
 #include <memory>
 #include <vector>
 #include <map>
-#include <mutex>
 
 namespace autoware::tensorrt_vad
 {
@@ -78,7 +77,6 @@ private:
   void tf_static_callback(const tf2_msgs::msg::TFMessage::ConstSharedPtr msg);
 
   // Helper functions for data synchronization
-  void reset_current_frame();
   void frame_timeout_callback();
 
   // tf Members
@@ -116,8 +114,6 @@ private:
 
   // Current frame data accumulation
   VadInputTopicData vad_input_topic_data_current_frame_;
-  bool frame_started_;
-  std::mutex frame_mutex_;
   
   // Timeout timer for frame completion
   rclcpp::TimerBase::SharedPtr frame_timeout_timer_;

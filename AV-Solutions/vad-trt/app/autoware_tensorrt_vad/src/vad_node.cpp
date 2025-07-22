@@ -85,8 +85,7 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
       declare_parameter<std::vector<int64_t>>("interface_params.autoware_to_vad_camera_mapping")
     ),
     trajectory_timestep_(declare_parameter<double>("interface_params.trajectory_timestep", 1.0)),
-    vad_input_topic_data_current_frame_(num_cameras_),
-    frame_started_(false)
+    vad_input_topic_data_current_frame_(num_cameras_)
 {
   // Publishers
   trajectory_publisher_ =
@@ -158,18 +157,13 @@ void VadNode::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr msg, 
     return;
   }
 
-  std::lock_guard<std::mutex> lock(frame_mutex_);
-
-  // Initialize frame if not started
-  if (!frame_started_) {
-    vad_input_topic_data_current_frame_.stamp = msg->header.stamp;
-    frame_started_ = true;
+  // Initialize frame if not started and set image data
+  if (!vad_input_topic_data_current_frame_.is_frame_started()) {
     // Start timeout timer for this frame
     frame_timeout_timer_->reset();
   }
 
-  // Store as ConstSharedPtr directly
-  vad_input_topic_data_current_frame_.images[camera_id] = msg;
+  vad_input_topic_data_current_frame_.set_image(camera_id, msg);
     
   auto vad_output_topic_data = trigger_inference();
   if (vad_output_topic_data.has_value()) {
@@ -187,69 +181,45 @@ void VadNode::camera_info_callback(const sensor_msgs::msg::CameraInfo::ConstShar
     return;
   }
 
-  std::lock_guard<std::mutex> lock(frame_mutex_);
-
-  // Initialize frame if not started
-  if (!frame_started_) {
-    vad_input_topic_data_current_frame_.stamp = msg->header.stamp;
-    frame_started_ = true;
+  // Initialize frame if not started and set camera info data
+  if (!vad_input_topic_data_current_frame_.is_frame_started()) {
     // Start timeout timer for this frame
     frame_timeout_timer_->reset();
   }
 
-  vad_input_topic_data_current_frame_.camera_infos[camera_id] = msg;
+  vad_input_topic_data_current_frame_.set_camera_info(camera_id, msg);
 
   RCLCPP_DEBUG(this->get_logger(), "Received camera info from camera %zu", camera_id);
 }
 
 void VadNode::odometry_callback(const nav_msgs::msg::Odometry::ConstSharedPtr msg)
 {
-  std::lock_guard<std::mutex> lock(frame_mutex_);
-
-  // Initialize frame if not started
-  if (!frame_started_) {
-    vad_input_topic_data_current_frame_.stamp = msg->header.stamp;
-    frame_started_ = true;
+  // Initialize frame if not started and set kinematic state data
+  if (!vad_input_topic_data_current_frame_.is_frame_started()) {
     // Start timeout timer for this frame
     frame_timeout_timer_->reset();
   }
 
-  vad_input_topic_data_current_frame_.kinematic_state = msg;
+  vad_input_topic_data_current_frame_.set_kinematic_state(msg);
 
   RCLCPP_DEBUG(this->get_logger(), "Received odometry data");
 }
 
 void VadNode::acceleration_callback(const geometry_msgs::msg::AccelWithCovarianceStamped::ConstSharedPtr msg)
 {
-  std::lock_guard<std::mutex> lock(frame_mutex_);
-
-  // Initialize frame if not started
-  if (!frame_started_) {
-    vad_input_topic_data_current_frame_.stamp = msg->header.stamp;
-    frame_started_ = true;
+  // Initialize frame if not started and set acceleration data
+  if (!vad_input_topic_data_current_frame_.is_frame_started()) {
     // Start timeout timer for this frame
     frame_timeout_timer_->reset();
   }
 
-  vad_input_topic_data_current_frame_.acceleration = msg;
+  vad_input_topic_data_current_frame_.set_acceleration(msg);
 
   RCLCPP_DEBUG(this->get_logger(), "Received acceleration data");
 }
 
 void VadNode::tf_static_callback(const tf2_msgs::msg::TFMessage::ConstSharedPtr msg)
 {
-  std::lock_guard<std::mutex> lock(frame_mutex_);
-
-  // Initialize frame if not started (though tf_static typically comes first)
-  if (!frame_started_) {
-    vad_input_topic_data_current_frame_.stamp = rclcpp::Time(0);  // tf_static doesn't have timestamp
-    frame_started_ = true;
-    // Start timeout timer for this frame
-    frame_timeout_timer_->reset();
-  }
-
-  vad_input_topic_data_current_frame_.tf_static = msg;
-
   // Register transforms in tf_buffer
   for (const auto &transform : msg->transforms) {
     tf_buffer_.setTransform(transform, "default_authority", true);
@@ -270,7 +240,7 @@ std::optional<VadOutputTopicData> VadNode::trigger_inference()
     auto vad_output_topic_data = execute_inference(vad_input_topic_data_current_frame_);
 
     // Reset frame for next data collection
-    reset_current_frame();
+    vad_input_topic_data_current_frame_.reset();
 
     return vad_output_topic_data;
   }
@@ -278,11 +248,6 @@ std::optional<VadOutputTopicData> VadNode::trigger_inference()
   return std::nullopt;
 }
 
-void VadNode::reset_current_frame()
-{
-  vad_input_topic_data_current_frame_.reset();
-  frame_started_ = false;
-}
 
 void VadNode::initialize_vad_model()
 {
@@ -415,10 +380,8 @@ void VadNode::publish(const VadOutputTopicData & vad_output_topic_data)
 }
 
 void VadNode::frame_timeout_callback()
-{
-  std::lock_guard<std::mutex> lock(frame_mutex_);
-  
-  if (frame_started_) {
+{  
+  if (vad_input_topic_data_current_frame_.is_frame_started()) {
     // Check how much data we have
     int valid_images = 0;
     int valid_camera_infos = 0;
@@ -429,14 +392,13 @@ void VadNode::frame_timeout_callback()
     }
     
     RCLCPP_WARN(this->get_logger(), 
-                "Frame timeout reached. Have %d/%d images, %d/%d camera_infos, kinematic_state: %s, acceleration: %s, tf_static: %s",
+                "Frame timeout reached. Have %d/%d images, %d/%d camera_infos, kinematic_state: %s, acceleration: %s",
                 valid_images, num_cameras_, valid_camera_infos, num_cameras_,
                 vad_input_topic_data_current_frame_.kinematic_state ? "yes" : "no",
-                vad_input_topic_data_current_frame_.acceleration ? "yes" : "no",
-                vad_input_topic_data_current_frame_.tf_static ? "yes" : "no");
+                vad_input_topic_data_current_frame_.acceleration ? "yes" : "no");
     
     // Reset frame if incomplete
-    reset_current_frame();
+    vad_input_topic_data_current_frame_.reset();
   }
   
   // Stop timer until next frame starts

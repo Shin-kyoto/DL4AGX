@@ -621,15 +621,6 @@ extract_vad_topic_data_from_rosbag(const std::string &bag_path, std::shared_ptr<
         rclcpp::Serialization<tf2_msgs::msg::TFMessage>().deserialize_message(
             &serialized_msg, msg.get());
 
-        if (!frame_started) {
-          current_frame.stamp = rclcpp::Time(0);
-          current_frame.images.resize(6);
-          current_frame.camera_infos.resize(6);
-          frame_started = true;
-        }
-
-        current_frame.tf_static = msg;
-
         // base_link -> camera の変換をバッファに登録
         for (const auto &transform : msg->transforms) {
           tf_buffer->setTransform(transform, "default_authority", true);
