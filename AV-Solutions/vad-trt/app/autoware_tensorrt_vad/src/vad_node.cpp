@@ -235,7 +235,6 @@ std::optional<VadOutputTopicData> VadNode::trigger_inference(VadInputTopicData v
   }
 }
 
-
 void VadNode::initialize_vad_model()
 {
   // Initialize VAD interface and model
