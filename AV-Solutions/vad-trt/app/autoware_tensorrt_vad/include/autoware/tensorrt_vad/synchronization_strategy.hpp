@@ -98,6 +98,14 @@ public:
    * @note Uses front camera's width, height, and timestamp for all dropped images
    */
   std::optional<VadInputTopicData> fill_dropped_data(const VadInputTopicData& current_data) override;
+
+  /**
+   * @brief Check if the current frame data is synchronized 
+   *        when the acceleration and kinematic_state topic timestamps
+   *        are within sync_tolerance_ms of the front_camera timestamp for synchronization.
+   * @param data VadInputTopicData in Current frame
+   * @return true if data is synchronized, false otherwise
+   */
   bool is_synchronized(const VadInputTopicData& data) const override;
 
 private:
