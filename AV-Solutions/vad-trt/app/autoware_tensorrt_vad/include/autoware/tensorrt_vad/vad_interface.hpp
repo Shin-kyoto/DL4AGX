@@ -69,8 +69,6 @@ public:
   void set_kinematic_state(const nav_msgs::msg::Odometry::ConstSharedPtr& msg);
   void set_acceleration(const geometry_msgs::msg::AccelWithCovarianceStamped::ConstSharedPtr& msg);
 
-  bool is_frame_started() const;
-
   // Public data members for access by VadInterface
   // Reference timestamp for this dataset
   rclcpp::Time stamp;

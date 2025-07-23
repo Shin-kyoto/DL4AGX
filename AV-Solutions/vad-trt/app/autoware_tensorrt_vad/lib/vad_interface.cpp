@@ -653,11 +653,6 @@ void VadInputTopicData::set_acceleration(const geometry_msgs::msg::AccelWithCova
   acceleration = msg;
 }
 
-bool VadInputTopicData::is_frame_started() const 
-{
-  return frame_started_;
-}
-
 void VadInputTopicData::ensure_frame_started(const rclcpp::Time& msg_stamp) 
 {
   if (!frame_started_) {
