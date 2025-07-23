@@ -362,7 +362,7 @@ void VadNode::publish(const VadOutputTopicData & vad_output_topic_data)
   // Publish candidate trajectories
   publish_trajectories(vad_output_topic_data.candidate_trajectories);
 
-  RCLCPP_DEBUG(this->get_logger(), "Published trajectories and candidate trajectories");
+  RCLCPP_DEBUG(this->get_logger(), "Published trajectories");
 }
 
 void VadNode::create_camera_image_subscribers(const rclcpp::QoS& sensor_qos)
