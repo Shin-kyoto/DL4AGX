@@ -356,7 +356,7 @@ std::optional<VadOutputTopicData> VadNode::execute_inference(const VadInputTopic
 
 void VadNode::publish(const VadOutputTopicData & vad_output_topic_data)
 {
-  // Publish individual trajectory using the dedicated method
+  // Publish selected trajectory
   publish_trajectory(vad_output_topic_data.trajectory);
 
   // Publish candidate trajectories
