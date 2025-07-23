@@ -84,6 +84,7 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
       declare_parameter<std::vector<double>>("interface_params.vad2base"),
       declare_parameter<std::vector<int64_t>>("interface_params.autoware_to_vad_camera_mapping")
     ),
+    front_camera_id_(declare_parameter<int32_t>("sync_params.front_camera_id")),
     trajectory_timestep_(declare_parameter<double>("interface_params.trajectory_timestep", 1.0)),
     vad_input_topic_data_current_frame_(num_cameras_)
 {
@@ -132,6 +133,10 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
   // Load VadConfig
   load_vad_config();
 
+  // Initialize synchronization strategy
+  double sync_tolerance_ms = declare_parameter<double>("sync_params.sync_tolerance_ms");
+  sync_strategy_ = std::make_unique<FrontCriticalSynchronizationStrategy>(front_camera_id_, sync_tolerance_ms);
+
   // Initialize VAD model on first complete frame
   if (!vad_model_ptr_) {
     RCLCPP_INFO(this->get_logger(), "Initializing VAD model with first complete frame");
@@ -151,9 +156,9 @@ void VadNode::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr msg, 
 
   vad_input_topic_data_current_frame_.set_image(camera_id, msg);
     
-  auto vad_output_topic_data = trigger_inference();
-  if (vad_output_topic_data.has_value()) {
-    publish(vad_output_topic_data.value());
+  // Check if this is the front camera (anchor camera)
+  if (static_cast<int32_t>(camera_id) == front_camera_id_) {
+    anchor_callback();
   }
 
   RCLCPP_DEBUG(this->get_logger(), "Received image from camera %zu", camera_id);
@@ -196,21 +201,38 @@ void VadNode::tf_static_callback(const tf2_msgs::msg::TFMessage::ConstSharedPtr 
   RCLCPP_DEBUG(this->get_logger(), "Received TF static data");
 }
 
-std::optional<VadOutputTopicData> VadNode::trigger_inference()
+void VadNode::anchor_callback()
 {
-  // Use the built-in is_complete() method to check if we have all required data
-  if (vad_input_topic_data_current_frame_.is_complete()) {
-    
-    // Execute inference
-    auto vad_output_topic_data = execute_inference(vad_input_topic_data_current_frame_);
-
-    // Reset frame for next data collection
-    vad_input_topic_data_current_frame_.reset();
-
-    return vad_output_topic_data;
+  if (sync_strategy_->is_ready(vad_input_topic_data_current_frame_)) {
+    auto vad_output_topic_data = trigger_inference(std::move(vad_input_topic_data_current_frame_));
+    if (vad_output_topic_data.has_value()) {
+      publish(vad_output_topic_data.value());
+    }
+  } else {
+    RCLCPP_ERROR(this->get_logger(), "Synchronization strategy indicates data is not ready for inference");
   }
   
-  return std::nullopt;
+  vad_input_topic_data_current_frame_.reset();
+}
+
+std::optional<VadOutputTopicData> VadNode::trigger_inference(VadInputTopicData vad_input_topic_data_current_frame)
+{
+  if (sync_strategy_->is_dropped(vad_input_topic_data_current_frame)) {
+    auto filled_data_opt = sync_strategy_->fill_dropped_data(vad_input_topic_data_current_frame);
+    if (!filled_data_opt) {
+      // Cannot fill dropped data (front camera unavailable)
+      return std::nullopt;
+    }
+    vad_input_topic_data_current_frame = std::move(filled_data_opt.value());
+  }
+
+  if (vad_input_topic_data_current_frame.is_complete()) {
+    // Execute inference
+    auto vad_output_topic_data = execute_inference(vad_input_topic_data_current_frame);
+    return vad_output_topic_data;
+  } else {
+    return std::nullopt;
+  }
 }
 
 
@@ -307,7 +329,7 @@ void VadNode::publish_trajectory(const autoware_planning_msgs::msg::Trajectory &
   trajectory_publisher_->publish(std::move(trajectory_msg));
 }
 
-std::optional<VadOutputTopicData> VadNode::execute_inference(const VadInputTopicData & vad_topic_data)
+std::optional<VadOutputTopicData> VadNode::execute_inference(const VadInputTopicData & vad_input_topic_data)
 {
   if (!vad_interface_ptr_ || !vad_model_ptr_) {
     RCLCPP_ERROR(this->get_logger(), "VAD interface or model not initialized");
@@ -316,12 +338,12 @@ std::optional<VadOutputTopicData> VadNode::execute_inference(const VadInputTopic
 
   // VadInterfaceを通じてVadInputDataに変換
   // scalingされた状態の画像を含む
-  const auto vad_input = vad_interface_ptr_->convert_input(vad_topic_data);
+  const auto vad_input = vad_interface_ptr_->convert_input(vad_input_topic_data);
 
   // VadModelで推論実行
   const auto vad_output = vad_model_ptr_->infer(vad_input);
 
-  const auto [base2map_transform, map2base_transform] = get_transform_matrix(*vad_input_topic_data_current_frame_.kinematic_state);
+  const auto [base2map_transform, map2base_transform] = get_transform_matrix(*vad_input_topic_data.kinematic_state);
   // VadInterfaceを通じてROS型に変換
   if (vad_output.has_value()) {
     const auto vad_output_topic_data = vad_interface_ptr_->convert_output(
