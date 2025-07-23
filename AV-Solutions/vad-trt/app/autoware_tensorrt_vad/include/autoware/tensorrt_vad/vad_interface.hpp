@@ -63,14 +63,13 @@ public:
   // Reset frame data
   void reset();
 
-  // Setter methods with proper locking and frame initialization
+  // Setter methods with frame initialization
   void set_image(std::size_t camera_id, const sensor_msgs::msg::Image::ConstSharedPtr& msg);
   void set_camera_info(std::size_t camera_id, const sensor_msgs::msg::CameraInfo::ConstSharedPtr& msg);
   void set_kinematic_state(const nav_msgs::msg::Odometry::ConstSharedPtr& msg);
   void set_acceleration(const geometry_msgs::msg::AccelWithCovarianceStamped::ConstSharedPtr& msg);
 
-  // Public data members for access by VadInterface
-  // Reference timestamp for this dataset
+  // Reference timestamp for current frame
   rclcpp::Time stamp;
 
   // Image data from multiple cameras.

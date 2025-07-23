@@ -41,29 +41,29 @@ public:
   virtual ~SynchronizationStrategy() = default;
 
   /**
-   * @brief Check if the system is ready to trigger inference
-   * @param data Current frame data
+   * @brief Check if the VadInputTopicData is ready to trigger inference
+   * @param data VadInputTopicData in Current frame
    * @return true if ready to trigger inference, false otherwise
    */
   virtual bool is_ready(const VadInputTopicData& data) const = 0;
 
   /**
-   * @brief Check if any topic data is dropped
-   * @param data Current frame data
-   * @return true if any topic data is dropped, false otherwise
+   * @brief Check if any image topic data is dropped
+   * @param data VadInputTopicData in Current frame
+   * @return true if any image topic data is dropped, false otherwise
    */
   virtual bool is_dropped(const VadInputTopicData& data) const = 0;
 
   /**
    * @brief Fill dropped data with appropriate default values
-   * @param current_data Current frame data with potentially dropped topics
-   * @return Modified frame data with dropped topics filled, or nullopt if front camera is unavailable
+   * @param current_data VadInputTopicData in Current frame with potentially dropped topics
+   * @return Modified frame data with dropped topics filled
    */
   virtual std::optional<VadInputTopicData> fill_dropped_data(const VadInputTopicData& current_data) = 0;
 
   /**
    * @brief Check if the current frame data is synchronized within tolerance
-   * @param data Current frame data
+   * @param data VadInputTopicData in Current frame
    * @return true if data is synchronized, false otherwise
    */
   virtual bool is_synchronized(const VadInputTopicData& data) const = 0;
@@ -80,7 +80,7 @@ class FrontCriticalSynchronizationStrategy : public SynchronizationStrategy {
 public:
   /**
    * @brief Constructor
-   * @param front_camera_id Camera ID for the front camera (anchor)
+   * @param front_camera_id Camera ID for the front camera (anchor topic)
    * @param sync_tolerance_ms Synchronization tolerance in milliseconds (e.g. 100ms)
    */
   explicit FrontCriticalSynchronizationStrategy(
@@ -93,8 +93,8 @@ public:
   
   /**
    * @brief Fill dropped data with black images using front camera dimensions
-   * @param current_data Current frame data with potentially dropped topics
-   * @return Modified frame data with dropped topics filled, or nullopt if front camera is unavailable
+   * @param current_data VadInputTopicData in Current frame with potentially dropped topics
+   * @return Modified frame data with dropped topics filled
    * @note Uses front camera's width, height, and timestamp for all dropped images
    */
   std::optional<VadInputTopicData> fill_dropped_data(const VadInputTopicData& current_data) override;
