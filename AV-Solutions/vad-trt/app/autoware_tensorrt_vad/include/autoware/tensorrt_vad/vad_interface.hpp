@@ -47,64 +47,61 @@
 namespace autoware::tensorrt_vad
 {
 
-struct VadInputTopicData
+/**
+ * @class VadInputTopicData
+ * @brief Class for managing ROS topic data for VAD input
+ */
+class VadInputTopicData
 {
-  // このデータセットの基準となるタイムスタンプ
+public:
+  // Constructor: Initialize vectors with specified number of cameras
+  explicit VadInputTopicData(int32_t num_cameras);
+
+  // Check if frame is complete
+  bool is_complete() const;
+
+  // Reset frame data
+  void reset();
+
+  // Setter methods with frame initialization
+  void set_image(std::size_t camera_id, const sensor_msgs::msg::Image::ConstSharedPtr& msg);
+  void set_camera_info(std::size_t camera_id, const sensor_msgs::msg::CameraInfo::ConstSharedPtr& msg);
+  void set_kinematic_state(const nav_msgs::msg::Odometry::ConstSharedPtr& msg);
+  void set_acceleration(const geometry_msgs::msg::AccelWithCovarianceStamped::ConstSharedPtr& msg);
+
+  // Reference timestamp for current frame
   rclcpp::Time stamp;
 
-  // 複数のカメラからの画像データ。
-  // launchファイルでリマップされた ~/input/image0, ~/input/image1, ... に対応します。
-  // vectorのインデックスが autoware_camera_id となります。
+  // Image data from multiple cameras.
+  // Corresponds to ~/input/image0, ~/input/image1, ... remapped in launch file.
+  // Vector index corresponds to autoware_camera_id.
   std::vector<sensor_msgs::msg::Image::ConstSharedPtr> images;
 
-  // 上記の各画像に対応するカメラのキャリブレーション情報
+  // Camera calibration information corresponding to each image above
   std::vector<sensor_msgs::msg::CameraInfo::ConstSharedPtr> camera_infos;
 
-  // 静的な座標変換情報（例: lidar_to_camera）
-  tf2_msgs::msg::TFMessage::ConstSharedPtr tf_static;
-
-  // 車両の運動状態データ（/localization/kinematic_state などから）
+  // Vehicle kinematic state data (from /localization/kinematic_state etc.)
   nav_msgs::msg::Odometry::ConstSharedPtr kinematic_state;
 
-  // 加速度データ（/localization/acceleration から）
+  // Acceleration data (from /localization/acceleration)
   geometry_msgs::msg::AccelWithCovarianceStamped::ConstSharedPtr acceleration;
 
 private:
   int32_t num_cameras_;
+  bool frame_started_ = false;
 
-public:
-  // コンストラクタ：カメラ数を指定してベクターを初期化
-  explicit VadInputTopicData(int32_t num_cameras) : num_cameras_(num_cameras) {
-    images.resize(num_cameras_);
-    camera_infos.resize(num_cameras_);
-  }
-
-  // フレームが完成しているかをチェック
-  bool is_complete() const {
-    if (static_cast<int32_t>(images.size()) != num_cameras_ || 
-        static_cast<int32_t>(camera_infos.size()) != num_cameras_) {
-      return false;
-    }
-    
-    for (int32_t i = 0; i < num_cameras_; ++i) {
-      if (!images[i] || !camera_infos[i]) return false;
-    }
-    
-    return tf_static != nullptr && 
-           kinematic_state != nullptr && 
-           acceleration != nullptr;
-  }
-
-  // フレームをリセットする
-  void reset() {
-    images.clear();
-    images.resize(num_cameras_);
-    camera_infos.clear();
-    camera_infos.resize(num_cameras_);
-    kinematic_state.reset();
-    acceleration.reset();
-    tf_static.reset();
-  }
+  /**
+   * @brief Ensure frame is started with the specified timestamp if not already started
+   * 
+   * This function checks the frame state and starts the frame with the specified timestamp
+   * only if it has not been started yet. If the frame is already started, it does nothing.
+   * 
+   * @note This function assumes that proper locking has been acquired by the caller.
+   *       Thread safety is the responsibility of the caller.
+   * 
+   * @param msg_stamp The timestamp to set when starting the frame
+   */
+  void ensure_frame_started(const rclcpp::Time& msg_stamp);
 };
 
 struct VadOutputTopicData
@@ -151,7 +148,6 @@ public:
     const Eigen::Matrix4f & base2map_transform) const;
 
   Lidar2ImgData process_lidar2img(
-    const tf2_msgs::msg::TFMessage::ConstSharedPtr & tf_static,
     const std::vector<sensor_msgs::msg::CameraInfo::ConstSharedPtr> & camera_infos,
     float scale_width, float scale_height) const;
 

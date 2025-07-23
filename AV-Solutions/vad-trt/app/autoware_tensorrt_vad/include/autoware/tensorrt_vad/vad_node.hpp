@@ -18,6 +18,7 @@
 #include "autoware/tensorrt_vad/vad_model.hpp"
 #include "autoware/tensorrt_vad/vad_interface.hpp"
 #include "autoware/tensorrt_vad/vad_interface_config.hpp"
+#include "autoware/tensorrt_vad/synchronization_strategy.hpp"
 #include "ros_vad_logger.hpp"
 
 #include <image_transport/image_transport.hpp>
@@ -48,7 +49,6 @@
 #include <memory>
 #include <vector>
 #include <map>
-#include <mutex>
 
 namespace autoware::tensorrt_vad
 {
@@ -76,11 +76,7 @@ private:
   void odometry_callback(const nav_msgs::msg::Odometry::ConstSharedPtr msg);
   void acceleration_callback(const geometry_msgs::msg::AccelWithCovarianceStamped::ConstSharedPtr msg);
   void tf_static_callback(const tf2_msgs::msg::TFMessage::ConstSharedPtr msg);
-
-  // Helper functions for data synchronization
-  void check_and_process_frame();
-  void reset_current_frame();
-  void frame_timeout_callback();
+  void anchor_callback();
 
   // tf Members
   tf2_ros::Buffer tf_buffer_;
@@ -106,6 +102,9 @@ private:
   std::unique_ptr<VadInterface> vad_interface_ptr_{};
   VadInterfaceConfig vad_interface_config_;
 
+  // Synchronization strategy
+  std::unique_ptr<SynchronizationStrategy> sync_strategy_;
+  int32_t front_camera_id_;
 
   // trajectory_timestep parameter
   double trajectory_timestep_;
@@ -116,17 +115,12 @@ private:
   rclcpp::Publisher<autoware_perception_msgs::msg::DetectedObjects>::SharedPtr objects_publisher_;
 
   // Current frame data accumulation
-  VadInputTopicData current_frame_;
-  bool frame_started_;
-  std::mutex frame_mutex_;
+  VadInputTopicData vad_input_topic_data_current_frame_;
   
-  // Timeout timer for frame completion
-  rclcpp::TimerBase::SharedPtr frame_timeout_timer_;
-  static constexpr std::chrono::milliseconds FRAME_TIMEOUT{180}; // 180ms timeout
-
   // 推論を実行するメソッド
-  std::optional<VadOutputTopicData> execute_inference(const VadInputTopicData & vad_topic_data);
-  void publish(const VadInputTopicData & vad_topic_data);
+  std::optional<VadOutputTopicData> execute_inference(const VadInputTopicData & vad_input_topic_data);
+  std::optional<VadOutputTopicData> trigger_inference(VadInputTopicData vad_input_topic_data_current_frame);
+  void publish(const VadOutputTopicData & vad_output_topic_data);
 };
 }  // namespace autoware::tensorrt_vad
 

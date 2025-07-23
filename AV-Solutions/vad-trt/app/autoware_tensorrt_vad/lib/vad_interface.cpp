@@ -39,7 +39,6 @@ VadInputData VadInterface::convert_input(const VadInputTopicData & vad_input_top
 
   // Process lidar2img transformation
   vad_input_data.lidar2img_ = process_lidar2img(
-    vad_input_topic_data.tf_static,
     vad_input_topic_data.camera_infos,
     scale_width, scale_height
   );
@@ -163,7 +162,6 @@ std::vector<float> VadInterface::matrix_to_flat(const Eigen::Matrix4f & matrix) 
 }
 
 Lidar2ImgData VadInterface::process_lidar2img(
-    [[maybe_unused]] const tf2_msgs::msg::TFMessage::ConstSharedPtr & tf_static,
     const std::vector<sensor_msgs::msg::CameraInfo::ConstSharedPtr> & camera_infos,
     float scale_width, float scale_height) const
 {
@@ -590,3 +588,78 @@ float VadInterface::calculate_current_longitudinal_velocity(
 }
 
 } // namespace autoware::tensorrt_vad
+
+namespace autoware::tensorrt_vad
+{
+
+// VadInputTopicData class implementation
+VadInputTopicData::VadInputTopicData(int32_t num_cameras) : num_cameras_(num_cameras) 
+{
+  images.resize(num_cameras_);
+  camera_infos.resize(num_cameras_);
+}
+
+bool VadInputTopicData::is_complete() const 
+{
+  if (static_cast<int32_t>(images.size()) != num_cameras_ || 
+      static_cast<int32_t>(camera_infos.size()) != num_cameras_) {
+    return false;
+  }
+  
+  for (int32_t i = 0; i < num_cameras_; ++i) {
+    if (!images[i] || !camera_infos[i]) return false;
+  }
+  
+  return kinematic_state != nullptr && 
+         acceleration != nullptr;
+}
+
+void VadInputTopicData::reset() 
+{
+  images.clear();
+  images.resize(num_cameras_);
+  camera_infos.clear();
+  camera_infos.resize(num_cameras_);
+  kinematic_state.reset();
+  acceleration.reset();
+  frame_started_ = false;
+}
+
+void VadInputTopicData::set_image(std::size_t camera_id, const sensor_msgs::msg::Image::ConstSharedPtr& msg) 
+{
+  ensure_frame_started(msg->header.stamp);
+  if (camera_id < images.size()) {
+    images[camera_id] = msg;
+  }
+}
+
+void VadInputTopicData::set_camera_info(std::size_t camera_id, const sensor_msgs::msg::CameraInfo::ConstSharedPtr& msg) 
+{
+  ensure_frame_started(msg->header.stamp);
+  if (camera_id < camera_infos.size()) {
+    camera_infos[camera_id] = msg;
+  }
+}
+
+void VadInputTopicData::set_kinematic_state(const nav_msgs::msg::Odometry::ConstSharedPtr& msg) 
+{
+  ensure_frame_started(msg->header.stamp);
+  kinematic_state = msg;
+}
+
+void VadInputTopicData::set_acceleration(const geometry_msgs::msg::AccelWithCovarianceStamped::ConstSharedPtr& msg) 
+{
+  ensure_frame_started(msg->header.stamp);
+  acceleration = msg;
+}
+
+void VadInputTopicData::ensure_frame_started(const rclcpp::Time& msg_stamp) 
+{
+  if (!frame_started_) {
+    stamp = msg_stamp;
+    frame_started_ = true;
+  }
+}
+
+// VadInterface class implementation
+}

@@ -84,9 +84,9 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
       declare_parameter<std::vector<double>>("interface_params.vad2base"),
       declare_parameter<std::vector<int64_t>>("interface_params.autoware_to_vad_camera_mapping")
     ),
+    front_camera_id_(declare_parameter<int32_t>("sync_params.front_camera_id")),
     trajectory_timestep_(declare_parameter<double>("interface_params.trajectory_timestep", 1.0)),
-    current_frame_(num_cameras_),
-    frame_started_(false)
+    vad_input_topic_data_current_frame_(num_cameras_)
 {
   // Publishers
   trajectory_publisher_ =
@@ -133,19 +133,15 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
   // Load VadConfig
   load_vad_config();
 
+  // Initialize synchronization strategy
+  double sync_tolerance_ms = declare_parameter<double>("sync_params.sync_tolerance_ms");
+  sync_strategy_ = std::make_unique<FrontCriticalSynchronizationStrategy>(front_camera_id_, sync_tolerance_ms);
+
   // Initialize VAD model on first complete frame
   if (!vad_model_ptr_) {
     RCLCPP_INFO(this->get_logger(), "Initializing VAD model with first complete frame");
     initialize_vad_model();
   }
-
-  // Initialize timeout timer
-  frame_timeout_timer_ = this->create_wall_timer(
-    FRAME_TIMEOUT,
-    std::bind(&VadNode::frame_timeout_callback, this));
-  
-  // Start timer as stopped initially
-  frame_timeout_timer_->cancel();
 
   RCLCPP_INFO(this->get_logger(), "VAD Node has been initialized - VAD model will be initialized after first callback");
 }
@@ -158,20 +154,12 @@ void VadNode::image_callback(const sensor_msgs::msg::Image::ConstSharedPtr msg, 
     return;
   }
 
-  std::lock_guard<std::mutex> lock(frame_mutex_);
-
-  // Initialize frame if not started
-  if (!frame_started_) {
-    current_frame_.stamp = msg->header.stamp;
-    frame_started_ = true;
-    // Start timeout timer for this frame
-    frame_timeout_timer_->reset();
-  }
-
-  // Store as ConstSharedPtr directly
-  current_frame_.images[camera_id] = msg;
+  vad_input_topic_data_current_frame_.set_image(camera_id, msg);
     
-  check_and_process_frame();
+  // Check if this is the front camera (anchor camera)
+  if (static_cast<int32_t>(camera_id) == front_camera_id_) {
+    anchor_callback();
+  }
 
   RCLCPP_DEBUG(this->get_logger(), "Received image from camera %zu", camera_id);
 }
@@ -184,102 +172,67 @@ void VadNode::camera_info_callback(const sensor_msgs::msg::CameraInfo::ConstShar
     return;
   }
 
-  std::lock_guard<std::mutex> lock(frame_mutex_);
-
-  // Initialize frame if not started
-  if (!frame_started_) {
-    current_frame_.stamp = msg->header.stamp;
-    frame_started_ = true;
-    // Start timeout timer for this frame
-    frame_timeout_timer_->reset();
-  }
-
-  current_frame_.camera_infos[camera_id] = msg;
-  check_and_process_frame();
+  vad_input_topic_data_current_frame_.set_camera_info(camera_id, msg);
 
   RCLCPP_DEBUG(this->get_logger(), "Received camera info from camera %zu", camera_id);
 }
 
 void VadNode::odometry_callback(const nav_msgs::msg::Odometry::ConstSharedPtr msg)
 {
-  std::lock_guard<std::mutex> lock(frame_mutex_);
-
-  // Initialize frame if not started
-  if (!frame_started_) {
-    current_frame_.stamp = msg->header.stamp;
-    frame_started_ = true;
-    // Start timeout timer for this frame
-    frame_timeout_timer_->reset();
-  }
-
-  current_frame_.kinematic_state = msg;
-  check_and_process_frame();
+  vad_input_topic_data_current_frame_.set_kinematic_state(msg);
 
   RCLCPP_DEBUG(this->get_logger(), "Received odometry data");
 }
 
 void VadNode::acceleration_callback(const geometry_msgs::msg::AccelWithCovarianceStamped::ConstSharedPtr msg)
 {
-  std::lock_guard<std::mutex> lock(frame_mutex_);
-
-  // Initialize frame if not started
-  if (!frame_started_) {
-    current_frame_.stamp = msg->header.stamp;
-    frame_started_ = true;
-    // Start timeout timer for this frame
-    frame_timeout_timer_->reset();
-  }
-
-  current_frame_.acceleration = msg;
-  check_and_process_frame();
+  vad_input_topic_data_current_frame_.set_acceleration(msg);
 
   RCLCPP_DEBUG(this->get_logger(), "Received acceleration data");
 }
 
 void VadNode::tf_static_callback(const tf2_msgs::msg::TFMessage::ConstSharedPtr msg)
 {
-  std::lock_guard<std::mutex> lock(frame_mutex_);
-
-  // Initialize frame if not started (though tf_static typically comes first)
-  if (!frame_started_) {
-    current_frame_.stamp = rclcpp::Time(0);  // tf_static doesn't have timestamp
-    frame_started_ = true;
-    // Start timeout timer for this frame
-    frame_timeout_timer_->reset();
-  }
-
-  current_frame_.tf_static = msg;
-
   // Register transforms in tf_buffer
   for (const auto &transform : msg->transforms) {
     tf_buffer_.setTransform(transform, "default_authority", true);
   }
 
-  check_and_process_frame();
-
   RCLCPP_DEBUG(this->get_logger(), "Received TF static data");
 }
 
-void VadNode::check_and_process_frame()
+void VadNode::anchor_callback()
 {
-  // Use the built-in is_complete() method to check if we have all required data
-  if (current_frame_.is_complete()) {
-    
-    // Cancel timeout timer since frame is complete
-    frame_timeout_timer_->cancel();
-
-    // Execute inference and publish results
-    publish(current_frame_);
-
-    // Reset frame for next data collection
-    reset_current_frame();
+  if (sync_strategy_->is_ready(vad_input_topic_data_current_frame_)) {
+    auto vad_output_topic_data = trigger_inference(std::move(vad_input_topic_data_current_frame_));
+    if (vad_output_topic_data.has_value()) {
+      publish(vad_output_topic_data.value());
+    }
+  } else {
+    RCLCPP_ERROR(this->get_logger(), "Synchronization strategy indicates data is not ready for inference");
   }
+  
+  vad_input_topic_data_current_frame_.reset();
 }
 
-void VadNode::reset_current_frame()
+std::optional<VadOutputTopicData> VadNode::trigger_inference(VadInputTopicData vad_input_topic_data_current_frame)
 {
-  current_frame_.reset();
-  frame_started_ = false;
+  if (sync_strategy_->is_dropped(vad_input_topic_data_current_frame)) {
+    auto filled_data_opt = sync_strategy_->fill_dropped_data(vad_input_topic_data_current_frame);
+    if (!filled_data_opt) {
+      // Cannot fill dropped data (front camera unavailable)
+      return std::nullopt;
+    }
+    vad_input_topic_data_current_frame = std::move(filled_data_opt.value());
+  }
+
+  if (vad_input_topic_data_current_frame.is_complete()) {
+    // Execute inference
+    auto vad_output_topic_data = execute_inference(vad_input_topic_data_current_frame);
+    return vad_output_topic_data;
+  } else {
+    return std::nullopt;
+  }
 }
 
 void VadNode::initialize_vad_model()
@@ -375,7 +328,7 @@ void VadNode::publish_trajectory(const autoware_planning_msgs::msg::Trajectory &
   trajectory_publisher_->publish(std::move(trajectory_msg));
 }
 
-std::optional<VadOutputTopicData> VadNode::execute_inference(const VadInputTopicData & vad_topic_data)
+std::optional<VadOutputTopicData> VadNode::execute_inference(const VadInputTopicData & vad_input_topic_data)
 {
   if (!vad_interface_ptr_ || !vad_model_ptr_) {
     RCLCPP_ERROR(this->get_logger(), "VAD interface or model not initialized");
@@ -384,12 +337,12 @@ std::optional<VadOutputTopicData> VadNode::execute_inference(const VadInputTopic
 
   // VadInterfaceを通じてVadInputDataに変換
   // scalingされた状態の画像を含む
-  const auto vad_input = vad_interface_ptr_->convert_input(vad_topic_data);
+  const auto vad_input = vad_interface_ptr_->convert_input(vad_input_topic_data);
 
   // VadModelで推論実行
   const auto vad_output = vad_model_ptr_->infer(vad_input);
 
-  const auto [base2map_transform, map2base_transform] = get_transform_matrix(*current_frame_.kinematic_state);
+  const auto [base2map_transform, map2base_transform] = get_transform_matrix(*vad_input_topic_data.kinematic_state);
   // VadInterfaceを通じてROS型に変換
   if (vad_output.has_value()) {
     const auto vad_output_topic_data = vad_interface_ptr_->convert_output(
@@ -401,53 +354,15 @@ std::optional<VadOutputTopicData> VadNode::execute_inference(const VadInputTopic
   return std::nullopt;
 }
 
-void VadNode::publish(const VadInputTopicData & vad_topic_data)
+void VadNode::publish(const VadOutputTopicData & vad_output_topic_data)
 {
+  // Publish selected trajectory
+  publish_trajectory(vad_output_topic_data.trajectory);
 
-  // VAD推論を実行
-  const auto vad_output_topic_data = execute_inference(vad_topic_data);
+  // Publish candidate trajectories
+  publish_trajectories(vad_output_topic_data.candidate_trajectories);
 
-  // 結果をパブリッシュ
-  if (vad_output_topic_data.has_value()) {
-    // Publish individual trajectory using the dedicated method
-    publish_trajectory(vad_output_topic_data.value().trajectory);
-
-    // Publish candidate trajectories
-    publish_trajectories(vad_output_topic_data.value().candidate_trajectories);
-
-    RCLCPP_DEBUG(this->get_logger(), "Published trajectories and candidate trajectories");
-  } else {
-    RCLCPP_WARN(this->get_logger(), "No valid trajectories to publish");
-  }
-}
-
-void VadNode::frame_timeout_callback()
-{
-  std::lock_guard<std::mutex> lock(frame_mutex_);
-  
-  if (frame_started_) {
-    // Check how much data we have
-    int valid_images = 0;
-    int valid_camera_infos = 0;
-    
-    for (size_t i = 0; i < current_frame_.images.size(); ++i) {
-      if (current_frame_.images[i]) valid_images++;
-      if (current_frame_.camera_infos[i]) valid_camera_infos++;
-    }
-    
-    RCLCPP_WARN(this->get_logger(), 
-                "Frame timeout reached. Have %d/%d images, %d/%d camera_infos, kinematic_state: %s, acceleration: %s, tf_static: %s",
-                valid_images, num_cameras_, valid_camera_infos, num_cameras_,
-                current_frame_.kinematic_state ? "yes" : "no",
-                current_frame_.acceleration ? "yes" : "no",
-                current_frame_.tf_static ? "yes" : "no");
-    
-    // Reset frame if incomplete
-    reset_current_frame();
-  }
-  
-  // Stop timer until next frame starts
-  frame_timeout_timer_->cancel();
+  RCLCPP_DEBUG(this->get_logger(), "Published trajectories");
 }
 
 void VadNode::create_camera_image_subscribers(const rclcpp::QoS& sensor_qos)
