@@ -32,60 +32,59 @@ camera:
   k_matrix: [1257.86253, 0.0, 827.241063, 0.0, 1257.86253, 450.915498, 0.0, 0.0, 1.0]
 
 # TF configuration
-# Note: tf2_echo shows base_link -> camera_optical_link transform
 # TF static stores the inverse transform: camera_optical_link -> base_link
 tf:
   camera_optical_links:
     camera0/camera_optical_link:
-      x: -0.355
-      y: 0.000
-      z: -0.436
-      qx: -0.485
-      qy: -0.487
-      qz: 0.519
-      qw: 0.508
+      x: 0.352
+      y: -0.005
+      z: 0.920
+      qx: -0.487
+      qy: 0.486
+      qz: -0.507
+      qw: 0.519
     
     camera1/camera_optical_link:
-      x: -0.281
-      y: -0.000
-      z: -1.016
+      x: -1.004
+      y: 0.010
+      z: 0.879
       qx: 0.510
-      qy: -0.510
-      qz: 0.494
-      qw: -0.486
+      qy: 0.510
+      qz: -0.486
+      qw: -0.494
     
     camera2/camera_optical_link:
-      x: -0.350
-      y: -0.099
-      z: -0.539
-      qx: -0.193
-      qy: -0.665
-      qz: 0.685
-      qw: 0.226
-    
-    camera3/camera_optical_link:
-      x: -0.287
-      y: 0.209
-      z: -0.434
-      qx: 0.128
-      qy: -0.694
-      qz: 0.701
-      qw: -0.100
-    
-    camera4/camera_optical_link:
-      x: -0.331
-      y: -0.038
-      z: -0.613
-      qx: -0.672
-      qy: -0.177
-      qz: 0.219
+      x: 0.242
+      y: 0.505
+      z: 0.869
+      qx: -0.665
+      qy: 0.193
+      qz: -0.226
       qw: 0.685
     
+    camera3/camera_optical_link:
+      x: 0.070
+      y: 0.482
+      z: 0.923
+      qx: -0.694
+      qy: -0.128
+      qz: 0.100
+      qw: 0.701
+    
+    camera4/camera_optical_link:
+      x: 0.382
+      y: -0.496
+      z: 0.892
+      qx: 0.177
+      qy: -0.672
+      qz: 0.685
+      qw: -0.219
+    
     camera5/camera_optical_link:
-      x: -0.298
-      y: -0.095
-      z: -0.460
-      qx: -0.691
-      qy: 0.154
-      qz: -0.122
-      qw: 0.695
+      x: -0.075
+      y: -0.466
+      z: 0.905
+      qx: -0.154
+      qy: -0.691
+      qz: 0.695
+      qw: 0.122
