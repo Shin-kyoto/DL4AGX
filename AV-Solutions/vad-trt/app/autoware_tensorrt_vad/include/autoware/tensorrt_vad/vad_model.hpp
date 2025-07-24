@@ -88,6 +88,10 @@ struct VadOutputData
   // key: command index (int32_t), value: trajectory (std::vector<float>)
   std::map<int32_t, std::vector<float>> predicted_trajectories_{};
 
+  // マップポイント（フィルタリングされた2Dポイント）
+  // [N, 2] shape: N個のポイント、各ポイントは(x, y)座標
+  std::vector<std::vector<float>> map_points_{};
+
   // // 検出されたオブジェクト
   // std::vector<std::vector<float>> detected_objects_{};
 
@@ -105,6 +109,10 @@ std::vector<std::vector<float>> postprocess_traj_cls_scores(
 
 std::vector<std::vector<float>> postprocess_bbox_preds(
     const std::vector<float>& all_bbox_preds_flat);
+
+std::vector<std::vector<std::vector<float>>> postprocess_map_preds(
+    const std::vector<float>& all_map_cls_preds_flat,
+    const std::vector<float>& all_map_pts_preds_flat);
 
 // config for Net class
 struct NetConfig
@@ -366,6 +374,7 @@ private:
 
   VadOutputData postprocess(const std::string& head_name, int32_t cmd) {
     std::vector<float> ego_fut_preds = nets_[head_name]->bindings["out.ego_fut_preds"]->cpu<float>();
+    std::vector<float> map_all_cls_preds_flat = nets_[head_name]->bindings["out.map_all_cls_scores"]->cpu<float>();
     std::vector<float> map_all_pts_preds_flat = nets_[head_name]->bindings["out.map_all_pts_preds"]->cpu<float>();
     std::vector<float> all_traj_preds_flat = nets_[head_name]->bindings["out.all_traj_preds"]->cpu<float>();
     std::vector<float> all_traj_cls_scores_flat = nets_[head_name]->bindings["out.all_traj_cls_scores"]->cpu<float>();
@@ -375,6 +384,18 @@ private:
     auto traj_preds = postprocess_traj_preds(all_traj_preds_flat);
     auto traj_cls_scores = postprocess_traj_cls_scores(all_traj_cls_scores_flat);
     auto bbox_preds = postprocess_bbox_preds(all_bbox_preds_flat);
+    auto map_pts_preds = postprocess_map_preds(
+        map_all_cls_preds_flat, map_all_pts_preds_flat);
+    
+    // Convert map_pts_preds (3D) to map_points (2D) for VadOutputData
+    std::vector<std::vector<float>> map_points;
+    for (const auto& query_pts : map_pts_preds) {
+      for (const auto& pt : query_pts) {
+        if (pt.size() >= 2) {
+          map_points.push_back({pt[0], pt[1]});  // Extract x, y coordinates
+        }
+      }
+    }
     
     // Extract planning for the given command
     std::vector<float> planning(
@@ -405,7 +426,7 @@ private:
       all_trajectories[command_idx] = trajectory;
     }
     
-    return VadOutputData{planning, all_trajectories};
+    return VadOutputData{planning, all_trajectories, map_points};
   }
 };
 

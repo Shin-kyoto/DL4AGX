@@ -84,6 +84,9 @@ VadOutputTopicData VadInterface::convert_output(
   output_topic_data.trajectory = process_trajectory(
     vad_output_data.predicted_trajectory_, stamp, trajectory_timestep, base2map_transform);
 
+  // Convert map_points from VAD coordinate system to Autoware coordinate system
+  output_topic_data.map_points = process_map_points(vad_output_data.map_points_, stamp, base2map_transform);
+
   return output_topic_data;
 }
 
@@ -563,6 +566,65 @@ autoware_planning_msgs::msg::Trajectory VadInterface::process_trajectory(
   trajectory_msg.points = create_trajectory_points(predicted_trajectory, trajectory_timestep, base2map_transform);
 
   return trajectory_msg;
+}
+
+visualization_msgs::msg::MarkerArray VadInterface::process_map_points(
+  const std::vector<std::vector<float>> & vad_map_points,
+  const rclcpp::Time & stamp,
+  const Eigen::Matrix4f & base2map_transform) const
+{
+  visualization_msgs::msg::Marker marker;
+  marker.ns = "vad_map_points";
+  marker.id = 0;
+  marker.header.frame_id = "map";
+  marker.header.stamp = stamp;
+  marker.type = visualization_msgs::msg::Marker::POINTS;
+  marker.action = visualization_msgs::msg::Marker::ADD;
+  
+  // スケール設定（ポイントのサイズ）
+  marker.scale.x = 0.2;
+  marker.scale.y = 0.2;
+  marker.scale.z = 0.2;
+  
+  // カラー設定（青色）
+  marker.color.r = 0.0;
+  marker.color.g = 0.0;
+  marker.color.b = 1.0;
+  marker.color.a = 0.8;
+  
+  // オリエンテーション（マーカーなので固定）
+  marker.pose.orientation.x = 0.0;
+  marker.pose.orientation.y = 0.0;
+  marker.pose.orientation.z = 0.0;
+  marker.pose.orientation.w = 1.0;
+  
+  // VAD座標系のポイントをmap座標系に変換してマーカーに追加
+  for (const auto& vad_point : vad_map_points) {
+    if (vad_point.size() >= 2) {
+      // VAD座標系の点 (x, y)
+      float vad_x = vad_point[0];
+      float vad_y = vad_point[1];
+      
+      // VAD座標系からbase_link座標系に変換
+      auto [aw_x, aw_y, aw_z] = vad2aw_xyz(vad_x, vad_y, 0.0f);
+      
+      // base_link座標系からmap座標系に変換
+      Eigen::Vector4f base_point(aw_x, aw_y, 0.0f, 1.0f);
+      Eigen::Vector4f map_point = base2map_transform * base_point;
+      
+      // ポイントを追加
+      geometry_msgs::msg::Point geometry_point;
+      geometry_point.x = map_point[0];
+      geometry_point.y = map_point[1];
+      geometry_point.z = map_point[2];
+      marker.points.push_back(geometry_point);
+    }
+  }
+
+  visualization_msgs::msg::MarkerArray marker_array;
+  marker_array.markers.push_back(marker);
+
+  return marker_array;
 }
 
 float VadInterface::calculate_current_longitudinal_velocity(

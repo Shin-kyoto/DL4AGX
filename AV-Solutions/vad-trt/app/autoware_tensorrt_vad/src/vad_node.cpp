@@ -102,6 +102,11 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
           "~/output/objects",
           rclcpp::QoS(1));
 
+  map_points_publisher_ =
+      this->create_publisher<visualization_msgs::msg::MarkerArray>(
+          "~/output/map",
+          rclcpp::QoS(1));
+
   // Create QoS profiles for sensor data (best effort for compatibility with typical sensor topics)
   auto sensor_qos = rclcpp::QoS(1).reliability(rclcpp::ReliabilityPolicy::BestEffort);
   auto camera_info_qos = rclcpp::QoS(10).reliability(rclcpp::ReliabilityPolicy::BestEffort);
@@ -361,6 +366,9 @@ void VadNode::publish(const VadOutputTopicData & vad_output_topic_data)
 
   // Publish candidate trajectories
   publish_trajectories(vad_output_topic_data.candidate_trajectories);
+
+  // Publish map points
+  map_points_publisher_->publish(vad_output_topic_data.map_points);
 
   RCLCPP_DEBUG(this->get_logger(), "Published trajectories");
 }

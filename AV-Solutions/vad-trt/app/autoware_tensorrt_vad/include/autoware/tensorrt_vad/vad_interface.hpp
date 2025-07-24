@@ -41,6 +41,8 @@
 #include "autoware_planning_msgs/msg/trajectory_point.hpp"
 #include "autoware_utils_uuid/uuid_helper.hpp"
 #include "geometry_msgs/msg/quaternion.hpp"
+#include "visualization_msgs/msg/marker_array.hpp"
+#include "visualization_msgs/msg/marker.hpp"
 
 #include "vad_model.hpp" 
 
@@ -108,6 +110,7 @@ struct VadOutputTopicData
 {
   autoware_internal_planning_msgs::msg::CandidateTrajectories candidate_trajectories;
   autoware_planning_msgs::msg::Trajectory trajectory;
+  visualization_msgs::msg::MarkerArray map_points;  // Transformed map points in Autoware coordinate system
   // autoware_perception_msgs::msg::DetectedObjects objects;
 };
 
@@ -145,6 +148,12 @@ public:
     const std::vector<float> & predicted_trajectory,
     const rclcpp::Time & stamp,
     double trajectory_timestep,
+    const Eigen::Matrix4f & base2map_transform) const;
+
+  // Convert map_points from VAD coordinate system to Autoware coordinate system
+  visualization_msgs::msg::MarkerArray process_map_points(
+    const std::vector<std::vector<float>> & vad_map_points,
+    const rclcpp::Time & stamp,
     const Eigen::Matrix4f & base2map_transform) const;
 
   Lidar2ImgData process_lidar2img(
