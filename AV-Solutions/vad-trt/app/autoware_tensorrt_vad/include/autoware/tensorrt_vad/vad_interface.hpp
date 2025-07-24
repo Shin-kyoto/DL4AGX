@@ -107,7 +107,9 @@ private:
 struct VadOutputTopicData
 {
   autoware_internal_planning_msgs::msg::CandidateTrajectories candidate_trajectories;
+  autoware_internal_planning_msgs::msg::CandidateTrajectories candidate_trajectories_base;
   autoware_planning_msgs::msg::Trajectory trajectory;
+  autoware_planning_msgs::msg::Trajectory trajectory_base;
   // autoware_perception_msgs::msg::DetectedObjects objects;
 };
 
@@ -141,11 +143,21 @@ public:
     double trajectory_timestep,
     const Eigen::Matrix4f & base2map_transform) const;
   
+  autoware_internal_planning_msgs::msg::CandidateTrajectories process_candidate_trajectories_base(
+    const std::map<int32_t, std::vector<float>> & predicted_trajectories,
+    const rclcpp::Time & stamp,
+    double trajectory_timestep) const;
+  
   autoware_planning_msgs::msg::Trajectory process_trajectory(
     const std::vector<float> & predicted_trajectory,
     const rclcpp::Time & stamp,
     double trajectory_timestep,
     const Eigen::Matrix4f & base2map_transform) const;
+  
+  autoware_planning_msgs::msg::Trajectory process_trajectory_base(
+    const std::vector<float> & predicted_trajectory,
+    const rclcpp::Time & stamp,
+    double trajectory_timestep) const;
 
   Lidar2ImgData process_lidar2img(
     const std::vector<sensor_msgs::msg::CameraInfo::ConstSharedPtr> & camera_infos,
@@ -220,6 +232,11 @@ private:
     const std::vector<float> & predicted_trajectory,
     double trajectory_timestep,
     const Eigen::Matrix4f & base2map_transform) const;
+  
+  // Helper function for creating trajectory points in base_link coordinate system
+  std::vector<autoware_planning_msgs::msg::TrajectoryPoint> create_trajectory_points_base(
+    const std::vector<float> & predicted_trajectory,
+    double trajectory_timestep) const;
 };
 
 }  // namespace autoware::tensorrt_vad

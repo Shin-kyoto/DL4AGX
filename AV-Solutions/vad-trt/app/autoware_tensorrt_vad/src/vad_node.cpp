@@ -93,9 +93,17 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
       this->create_publisher<autoware_planning_msgs::msg::Trajectory>(
           "~/output/trajectory", rclcpp::QoS(1));
 
+  trajectory_base_publisher_ =
+      this->create_publisher<autoware_planning_msgs::msg::Trajectory>(
+          "~/output/trajectory_base", rclcpp::QoS(1));
+
   candidate_trajectories_publisher_ =
       this->create_publisher<autoware_internal_planning_msgs::msg::CandidateTrajectories>(
           "~/output/trajectories", rclcpp::QoS(1));
+
+  candidate_trajectories_base_publisher_ =
+      this->create_publisher<autoware_internal_planning_msgs::msg::CandidateTrajectories>(
+          "~/output/trajectories_base", rclcpp::QoS(1));
 
   objects_publisher_ =
       this->create_publisher<autoware_perception_msgs::msg::DetectedObjects>(
@@ -322,10 +330,22 @@ void VadNode::publish_trajectories(const autoware_internal_planning_msgs::msg::C
   candidate_trajectories_publisher_->publish(std::move(candidate_trajectories_msg));
 }
 
+void VadNode::publish_candidate_trajectories_base(const autoware_internal_planning_msgs::msg::CandidateTrajectories & candidate_trajectories_base)
+{
+  auto candidate_trajectories_base_msg = std::make_unique<autoware_internal_planning_msgs::msg::CandidateTrajectories>(candidate_trajectories_base);
+  candidate_trajectories_base_publisher_->publish(std::move(candidate_trajectories_base_msg));
+}
+
 void VadNode::publish_trajectory(const autoware_planning_msgs::msg::Trajectory & trajectory)
 {
   auto trajectory_msg = std::make_unique<autoware_planning_msgs::msg::Trajectory>(trajectory);
   trajectory_publisher_->publish(std::move(trajectory_msg));
+}
+
+void VadNode::publish_trajectory_base(const autoware_planning_msgs::msg::Trajectory & trajectory_base)
+{
+  auto trajectory_base_msg = std::make_unique<autoware_planning_msgs::msg::Trajectory>(trajectory_base);
+  trajectory_base_publisher_->publish(std::move(trajectory_base_msg));
 }
 
 std::optional<VadOutputTopicData> VadNode::execute_inference(const VadInputTopicData & vad_input_topic_data)
@@ -359,10 +379,16 @@ void VadNode::publish(const VadOutputTopicData & vad_output_topic_data)
   // Publish selected trajectory
   publish_trajectory(vad_output_topic_data.trajectory);
 
+  // Publish base_link coordinate trajectory
+  publish_trajectory_base(vad_output_topic_data.trajectory_base);
+
   // Publish candidate trajectories
   publish_trajectories(vad_output_topic_data.candidate_trajectories);
 
-  RCLCPP_DEBUG(this->get_logger(), "Published trajectories");
+  // Publish candidate trajectories_base
+  publish_candidate_trajectories_base(vad_output_topic_data.candidate_trajectories_base);
+
+  RCLCPP_DEBUG(this->get_logger(), "Published trajectories, trajectory_base, candidate trajectories, and candidate trajectories_base");
 }
 
 void VadNode::create_camera_image_subscribers(const rclcpp::QoS& sensor_qos)

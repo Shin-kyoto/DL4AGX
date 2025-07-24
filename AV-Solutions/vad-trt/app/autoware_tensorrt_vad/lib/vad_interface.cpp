@@ -76,13 +76,21 @@ VadOutputTopicData VadInterface::convert_output(
 {
   VadOutputTopicData output_topic_data;
 
-  // Convert candidate trajectories
+  // Convert candidate trajectories (map coordinate system)
   output_topic_data.candidate_trajectories = process_candidate_trajectories(
     vad_output_data.predicted_trajectories_, stamp, trajectory_timestep, base2map_transform);
   
-  // Convert trajectory
+  // Convert candidate trajectories_base (base_link coordinate system)
+  output_topic_data.candidate_trajectories_base = process_candidate_trajectories_base(
+    vad_output_data.predicted_trajectories_, stamp, trajectory_timestep);
+  
+  // Convert trajectory (map coordinate system)
   output_topic_data.trajectory = process_trajectory(
     vad_output_data.predicted_trajectory_, stamp, trajectory_timestep, base2map_transform);
+
+  // Convert trajectory_base (base_link coordinate system)
+  output_topic_data.trajectory_base = process_trajectory_base(
+    vad_output_data.predicted_trajectory_, stamp, trajectory_timestep);
 
   return output_topic_data;
 }
@@ -471,6 +479,8 @@ std::vector<autoware_planning_msgs::msg::TrajectoryPoint> VadInterface::create_t
     float vad_y = predicted_trajectory[i + 1];
 
     auto [aw_x, aw_y, aw_z] = vad2aw_xyz(vad_x, vad_y, 0.0f);
+    // aw_y = 0.0f;
+    // printf("aw_x, aw_y: %f, %f\n", aw_x, aw_y);
     Eigen::Vector4f base_link_position(aw_x, aw_y, 0.0, 1.0);
     Eigen::Vector4f map_position = base2map_transform * base_link_position;
 
@@ -484,6 +494,81 @@ std::vector<autoware_planning_msgs::msg::TrajectoryPoint> VadInterface::create_t
       auto [aw_dx, aw_dy, aw_dz] = vad2aw_xyz(vad_dx, vad_dy, 0.0f);
       
       float yaw = transform_direction_to_map(aw_dx, aw_dy);
+      point.pose.orientation = create_quaternion_from_yaw(yaw);
+    } else {
+      point.pose.orientation = prev_orientation;
+    }
+
+    // 速度を計算（前の点との距離を時間間隔で割る）
+    auto distance = std::hypot(point.pose.position.x - prev_x, point.pose.position.y - prev_y);
+    point.longitudinal_velocity_mps = static_cast<float>(distance / trajectory_timestep);
+    
+    point.lateral_velocity_mps = 0.0;
+    point.acceleration_mps2 = 0.0;
+    point.heading_rate_rps = 0.0;
+
+    // time_from_startを設定（1秒, 2秒, 3秒, 4秒, 5秒, 6秒）
+    size_t point_index = i / 2;
+    double time_sec = (point_index + 1) * trajectory_timestep;
+    point.time_from_start.sec = static_cast<int32_t>(time_sec);
+    point.time_from_start.nanosec = static_cast<uint32_t>((time_sec - point.time_from_start.sec) * 1e9);
+
+    // 次の計算のために現在の位置を保存
+    prev_x = point.pose.position.x;
+    prev_y = point.pose.position.y;
+    prev_orientation = point.pose.orientation;
+
+    points.push_back(point);
+  }
+
+  return points;
+}
+
+std::vector<autoware_planning_msgs::msg::TrajectoryPoint> VadInterface::create_trajectory_points_base(
+  const std::vector<float> & predicted_trajectory,
+  double trajectory_timestep) const
+{
+  std::vector<autoware_planning_msgs::msg::TrajectoryPoint> points;
+  
+  // 0秒目の点 (0,0) を追加 - base_link座標系
+  autoware_planning_msgs::msg::TrajectoryPoint initial_point;
+  initial_point.pose.position.x = 0.0;
+  initial_point.pose.position.y = 0.0;
+  initial_point.pose.position.z = 0.0;
+  initial_point.pose.orientation = create_quaternion_from_yaw(0.0);
+  initial_point.longitudinal_velocity_mps = 2.5;
+  initial_point.lateral_velocity_mps = 0.0;
+  initial_point.acceleration_mps2 = 0.0;
+  initial_point.heading_rate_rps = 0.0;
+  initial_point.time_from_start.sec = 0;
+  initial_point.time_from_start.nanosec = 0;
+  points.push_back(initial_point);
+
+  double prev_x = 0.0;
+  double prev_y = 0.0;
+  auto prev_orientation = initial_point.pose.orientation;
+
+  for (size_t i = 0; i < predicted_trajectory.size(); i += 2) {
+    autoware_planning_msgs::msg::TrajectoryPoint point;
+
+    float vad_x = predicted_trajectory[i];
+    float vad_y = predicted_trajectory[i + 1];
+
+    // VAD座標系からAutoware base_link座標系に変換
+    auto [aw_x, aw_y, aw_z] = vad2aw_xyz(vad_x, vad_y, 0.0f);
+    // aw_y = 0.0f;
+    // printf("aw_x, aw_y: %f, %f\n", aw_x, aw_y);
+    point.pose.position.x = aw_x;
+    point.pose.position.y = aw_y;
+    point.pose.position.z = aw_z;
+
+    // 方向を計算
+    if (i + 2 < predicted_trajectory.size()) {
+      float vad_dx = predicted_trajectory[i + 2] - predicted_trajectory[i];
+      float vad_dy = predicted_trajectory[i + 3] - predicted_trajectory[i + 1];
+      auto [aw_dx, aw_dy, aw_dz] = vad2aw_xyz(vad_dx, vad_dy, 0.0f);
+      
+      float yaw = std::atan2(aw_dy, aw_dx);
       point.pose.orientation = create_quaternion_from_yaw(yaw);
     } else {
       point.pose.orientation = prev_orientation;
@@ -548,6 +633,39 @@ autoware_internal_planning_msgs::msg::CandidateTrajectories VadInterface::proces
   return candidate_trajectories_msg;
 }
 
+autoware_internal_planning_msgs::msg::CandidateTrajectories VadInterface::process_candidate_trajectories_base(
+  const std::map<int32_t, std::vector<float>> & predicted_trajectories,
+  const rclcpp::Time & stamp,
+  double trajectory_timestep) const
+{
+  // CandidateTrajectories メッセージを作成
+  autoware_internal_planning_msgs::msg::CandidateTrajectories candidate_trajectories_msg;
+
+  // 各コマンドの軌道をCandidateTrajectoryとして追加
+  for (const auto& [command_idx, trajectory] : predicted_trajectories) {
+    autoware_internal_planning_msgs::msg::CandidateTrajectory candidate_trajectory;
+    
+    // ヘッダーを設定 - base_link座標系
+    candidate_trajectory.header.stamp = stamp;
+    candidate_trajectory.header.frame_id = "base_link";
+    
+    // generator_idを設定（ユニークなUUID）
+    candidate_trajectory.generator_id = autoware_utils_uuid::generate_uuid();
+
+    candidate_trajectory.points = create_trajectory_points_base(trajectory, trajectory_timestep);
+
+    candidate_trajectories_msg.candidate_trajectories.push_back(candidate_trajectory);
+
+    // 各コマンドのGeneratorInfoを追加
+    autoware_internal_planning_msgs::msg::GeneratorInfo generator_info;
+    generator_info.generator_id = autoware_utils_uuid::generate_uuid();
+    generator_info.generator_name.data = "autoware_tensorrt_vad_cmd_base_" + std::to_string(command_idx);
+    candidate_trajectories_msg.generator_info.push_back(generator_info);
+  }
+
+  return candidate_trajectories_msg;
+}
+
 autoware_planning_msgs::msg::Trajectory VadInterface::process_trajectory(
   const std::vector<float> & predicted_trajectory,
   const rclcpp::Time & stamp,
@@ -561,6 +679,22 @@ autoware_planning_msgs::msg::Trajectory VadInterface::process_trajectory(
   trajectory_msg.header.frame_id = "map";
 
   trajectory_msg.points = create_trajectory_points(predicted_trajectory, trajectory_timestep, base2map_transform);
+
+  return trajectory_msg;
+}
+
+autoware_planning_msgs::msg::Trajectory VadInterface::process_trajectory_base(
+  const std::vector<float> & predicted_trajectory,
+  const rclcpp::Time & stamp,
+  double trajectory_timestep) const
+{
+  autoware_planning_msgs::msg::Trajectory trajectory_msg;
+
+  // ヘッダーを設定 - base_link座標系
+  trajectory_msg.header.stamp = stamp;
+  trajectory_msg.header.frame_id = "base_link";
+
+  trajectory_msg.points = create_trajectory_points_base(predicted_trajectory, trajectory_timestep);
 
   return trajectory_msg;
 }
