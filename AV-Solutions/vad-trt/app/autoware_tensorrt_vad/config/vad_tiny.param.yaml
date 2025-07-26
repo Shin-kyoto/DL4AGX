@@ -4,6 +4,9 @@
       use_raw: [false, false, false, false, false, false] # per camera: if true, use raw image data, otherwise use compressed images
     model_params:
       plugins_path: "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/libplugins.so"
+      onnx_path_backbone: "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/onnx_files/vadv1.extract_img_feat/sim_vadv1.extract_img_feat.onnx"
+      onnx_path_head: "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/onnx_files/vadv1.pts_bbox_head.forward/sim_vadv1.pts_bbox_head.forward.onnx"
+      onnx_path_head_no_prev: "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/onnx_files/vadv1_prev.pts_bbox_head.forward/sim_vadv1_prev.pts_bbox_head.forward.onnx"
       warm_up_num: 20
       default_command: 2  # 0: TURN RIGHT, 1: TURN LEFT, 2: KEEP FORWARD
     sync_params:
