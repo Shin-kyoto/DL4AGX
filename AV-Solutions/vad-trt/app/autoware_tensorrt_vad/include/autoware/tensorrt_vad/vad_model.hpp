@@ -27,6 +27,8 @@
 #include "net.h"
 #include <map>
 
+#include <autoware/tensorrt_common/tensorrt_common.hpp>
+
 namespace autoware::tensorrt_vad
 {
 
@@ -65,7 +67,7 @@ struct VadInputData
   std::vector<float> camera_images_;
 
   // シフト情報（img_metas.0[shift]）
-  std::vector<float> shift_;
+  std::vector<float> shift_;  
 
   // LiDAR座標系からカメラ画像座標系への変換行列（img_metas.0[lidar2img]）
   std::vector<float> lidar2img_;
@@ -222,6 +224,11 @@ public:
   std::unordered_map<std::string, std::shared_ptr<nv::Net>> nets_;
   bool initialized_;
 
+  // TrtCommon instances
+  std::unique_ptr<autoware::tensorrt_common::TrtCommon> backbone_trt_;
+  std::unique_ptr<autoware::tensorrt_common::TrtCommon> head_trt_;
+  std::unique_ptr<autoware::tensorrt_common::TrtCommon> head_no_prev_trt_;
+
   // 前回のBEV特徴量保存用
   std::shared_ptr<nv::Tensor> saved_prev_bev_;
   bool is_first_frame_;
@@ -233,7 +240,7 @@ public:
   std::shared_ptr<VadLogger> logger_;
 
 private:
-  // メンバ関数
+    // メンバ関数
   std::unique_ptr<nvinfer1::IRuntime, std::function<void(nvinfer1::IRuntime*)>> create_runtime() {
     static std::unique_ptr<Logger> logger_instance = std::make_unique<Logger>(logger_);
     auto runtime_deleter = []([[maybe_unused]] nvinfer1::IRuntime *runtime) {};
