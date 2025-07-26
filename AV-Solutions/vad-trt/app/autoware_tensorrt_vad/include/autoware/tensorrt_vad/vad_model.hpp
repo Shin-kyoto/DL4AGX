@@ -67,7 +67,7 @@ struct VadInputData
   std::vector<float> camera_images_;
 
   // シフト情報（img_metas.0[shift]）
-  std::vector<float> shift_;  
+  std::vector<float> shift_;
 
   // LiDAR座標系からカメラ画像座標系への変換行列（img_metas.0[lidar2img]）
   std::vector<float> lidar2img_;
@@ -240,7 +240,6 @@ public:
   std::shared_ptr<VadLogger> logger_;
 
 private:
-    // メンバ関数
   std::unique_ptr<nvinfer1::IRuntime, std::function<void(nvinfer1::IRuntime*)>> create_runtime() {
     static std::unique_ptr<Logger> logger_instance = std::make_unique<Logger>(logger_);
     auto runtime_deleter = []([[maybe_unused]] nvinfer1::IRuntime *runtime) {};
