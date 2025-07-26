@@ -35,20 +35,20 @@ struct TestConfig {
 };
 
 /**
- * @brief load VadConfig and TestConfig from a YAML file
+ * @brief load VadModelConfig and TestConfig from a YAML file
  * 
  * @param config_path path to the YAML file
- * @return pair of VadConfig and TestConfig
+ * @return pair of VadModelConfig and TestConfig
  * @throws std::runtime_error if YAML loading fails
  */
-std::pair<VadConfig, TestConfig> load_config_from_yaml(const std::string& config_path) {
+std::pair<VadModelConfig, TestConfig> load_config_from_yaml(const std::string& config_path) {
     try {
         YAML::Node yaml_config = YAML::LoadFile(config_path);
         const auto& test_config_node = yaml_config["test_config"];
         
-        VadConfig vad_config;
-        vad_config.plugins_path = test_config_node["plugins_path"].as<std::string>();
-        vad_config.warm_up_num = test_config_node["warm_up_num"].as<int>();
+        VadModelConfig vad_model_config;
+        vad_model_config.plugins_path = test_config_node["plugins_path"].as<std::string>();
+        vad_model_config.warm_up_num = test_config_node["warm_up_num"].as<int>();
         
         const auto& nets = test_config_node["nets"];
         for (const auto& net : nets) {
@@ -67,7 +67,7 @@ std::pair<VadConfig, TestConfig> load_config_from_yaml(const std::string& config
                     net_config.inputs[input.first.as<std::string>()] = input_map;
                 }
             }
-            vad_config.nets_config.push_back(net_config);
+            vad_model_config.nets_config.push_back(net_config);
         }
 
         TestConfig test_config;
@@ -84,7 +84,7 @@ std::pair<VadConfig, TestConfig> load_config_from_yaml(const std::string& config
         const auto& expected_output = test_data["expected_output"];
         test_config.expected_output.trajectory = expected_output["trajectory"].as<std::vector<float>>();
 
-        return {vad_config, test_config};
+        return {vad_model_config, test_config};
     } catch (const YAML::Exception& e) {
         throw std::runtime_error("Failed to load config from YAML: " + std::string(e.what()));
     }
@@ -97,13 +97,13 @@ class VadIntegrationTest : public ::testing::Test {
 protected:
     void SetUp() override {
         mock_logger_ = std::make_shared<MockVadLogger>();
-        auto [vad_config, test_config] = test::load_config_from_yaml(autoware::tensorrt_vad::test::getTestConfigPath());
-        config_ = vad_config;
+        auto [vad_model_config, test_config] = test::load_config_from_yaml(autoware::tensorrt_vad::test::getTestConfigPath());
+        config_ = vad_model_config;
         test_config_ = test_config;
     }
 
     std::shared_ptr<MockVadLogger> mock_logger_;
-    VadConfig config_;
+    VadModelConfig config_;
     test::TestConfig test_config_;
 };
 
@@ -131,8 +131,8 @@ class VadInferIntegrationTest : public ::testing::Test {
 protected:
     void SetUp() override {
         logger_ = std::make_shared<MockVadLogger>();
-        auto [vad_config, test_config] = test::load_config_from_yaml(autoware::tensorrt_vad::test::getTestConfigPath());
-        config_ = vad_config;
+        auto [vad_model_config, test_config] = test::load_config_from_yaml(autoware::tensorrt_vad::test::getTestConfigPath());
+        config_ = vad_model_config;
         test_config_ = test_config;
         
         // 前提条件のチェック
@@ -162,8 +162,8 @@ protected:
         }
     }
 
-    VadConfig createRealConfig() {
-        VadConfig config;
+    VadModelConfig createRealConfig() {
+        VadModelConfig config;
         config.plugins_path = config_.plugins_path;
         config.warm_up_num = config_.warm_up_num;
         
@@ -237,14 +237,14 @@ protected:
     }
 
     std::shared_ptr<MockVadLogger> logger_;
-    VadConfig config_;
+    VadModelConfig config_;
     test::TestConfig test_config_;
     bool integration_test_enabled_ = false;
 };
 
 // 1. モデルが例外を投げずに初期化できることを確認
 TEST_F(VadInferIntegrationTest, ModelInitialization) {
-    VadConfig config = createRealConfig();
+    VadModelConfig config = createRealConfig();
     std::unique_ptr<VadModel<MockVadLogger>> model;
     
     ASSERT_NO_THROW({

@@ -60,7 +60,7 @@ public:
 
 private:
   // Config loading function
-  void load_vad_config();
+  void load_vad_model_config();
   void load_net_configs();
   void initialize_vad_model();
   void create_camera_image_subscribers(const rclcpp::QoS& sensor_qos);
@@ -96,7 +96,7 @@ private:
 
   // VAD model
   std::unique_ptr<VadModel<RosVadLogger>> vad_model_ptr_{};
-  VadConfig vad_config_;
+  VadModelConfig vad_model_config_;
 
   // VAD interface
   std::unique_ptr<VadInterface> vad_interface_ptr_{};
