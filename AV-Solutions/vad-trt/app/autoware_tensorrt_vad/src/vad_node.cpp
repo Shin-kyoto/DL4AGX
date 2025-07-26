@@ -245,6 +245,26 @@ void VadNode::initialize_vad_model()
   auto ros_logger = std::make_shared<RosVadLogger>(this->get_logger());
   vad_model_ptr_ = std::make_unique<VadModel<RosVadLogger>>(vad_model_config_, ros_logger);
 
+  // Initialize TensorRT with NetworkIO (init_tensorrt integration)
+  if (backbone_trt_config_ && head_trt_config_ && head_no_prev_trt_config_) {
+    RCLCPP_INFO(this->get_logger(), "Initializing TensorRT engines with NetworkIO");
+    bool tensorrt_success = vad_model_ptr_->init_tensorrt(
+        vad_config_,
+        backbone_trt_config_.value(),
+        head_trt_config_.value(),
+        head_no_prev_trt_config_.value()
+    );
+    
+    if (tensorrt_success) {
+      RCLCPP_INFO(this->get_logger(), "TensorRT initialization completed successfully");
+    } else {
+      RCLCPP_ERROR(this->get_logger(), "TensorRT initialization failed");
+      throw std::runtime_error("Failed to initialize TensorRT engines");
+    }
+  } else {
+    RCLCPP_WARN(this->get_logger(), "TrtCommonConfig not available, skipping TensorRT initialization");
+  }
+
   RCLCPP_INFO(this->get_logger(), "VAD model and interface initialized successfully");
 }
 
@@ -332,7 +352,7 @@ void VadNode::load_trt_common_configs()
       "model_params.nets.backbone.engine_path");
 
   backbone_trt_config_.emplace(
-      backbone_onnx_path, backbone_precision, backbone_engine_path);
+      backbone_onnx_path, backbone_precision, backbone_engine_path, 5ULL << 30U);
 
   // Load TrtCommonConfig for head
   std::string head_onnx_path = this->declare_parameter<std::string>(
@@ -343,7 +363,7 @@ void VadNode::load_trt_common_configs()
       "model_params.nets.head.engine_path");
 
   head_trt_config_.emplace(
-      head_onnx_path, head_precision, head_engine_path);
+      head_onnx_path, head_precision, head_engine_path, 5ULL << 30U);
 
   // Load TrtCommonConfig for head_no_prev
   std::string head_no_prev_onnx_path = this->declare_parameter<std::string>(
@@ -354,10 +374,10 @@ void VadNode::load_trt_common_configs()
       "model_params.nets.head_no_prev.engine_path");
 
   head_no_prev_trt_config_.emplace(
-      head_no_prev_onnx_path, head_no_prev_precision, head_no_prev_engine_path);
+      head_no_prev_onnx_path, head_no_prev_precision, head_no_prev_engine_path, 5ULL << 30U);
 
   // Log loaded configurations
-  RCLCPP_INFO(this->get_logger(), "TrtCommon configurations loaded:");
+  RCLCPP_INFO(this->get_logger(), "TrtCommon configurations loaded (5GB workspace):");
   RCLCPP_INFO(this->get_logger(), "  Backbone - ONNX: %s, Precision: %s", 
               backbone_onnx_path.c_str(), backbone_precision.c_str());
   RCLCPP_INFO(this->get_logger(), "  Head - ONNX: %s, Precision: %s", 
