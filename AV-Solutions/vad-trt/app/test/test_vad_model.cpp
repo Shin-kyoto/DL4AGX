@@ -36,7 +36,7 @@ protected:
     }
 
     std::shared_ptr<MockVadLogger> mock_logger_;
-    VadConfig config_;
+    VadModelConfig config_;
 };
 
 // 1. VadInputData構造体の基本的な検証
@@ -83,8 +83,8 @@ TEST_F(VadModelTest, VadOutputDataStructure)
     EXPECT_EQ(output_data.predicted_trajectory_.size(), 12);
 }
 
-// 3. VadConfig構造体の検証
-TEST_F(VadModelTest, VadConfigStructure)
+// 3. VadModelConfig構造体の検証
+TEST_F(VadModelTest, VadModelConfigStructure)
 {
     EXPECT_EQ(config_.plugins_path, "/tmp/test_plugin.so");
     EXPECT_EQ(config_.warm_up_num, 1);

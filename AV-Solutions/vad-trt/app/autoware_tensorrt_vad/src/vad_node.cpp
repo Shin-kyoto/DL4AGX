@@ -130,8 +130,8 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
       "/tf_static", tf_static_qos,
       std::bind(&VadNode::tf_static_callback, this, std::placeholders::_1));
 
-  // Load VadConfig
-  load_vad_config();
+  // Load VadModelConfig
+  load_vad_model_config();
 
   // Initialize synchronization strategy
   double sync_tolerance_ms = declare_parameter<double>("sync_params.sync_tolerance_ms");
@@ -243,17 +243,17 @@ void VadNode::initialize_vad_model()
 
   // Create RosVadLogger using the logger
   auto ros_logger = std::make_shared<RosVadLogger>(this->get_logger());
-  vad_model_ptr_ = std::make_unique<VadModel<RosVadLogger>>(vad_config_, ros_logger);
+  vad_model_ptr_ = std::make_unique<VadModel<RosVadLogger>>(vad_model_config_, ros_logger);
 
   RCLCPP_INFO(this->get_logger(), "VAD model and interface initialized successfully");
 }
 
-void VadNode::load_vad_config()
+void VadNode::load_vad_model_config()
 {
   // Load VAD config parameters
-  vad_config_.plugins_path =
+  vad_model_config_.plugins_path =
       this->declare_parameter<std::string>("model_params.plugins_path", "");
-  vad_config_.warm_up_num =
+  vad_model_config_.warm_up_num =
       this->declare_parameter<int>("model_params.warm_up_num", 20);
 
   // Load network configurations
@@ -311,9 +311,9 @@ void VadNode::load_net_configs()
   head_no_prev_config.inputs[input_feature_no_prev]["net"] = net_param_no_prev;
   head_no_prev_config.inputs[input_feature_no_prev]["name"] = name_param_no_prev;
 
-  vad_config_.nets_config.push_back(backbone_config);
-  vad_config_.nets_config.push_back(head_config);
-  vad_config_.nets_config.push_back(head_no_prev_config);
+  vad_model_config_.nets_config.push_back(backbone_config);
+  vad_model_config_.nets_config.push_back(head_config);
+  vad_model_config_.nets_config.push_back(head_no_prev_config);
 }
 
 void VadNode::publish_trajectories(const autoware_internal_planning_msgs::msg::CandidateTrajectories & candidate_trajectories)

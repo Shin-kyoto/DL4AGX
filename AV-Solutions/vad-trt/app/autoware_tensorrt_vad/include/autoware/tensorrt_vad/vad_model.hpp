@@ -116,7 +116,7 @@ struct NetConfig
 };
 
 // config for VadModel class
-struct VadConfig
+struct VadModelConfig
 {
   std::string plugins_path;
   int32_t warm_up_num;
@@ -146,7 +146,7 @@ template<typename LoggerType>
 class VadModel
 {
 public:
-  VadModel(const VadConfig& config, std::shared_ptr<LoggerType> logger)
+  VadModel(const VadModelConfig& config, std::shared_ptr<LoggerType> logger)
     : stream_(nullptr), initialized_(false), is_first_frame_(true), config_(config), logger_(std::move(logger))
   {
     // loggerはVadLoggerを継承したclassのみ受け取る
@@ -227,7 +227,7 @@ public:
   bool is_first_frame_;
 
   // 設定情報の保存
-  VadConfig config_;
+  VadModelConfig config_;
 
   // ロガーインスタンス
   std::shared_ptr<VadLogger> logger_;

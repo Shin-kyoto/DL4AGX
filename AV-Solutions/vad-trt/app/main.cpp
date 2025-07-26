@@ -194,15 +194,15 @@ public:
               rclcpp::QoS(1), callback));
     }
 
-    // VadConfigを読み込み
-    load_vad_config();
+    // VadModelConfigを読み込み
+    load_vad_model_config();
 
     RCLCPP_INFO(this->get_logger(), "VAD Node has been initialized");
   }
 
-  // VadConfigを取得する関数
-  const autoware::tensorrt_vad::VadConfig &getVadConfig() const {
-    return vad_config_;
+  // VadModelConfigを取得する関数
+  const autoware::tensorrt_vad::VadModelConfig &getVadModelConfig() const {
+    return vad_model_config_;
   }
 
   void publish_trajectory(const std::vector<float> &planning) {
@@ -378,8 +378,8 @@ private:
       rclcpp::Subscription<sensor_msgs::msg::CompressedImage>::SharedPtr>
       camera_subscribers_;
 
-  // VadConfig
-  autoware::tensorrt_vad::VadConfig vad_config_;
+  // VadModelConfig
+  autoware::tensorrt_vad::VadModelConfig vad_model_config_;
 
   // trajectory_timestep parameter
   double trajectory_timestep_;
@@ -397,11 +397,11 @@ private:
     return node_options;
   }
 
-  void load_vad_config() {
+  void load_vad_model_config() {
     // このノード自体からパラメータを読み込み
-    vad_config_.plugins_path =
+    vad_model_config_.plugins_path =
         this->declare_parameter<std::string>("model_params.plugins_path", "");
-    vad_config_.warm_up_num =
+    vad_model_config_.warm_up_num =
         this->declare_parameter<int>("model_params.warm_up_num", 20);
 
     // ネットワーク設定の読み込み
@@ -460,9 +460,9 @@ private:
     head_no_prev_config.inputs[input_feature_no_prev]["name"] =
         name_param_no_prev;
 
-    vad_config_.nets_config.push_back(backbone_config);
-    vad_config_.nets_config.push_back(head_config);
-    vad_config_.nets_config.push_back(head_no_prev_config);
+    vad_model_config_.nets_config.push_back(backbone_config);
+    vad_model_config_.nets_config.push_back(head_config);
+    vad_model_config_.nets_config.push_back(head_no_prev_config);
   }
 
   void onImageReceived(const sensor_msgs::msg::CompressedImage::SharedPtr msg,
@@ -706,13 +706,13 @@ int main(int argc, char **argv) {
   // VADNodeを作成（yamlパスを渡す）
   auto node = std::make_shared<VADNode>(yaml_config_paths);
 
-  // VADNodeからVadConfigを取得
-  const auto &vad_config = node->getVadConfig();
+  // VADNodeからVadModelConfigを取得
+  const auto &vad_model_config = node->getVadModelConfig();
 
   // VadModelを初期化
   auto ros_logger =
       std::make_shared<autoware::tensorrt_vad::RosVadLogger>(node);
-  autoware::tensorrt_vad::VadModel vad_model(vad_config, ros_logger);
+  autoware::tensorrt_vad::VadModel vad_model(vad_model_config, ros_logger);
 
   EventTimer timer;
   std::string data_dir = cfg_dir.string() + "/data/";
