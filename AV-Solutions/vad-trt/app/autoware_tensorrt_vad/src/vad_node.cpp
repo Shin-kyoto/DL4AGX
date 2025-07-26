@@ -256,6 +256,8 @@ void VadNode::load_vad_model_config()
   vad_model_config_.warm_up_num =
       this->declare_parameter<int>("model_params.warm_up_num", 20);
 
+  load_trt_common_configs();
+
   // Load network configurations
   load_net_configs();
 }
@@ -314,6 +316,51 @@ void VadNode::load_net_configs()
   vad_model_config_.nets_config.push_back(backbone_config);
   vad_model_config_.nets_config.push_back(head_config);
   vad_model_config_.nets_config.push_back(head_no_prev_config);
+}
+
+void VadNode::load_trt_common_configs()
+{
+  // Load TrtCommonConfig for backbone
+  std::string backbone_onnx_path = this->declare_parameter<std::string>(
+      "model_params.nets.backbone.onnx_path");
+  std::string backbone_precision = this->declare_parameter<std::string>(
+      "model_params.nets.backbone.precision");
+  std::string backbone_engine_path = this->declare_parameter<std::string>(
+      "model_params.nets.backbone.engine_path");
+
+  backbone_trt_config_.emplace(
+      backbone_onnx_path, backbone_precision, backbone_engine_path);
+
+  // Load TrtCommonConfig for head
+  std::string head_onnx_path = this->declare_parameter<std::string>(
+      "model_params.nets.head.onnx_path");
+  std::string head_precision = this->declare_parameter<std::string>(
+      "model_params.nets.head.precision");
+  std::string head_engine_path = this->declare_parameter<std::string>(
+      "model_params.nets.head.engine_path");
+
+  head_trt_config_.emplace(
+      head_onnx_path, head_precision, head_engine_path);
+
+  // Load TrtCommonConfig for head_no_prev
+  std::string head_no_prev_onnx_path = this->declare_parameter<std::string>(
+      "model_params.nets.head_no_prev.onnx_path");
+  std::string head_no_prev_precision = this->declare_parameter<std::string>(
+      "model_params.nets.head_no_prev.precision");
+  std::string head_no_prev_engine_path = this->declare_parameter<std::string>(
+      "model_params.nets.head_no_prev.engine_path");
+
+  head_no_prev_trt_config_.emplace(
+      head_no_prev_onnx_path, head_no_prev_precision, head_no_prev_engine_path);
+
+  // Log loaded configurations
+  RCLCPP_INFO(this->get_logger(), "TrtCommon configurations loaded:");
+  RCLCPP_INFO(this->get_logger(), "  Backbone - ONNX: %s, Precision: %s", 
+              backbone_onnx_path.c_str(), backbone_precision.c_str());
+  RCLCPP_INFO(this->get_logger(), "  Head - ONNX: %s, Precision: %s", 
+              head_onnx_path.c_str(), head_precision.c_str());
+  RCLCPP_INFO(this->get_logger(), "  Head No Prev - ONNX: %s, Precision: %s", 
+              head_no_prev_onnx_path.c_str(), head_no_prev_precision.c_str());
 }
 
 void VadNode::publish_trajectories(const autoware_internal_planning_msgs::msg::CandidateTrajectories & candidate_trajectories)

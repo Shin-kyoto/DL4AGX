@@ -21,6 +21,9 @@
 #include "autoware/tensorrt_vad/synchronization_strategy.hpp"
 #include "ros_vad_logger.hpp"
 
+#include <autoware/tensorrt_common/tensorrt_common.hpp>
+#include <autoware/tensorrt_common/utils.hpp>
+
 #include <image_transport/image_transport.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <rclcpp_components/register_node_macro.hpp>
@@ -49,6 +52,7 @@
 #include <memory>
 #include <vector>
 #include <map>
+#include <optional>
 
 namespace autoware::tensorrt_vad
 {
@@ -61,6 +65,7 @@ public:
 private:
   // Config loading function
   void load_vad_model_config();
+  void load_trt_common_configs();
   void load_net_configs();
   void initialize_vad_model();
   void create_camera_image_subscribers(const rclcpp::QoS& sensor_qos);
@@ -97,6 +102,11 @@ private:
   // VAD model
   std::unique_ptr<VadModel<RosVadLogger>> vad_model_ptr_{};
   VadModelConfig vad_model_config_;
+
+  // TrtCommon configurations
+  std::optional<autoware::tensorrt_common::TrtCommonConfig> backbone_trt_config_;
+  std::optional<autoware::tensorrt_common::TrtCommonConfig> head_trt_config_;
+  std::optional<autoware::tensorrt_common::TrtCommonConfig> head_no_prev_trt_config_;
 
   // VAD interface
   std::unique_ptr<VadInterface> vad_interface_ptr_{};

@@ -52,10 +52,16 @@
       nets:
         backbone:
           name: "backbone"
+          onnx_path: "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/onnx_files/vadv1.extract_img_feat/sim_vadv1.extract_img_feat.onnx"
+          engine_path: "$(var model_path)/vad-tiny_backbone.engine"
+          precision: "fp16"
           engine_file: "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/engines/vadv1.extract_img_feat.fp16.engine"
           use_graph: true
         head:
           name: "head"
+          onnx_path: "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/onnx_files/vadv1.pts_bbox_head.forward/sim_vadv1.pts_bbox_head.forward.onnx"
+          engine_path: "$(var model_path)/vad-tiny_head.engine"
+          precision: "fp16"
           engine_file: "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/engines/vadv1_prev.pts_bbox_head.forward.engine"
           use_graph: true
           inputs:
@@ -64,6 +70,9 @@
             "name": "out.0"
         head_no_prev:
           name: "head_no_prev"
+          onnx_path: "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/onnx_files/vadv1_prev.pts_bbox_head.forward/sim_vadv1_prev.pts_bbox_head.forward.onnx"
+          engine_path: "$(var model_path)/vad-tiny_head_no_prev.engine"
+          precision: "fp16"
           engine_file: "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/engines/vadv1.pts_bbox_head.forward.engine"
           use_graph: true
           inputs:
