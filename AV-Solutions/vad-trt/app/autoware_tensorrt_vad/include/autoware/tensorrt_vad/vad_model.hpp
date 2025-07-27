@@ -490,22 +490,28 @@ private:
     head_no_prev_network_io_.clear();
     
     // Backbone Network IO Configuration
+    int32_t downsampled_image_height = vad_config_.target_image_height / vad_config_.downsample_factor;
+    int32_t downsampled_image_width = vad_config_.target_image_width / vad_config_.downsample_factor;
     nvinfer1::Dims camera_input_dims{4, {vad_config_.num_cameras, 3, vad_config_.target_image_height, vad_config_.target_image_width}};
+    nvinfer1::Dims backbone_output_dims{5, {vad_config_.num_cameras, 1, vad_config_.bev_feature_dim, downsampled_image_height, downsampled_image_width}};
+
     backbone_network_io_.emplace_back("img", camera_input_dims);
-    nvinfer1::Dims backbone_output_dims{5, {6, 1, 256, 12, 20}};
     backbone_network_io_.emplace_back("out.0", backbone_output_dims);
     
     // Common dimensions for head networks
-    nvinfer1::Dims mlvl_dims{5, {1, 6, 256, 12, 20}};
+    nvinfer1::Dims mlvl_dims{5, {1, vad_config_.num_cameras, vad_config_.bev_feature_dim, downsampled_image_height, downsampled_image_width}};
     nvinfer1::Dims can_bus_dims{2, {1, vad_config_.can_bus_dim}};
-    nvinfer1::Dims lidar2img_dims{3, {6, 4, 4}};
+    nvinfer1::Dims lidar2img_dims{3, {vad_config_.num_cameras, 4, 4}};
     nvinfer1::Dims shift_dims{2, {1, 2}};
-    nvinfer1::Dims prev_bev_dims{3, {10000, 1, 256}};
+    nvinfer1::Dims prev_bev_dims{3, {10000, 1, vad_config_.bev_feature_dim}};
     nvinfer1::Dims ego_fut_preds_dims{4, {1, vad_config_.planning_ego_commands, vad_config_.planning_timesteps, 2}};
     nvinfer1::Dims traj_preds_dims{5, {3, 1, vad_config_.prediction_num_queries, vad_config_.prediction_trajectory_modes, vad_config_.prediction_timesteps*2}};
     nvinfer1::Dims traj_cls_dims{4, {3, 1, vad_config_.prediction_num_queries, vad_config_.prediction_trajectory_modes}};
-    nvinfer1::Dims bbox_preds_dims{4, {3, 1, vad_config_.prediction_num_queries, 10}};
-    nvinfer1::Dims all_cls_scores_dims{4, {3, 1, 300, 10}};
+    nvinfer1::Dims bbox_preds_dims{4, {3, 1, vad_config_.prediction_num_queries, vad_config_.prediction_bbox_pred_dim}};
+    nvinfer1::Dims all_cls_scores_dims{4, {3, 1, vad_config_.prediction_num_queries, vad_config_.prediction_num_classes}};
+    nvinfer1::Dims map_all_cls_scores_dims{4, {3, 1, vad_config_.map_num_queries, vad_config_.map_num_class}};
+    nvinfer1::Dims map_all_pts_preds_dims{5, {3, 1, vad_config_.map_num_queries, vad_config_.map_points_per_polylines, 2}};
+    nvinfer1::Dims map_all_bbox_preds_dims{4, {3, 1, vad_config_.map_num_queries, 4}};
     
     // Head Network IO Configuration (with previous BEV)
     head_network_io_.emplace_back("mlvl_feats.0", mlvl_dims);
@@ -519,10 +525,10 @@ private:
     head_network_io_.emplace_back("out.all_traj_cls_scores", traj_cls_dims);
     head_network_io_.emplace_back("out.all_bbox_preds", bbox_preds_dims);
     head_network_io_.emplace_back("out.all_cls_scores", all_cls_scores_dims);
-    head_network_io_.emplace_back("out.map_all_cls_scores", nvinfer1::Dims{4, {3, 1, 100, 3}});
-    head_network_io_.emplace_back("out.map_all_pts_preds", nvinfer1::Dims{5, {3, 1, 100, 20, 2}});
-    head_network_io_.emplace_back("out.map_all_bbox_preds", nvinfer1::Dims{4, {3, 1, 100, 4}});
-    
+    head_network_io_.emplace_back("out.map_all_cls_scores", map_all_cls_scores_dims);
+    head_network_io_.emplace_back("out.map_all_pts_preds", map_all_pts_preds_dims);
+    head_network_io_.emplace_back("out.map_all_bbox_preds", map_all_bbox_preds_dims);
+
     // Head No Previous Network IO Configuration (without prev_bev input)
     head_no_prev_network_io_.emplace_back("mlvl_feats.0", mlvl_dims);
     head_no_prev_network_io_.emplace_back("img_metas.0[can_bus]", can_bus_dims);
@@ -534,10 +540,10 @@ private:
     head_no_prev_network_io_.emplace_back("out.all_traj_cls_scores", traj_cls_dims);
     head_no_prev_network_io_.emplace_back("out.all_bbox_preds", bbox_preds_dims);
     head_no_prev_network_io_.emplace_back("out.all_cls_scores", all_cls_scores_dims);
-    head_no_prev_network_io_.emplace_back("out.map_all_cls_scores", nvinfer1::Dims{4, {3, 1, 100, 3}});
-    head_no_prev_network_io_.emplace_back("out.map_all_pts_preds", nvinfer1::Dims{5, {3, 1, 100, 20, 2}});
-    head_no_prev_network_io_.emplace_back("out.map_all_bbox_preds", nvinfer1::Dims{4, {3, 1, 100, 4}});
-    
+    head_no_prev_network_io_.emplace_back("out.map_all_cls_scores", map_all_cls_scores_dims);
+    head_no_prev_network_io_.emplace_back("out.map_all_pts_preds", map_all_pts_preds_dims);
+    head_no_prev_network_io_.emplace_back("out.map_all_bbox_preds", map_all_bbox_preds_dims);
+
     logger_->info("NetworkIO configurations generated successfully");
   }
 
