@@ -234,36 +234,34 @@ public:
     new(&head_no_prev_config_) autoware::tensorrt_common::TrtCommonConfig(head_no_prev_config);
     
     // NetworkIO arrays generation
-    generate_network_io_configs();
+     auto [backbone_network_io, head_network_io, head_no_prev_network_io] = generate_network_io_configs();
     
     // Build all engines first (this takes time but done only once)
     logger_->info("Building all TensorRT engines (this may take several minutes)...");
     
     // 1. Build backbone engine (permanent)
     logger_->info("Building backbone engine...");
-    if (!build_backbone_engine()) {
+    if (!build_backbone_engine(backbone_network_io)) {
       logger_->error("Failed to build backbone engine");
       return false;
     }
-    
+
     // 2. Build head engine
     logger_->info("Building head engine...");
-    if (!build_head_engine()) {
+    if (!build_head_engine(head_network_io)) {
       logger_->error("Failed to build head engine");
       return false;
     }
-
     // After building, unload head engine to save GPU memory
     logger_->info("Releasing head engine to save GPU memory");
     unload_head_engine();
     
     // 3. Build head_no_prev engine
     logger_->info("Building head_no_prev engine...");
-    if (!build_head_no_prev_engine()) {
+    if (!build_head_no_prev_engine(head_no_prev_network_io)) {
       logger_->error("Failed to build head_no_prev engine");
       return false;
     }
-    
 
     
     logger_->info("TensorRT pre-build initialization completed successfully");
@@ -272,14 +270,13 @@ public:
   }
 
   // エンジンビルド専用メソッド
-  bool build_backbone_engine() {
+  bool build_backbone_engine(const std::vector<tensorrt_common::NetworkIO>& backbone_network_io) {
     logger_->info("Building backbone engine...");
     try {
       backbone_trt_ = std::make_unique<autoware::tensorrt_common::TrtCommon>(
         backbone_config_, std::make_shared<autoware::tensorrt_common::Profiler>(),
         std::vector<std::string>{config_.plugins_path});
-      
-      auto backbone_network_io_ptr = std::make_unique<std::vector<tensorrt_common::NetworkIO>>(backbone_network_io_);
+      auto backbone_network_io_ptr = std::make_unique<std::vector<tensorrt_common::NetworkIO>>(backbone_network_io);
       if (!backbone_trt_->setup(nullptr, std::move(backbone_network_io_ptr))) {
         logger_->error("Failed to setup backbone TrtCommon");
         backbone_trt_.reset();
@@ -294,14 +291,13 @@ public:
     }
   }
 
-  bool build_head_engine() {
+  bool build_head_engine(const std::vector<tensorrt_common::NetworkIO>& head_network_io) {
     logger_->info("Building head engine...");
     try {
       head_trt_ = std::make_unique<autoware::tensorrt_common::TrtCommon>(
         head_config_, std::make_shared<autoware::tensorrt_common::Profiler>(),
         std::vector<std::string>{config_.plugins_path});
-      
-      auto head_network_io_ptr = std::make_unique<std::vector<tensorrt_common::NetworkIO>>(head_network_io_);
+      auto head_network_io_ptr = std::make_unique<std::vector<tensorrt_common::NetworkIO>>(head_network_io);
       if (!head_trt_->setup(nullptr, std::move(head_network_io_ptr))) {
         logger_->error("Failed to setup head TrtCommon");
         head_trt_.reset();
@@ -316,14 +312,13 @@ public:
     }
   }
 
-  bool build_head_no_prev_engine() {
+  bool build_head_no_prev_engine(const std::vector<tensorrt_common::NetworkIO>& head_no_prev_network_io) {
     logger_->info("Building head_no_prev engine...");
     try {
       head_no_prev_trt_ = std::make_unique<autoware::tensorrt_common::TrtCommon>(
         head_no_prev_config_, std::make_shared<autoware::tensorrt_common::Profiler>(),
         std::vector<std::string>{config_.plugins_path});
-      
-      auto head_no_prev_network_io_ptr = std::make_unique<std::vector<tensorrt_common::NetworkIO>>(head_no_prev_network_io_);
+      auto head_no_prev_network_io_ptr = std::make_unique<std::vector<tensorrt_common::NetworkIO>>(head_no_prev_network_io);
       if (!head_no_prev_trt_->setup(nullptr, std::move(head_no_prev_network_io_ptr))) {
         logger_->error("Failed to setup head_no_prev TrtCommon");
         head_no_prev_trt_.reset();
@@ -339,19 +334,17 @@ public:
   }
 
   // 動的エンジンロード用メソッド（軽量版 - エンジンファイルから直接ロード）
-  bool load_head_engine() {
+  bool load_head_engine(const std::vector<tensorrt_common::NetworkIO>& head_network_io) {
     if (head_trt_) {
       logger_->debug("Head engine already loaded");
       return true;
     }
-    
     logger_->info("Loading head engine from built engine file");
     try {
       head_trt_ = std::make_unique<autoware::tensorrt_common::TrtCommon>(
         head_config_, std::make_shared<autoware::tensorrt_common::Profiler>(),
         std::vector<std::string>{config_.plugins_path});
-      
-      auto head_network_io_ptr = std::make_unique<std::vector<tensorrt_common::NetworkIO>>(head_network_io_);
+      auto head_network_io_ptr = std::make_unique<std::vector<tensorrt_common::NetworkIO>>(head_network_io);
       if (!head_trt_->setup(nullptr, std::move(head_network_io_ptr))) {
         logger_->error("Failed to setup head TrtCommon");
         head_trt_.reset();
@@ -366,19 +359,17 @@ public:
     }
   }
 
-  bool load_head_no_prev_engine() {
+  bool load_head_no_prev_engine(const std::vector<tensorrt_common::NetworkIO>& head_no_prev_network_io) {
     if (head_no_prev_trt_) {
       logger_->debug("Head_no_prev engine already loaded");
       return true;
     }
-    
     logger_->info("Loading head_no_prev engine from built engine file");
     try {
       head_no_prev_trt_ = std::make_unique<autoware::tensorrt_common::TrtCommon>(
         head_no_prev_config_, std::make_shared<autoware::tensorrt_common::Profiler>(),
         std::vector<std::string>{config_.plugins_path});
-      
-      auto head_no_prev_network_io_ptr = std::make_unique<std::vector<tensorrt_common::NetworkIO>>(head_no_prev_network_io_);
+      auto head_no_prev_network_io_ptr = std::make_unique<std::vector<tensorrt_common::NetworkIO>>(head_no_prev_network_io);
       if (!head_no_prev_trt_->setup(nullptr, std::move(head_no_prev_network_io_ptr))) {
         logger_->error("Failed to setup head_no_prev TrtCommon");
         head_no_prev_trt_.reset();
@@ -466,10 +457,6 @@ public:
   autoware::tensorrt_common::TrtCommonConfig head_config_;
   autoware::tensorrt_common::TrtCommonConfig head_no_prev_config_;
 
-  // NetworkIO設定の保存
-  std::vector<tensorrt_common::NetworkIO> backbone_network_io_;
-  std::vector<tensorrt_common::NetworkIO> head_network_io_;
-  std::vector<tensorrt_common::NetworkIO> head_no_prev_network_io_;
 
 private:
   std::unique_ptr<nvinfer1::IRuntime, std::function<void(nvinfer1::IRuntime*)>> create_runtime() {
@@ -481,23 +468,25 @@ private:
   }
 
   // NetworkIO設定を生成するメソッド
-  void generate_network_io_configs() {
+  std::tuple<
+    std::vector<tensorrt_common::NetworkIO>,
+    std::vector<tensorrt_common::NetworkIO>,
+    std::vector<tensorrt_common::NetworkIO>
+  > generate_network_io_configs() {
     logger_->info("Generating NetworkIO configurations");
-    
-    // Clear existing configurations
-    backbone_network_io_.clear();
-    head_network_io_.clear();
-    head_no_prev_network_io_.clear();
-    
+    std::vector<tensorrt_common::NetworkIO> backbone_network_io;
+    std::vector<tensorrt_common::NetworkIO> head_network_io;
+    std::vector<tensorrt_common::NetworkIO> head_no_prev_network_io;
+
     // Backbone Network IO Configuration
     int32_t downsampled_image_height = vad_config_.target_image_height / vad_config_.downsample_factor;
     int32_t downsampled_image_width = vad_config_.target_image_width / vad_config_.downsample_factor;
     nvinfer1::Dims camera_input_dims{4, {vad_config_.num_cameras, 3, vad_config_.target_image_height, vad_config_.target_image_width}};
     nvinfer1::Dims backbone_output_dims{5, {vad_config_.num_cameras, 1, vad_config_.bev_feature_dim, downsampled_image_height, downsampled_image_width}};
 
-    backbone_network_io_.emplace_back("img", camera_input_dims);
-    backbone_network_io_.emplace_back("out.0", backbone_output_dims);
-    
+    backbone_network_io.emplace_back("img", camera_input_dims);
+    backbone_network_io.emplace_back("out.0", backbone_output_dims);
+
     // Common dimensions for head networks
     nvinfer1::Dims mlvl_dims{5, {1, vad_config_.num_cameras, vad_config_.bev_feature_dim, downsampled_image_height, downsampled_image_width}};
     nvinfer1::Dims can_bus_dims{2, {1, vad_config_.can_bus_dim}};
@@ -512,62 +501,40 @@ private:
     nvinfer1::Dims map_all_cls_scores_dims{4, {3, 1, vad_config_.map_num_queries, vad_config_.map_num_class}};
     nvinfer1::Dims map_all_pts_preds_dims{5, {3, 1, vad_config_.map_num_queries, vad_config_.map_points_per_polylines, 2}};
     nvinfer1::Dims map_all_bbox_preds_dims{4, {3, 1, vad_config_.map_num_queries, 4}};
-    
+
     // Head Network IO Configuration (with previous BEV)
-    head_network_io_.emplace_back("mlvl_feats.0", mlvl_dims);
-    head_network_io_.emplace_back("img_metas.0[can_bus]", can_bus_dims);
-    head_network_io_.emplace_back("img_metas.0[lidar2img]", lidar2img_dims);
-    head_network_io_.emplace_back("img_metas.0[shift]", shift_dims);
-    head_network_io_.emplace_back("prev_bev", prev_bev_dims);
-    head_network_io_.emplace_back("out.bev_embed", prev_bev_dims);
-    head_network_io_.emplace_back("out.ego_fut_preds", ego_fut_preds_dims);
-    head_network_io_.emplace_back("out.all_traj_preds", traj_preds_dims);
-    head_network_io_.emplace_back("out.all_traj_cls_scores", traj_cls_dims);
-    head_network_io_.emplace_back("out.all_bbox_preds", bbox_preds_dims);
-    head_network_io_.emplace_back("out.all_cls_scores", all_cls_scores_dims);
-    head_network_io_.emplace_back("out.map_all_cls_scores", map_all_cls_scores_dims);
-    head_network_io_.emplace_back("out.map_all_pts_preds", map_all_pts_preds_dims);
-    head_network_io_.emplace_back("out.map_all_bbox_preds", map_all_bbox_preds_dims);
+    head_network_io.emplace_back("mlvl_feats.0", mlvl_dims);
+    head_network_io.emplace_back("img_metas.0[can_bus]", can_bus_dims);
+    head_network_io.emplace_back("img_metas.0[lidar2img]", lidar2img_dims);
+    head_network_io.emplace_back("img_metas.0[shift]", shift_dims);
+    head_network_io.emplace_back("prev_bev", prev_bev_dims);
+    head_network_io.emplace_back("out.bev_embed", prev_bev_dims);
+    head_network_io.emplace_back("out.ego_fut_preds", ego_fut_preds_dims);
+    head_network_io.emplace_back("out.all_traj_preds", traj_preds_dims);
+    head_network_io.emplace_back("out.all_traj_cls_scores", traj_cls_dims);
+    head_network_io.emplace_back("out.all_bbox_preds", bbox_preds_dims);
+    head_network_io.emplace_back("out.all_cls_scores", all_cls_scores_dims);
+    head_network_io.emplace_back("out.map_all_cls_scores", map_all_cls_scores_dims);
+    head_network_io.emplace_back("out.map_all_pts_preds", map_all_pts_preds_dims);
+    head_network_io.emplace_back("out.map_all_bbox_preds", map_all_bbox_preds_dims);
 
     // Head No Previous Network IO Configuration (without prev_bev input)
-    head_no_prev_network_io_.emplace_back("mlvl_feats.0", mlvl_dims);
-    head_no_prev_network_io_.emplace_back("img_metas.0[can_bus]", can_bus_dims);
-    head_no_prev_network_io_.emplace_back("img_metas.0[lidar2img]", lidar2img_dims);
-    head_no_prev_network_io_.emplace_back("img_metas.0[shift]", shift_dims);
-    head_no_prev_network_io_.emplace_back("out.bev_embed", prev_bev_dims);
-    head_no_prev_network_io_.emplace_back("out.ego_fut_preds", ego_fut_preds_dims);
-    head_no_prev_network_io_.emplace_back("out.all_traj_preds", traj_preds_dims);
-    head_no_prev_network_io_.emplace_back("out.all_traj_cls_scores", traj_cls_dims);
-    head_no_prev_network_io_.emplace_back("out.all_bbox_preds", bbox_preds_dims);
-    head_no_prev_network_io_.emplace_back("out.all_cls_scores", all_cls_scores_dims);
-    head_no_prev_network_io_.emplace_back("out.map_all_cls_scores", map_all_cls_scores_dims);
-    head_no_prev_network_io_.emplace_back("out.map_all_pts_preds", map_all_pts_preds_dims);
-    head_no_prev_network_io_.emplace_back("out.map_all_bbox_preds", map_all_bbox_preds_dims);
+    head_no_prev_network_io.emplace_back("mlvl_feats.0", mlvl_dims);
+    head_no_prev_network_io.emplace_back("img_metas.0[can_bus]", can_bus_dims);
+    head_no_prev_network_io.emplace_back("img_metas.0[lidar2img]", lidar2img_dims);
+    head_no_prev_network_io.emplace_back("img_metas.0[shift]", shift_dims);
+    head_no_prev_network_io.emplace_back("out.bev_embed", prev_bev_dims);
+    head_no_prev_network_io.emplace_back("out.ego_fut_preds", ego_fut_preds_dims);
+    head_no_prev_network_io.emplace_back("out.all_traj_preds", traj_preds_dims);
+    head_no_prev_network_io.emplace_back("out.all_traj_cls_scores", traj_cls_dims);
+    head_no_prev_network_io.emplace_back("out.all_bbox_preds", bbox_preds_dims);
+    head_no_prev_network_io.emplace_back("out.all_cls_scores", all_cls_scores_dims);
+    head_no_prev_network_io.emplace_back("out.map_all_cls_scores", map_all_cls_scores_dims);
+    head_no_prev_network_io.emplace_back("out.map_all_pts_preds", map_all_pts_preds_dims);
+    head_no_prev_network_io.emplace_back("out.map_all_bbox_preds", map_all_bbox_preds_dims);
 
     logger_->info("NetworkIO configurations generated successfully");
-  }
-
-  // backboneエンジンのロード
-  bool load_backbone_engine() {
-    logger_->info("Loading backbone engine (permanent)");
-    try {
-      backbone_trt_ = std::make_unique<autoware::tensorrt_common::TrtCommon>(
-        backbone_config_, std::make_shared<autoware::tensorrt_common::Profiler>(),
-        std::vector<std::string>{config_.plugins_path});
-      
-      auto backbone_network_io_ptr = std::make_unique<std::vector<tensorrt_common::NetworkIO>>(backbone_network_io_);
-      if (!backbone_trt_->setup(nullptr, std::move(backbone_network_io_ptr))) {
-        logger_->error("Failed to setup backbone TrtCommon");
-        backbone_trt_.reset();
-        return false;
-      }
-      logger_->info("Backbone engine loaded successfully");
-      return true;
-    } catch (const std::exception& e) {
-      logger_->error("Exception loading backbone engine: " + std::string(e.what()));
-      backbone_trt_.reset();
-      return false;
-    }
+    return {backbone_network_io, head_network_io, head_no_prev_network_io};
   }
 
   bool load_plugin(const std::string& plugin_dir) {
