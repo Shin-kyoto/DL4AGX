@@ -64,10 +64,14 @@ public:
 
 private:
   // Config loading function
-  void load_vad_model_config();
-  void load_vad_config();
-  void load_trt_common_configs();
-  void load_net_configs();
+  VadModelConfig load_vad_model_config();
+  VadConfig load_vad_config();
+  std::tuple<
+    autoware::tensorrt_common::TrtCommonConfig,
+    autoware::tensorrt_common::TrtCommonConfig,
+    autoware::tensorrt_common::TrtCommonConfig
+  > load_trt_common_configs();
+  VadModelConfig load_net_configs();
   void initialize_vad_model();
   void create_camera_image_subscribers(const rclcpp::QoS& sensor_qos);
   void create_camera_info_subscribers(const rclcpp::QoS& camera_info_qos);
@@ -102,15 +106,8 @@ private:
 
   // VAD model
   std::unique_ptr<VadModel<RosVadLogger>> vad_model_ptr_{};
-  VadModelConfig vad_model_config_;
 
-  // NetworkIO configuration
-  VadConfig vad_config_;
 
-  // TrtCommon configurations
-  std::optional<autoware::tensorrt_common::TrtCommonConfig> backbone_trt_config_;
-  std::optional<autoware::tensorrt_common::TrtCommonConfig> head_trt_config_;
-  std::optional<autoware::tensorrt_common::TrtCommonConfig> head_no_prev_trt_config_;
 
   // VAD interface
   std::unique_ptr<VadInterface> vad_interface_ptr_{};
