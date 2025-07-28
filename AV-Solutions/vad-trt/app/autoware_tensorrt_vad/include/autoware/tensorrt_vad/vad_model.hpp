@@ -503,7 +503,7 @@ private:
     nvinfer1::Dims can_bus_dims{2, {1, vad_config_.can_bus_dim}};
     nvinfer1::Dims lidar2img_dims{3, {vad_config_.num_cameras, 4, 4}};
     nvinfer1::Dims shift_dims{2, {1, 2}};
-    nvinfer1::Dims prev_bev_dims{3, {10000, 1, vad_config_.bev_feature_dim}};
+    nvinfer1::Dims prev_bev_dims{3, {vad_config_.bev_h * vad_config_.bev_w, 1, vad_config_.bev_feature_dim}};
     nvinfer1::Dims ego_fut_preds_dims{4, {1, vad_config_.planning_ego_commands, vad_config_.planning_timesteps, 2}};
     nvinfer1::Dims traj_preds_dims{5, {3, 1, vad_config_.prediction_num_queries, vad_config_.prediction_trajectory_modes, vad_config_.prediction_timesteps*2}};
     nvinfer1::Dims traj_cls_dims{4, {3, 1, vad_config_.prediction_num_queries, vad_config_.prediction_trajectory_modes}};
