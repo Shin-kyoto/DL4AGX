@@ -121,7 +121,6 @@ struct NetConfig
 struct VadModelConfig
 {
   std::string plugins_path;
-  int32_t warm_up_num;
   std::vector<NetConfig> nets_config;
 };
 
@@ -170,10 +169,7 @@ public:
     cudaStreamCreate(&stream_);
     
     nets_ = init_engines(config.nets_config);
-    
-    logger_->info("warm_up=" + std::to_string(config.warm_up_num));
-    warm_up(config.warm_up_num);
-    
+        
     initialized_ = true;
   }
 
@@ -547,14 +543,6 @@ private:
     return nets;
   }
 
-  void warm_up(int32_t warm_up_num) {
-    for(int32_t iw=0; iw < warm_up_num; iw++) {
-      nets_["backbone"]->Enqueue(stream_);
-      nets_["head_no_prev"]->Enqueue(stream_);
-      cudaStreamSynchronize(stream_);
-    }
-  }
-  
   // infer関数で使用するヘルパー関数
   void load_inputs(const VadInputData& vad_input, const std::string& head_name) {
     nets_["backbone"]->bindings["img"]->load(vad_input.camera_images_, stream_);

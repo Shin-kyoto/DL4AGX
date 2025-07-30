@@ -48,7 +48,6 @@ std::pair<VadModelConfig, TestConfig> load_config_from_yaml(const std::string& c
         
         VadModelConfig vad_model_config;
         vad_model_config.plugins_path = test_config_node["plugins_path"].as<std::string>();
-        vad_model_config.warm_up_num = test_config_node["warm_up_num"].as<int>();
         
         const auto& nets = test_config_node["nets"];
         for (const auto& net : nets) {
@@ -165,7 +164,6 @@ protected:
     VadModelConfig createRealConfig() {
         VadModelConfig config;
         config.plugins_path = config_.plugins_path;
-        config.warm_up_num = config_.warm_up_num;
         
         NetConfig backbone_config;
         backbone_config.name = config_.nets_config[0].name;

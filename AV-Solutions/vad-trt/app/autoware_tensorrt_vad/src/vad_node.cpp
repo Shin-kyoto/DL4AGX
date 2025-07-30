@@ -266,7 +266,6 @@ VadModelConfig VadNode::load_vad_model_config()
 {
   VadModelConfig vad_model_config;
   vad_model_config.plugins_path = this->declare_parameter<std::string>("model_params.plugins_path");
-  vad_model_config.warm_up_num = this->declare_parameter<int32_t>("model_params.warm_up_num");
 
   // backbone configuration
   NetConfig backbone_config;
