@@ -148,24 +148,6 @@ struct VadConfig
   int32_t map_points_per_polylines;
 };
 
-class NetworkParam
-{
-public:
-  NetworkParam(std::string onnx_path, std::string engine_path, std::string trt_precision)
-  : onnx_path_(std::move(onnx_path)), engine_path_(std::move(engine_path)), trt_precision_(std::move(trt_precision))
-  {
-  }
-
-  std::string onnx_path() const { return onnx_path_; }
-  std::string engine_path() const { return engine_path_; }
-  std::string trt_precision() const { return trt_precision_; }
-
-private:
-  std::string onnx_path_;
-  std::string engine_path_;
-  std::string trt_precision_;
-};
-
 // VADモデルクラス - CUDA/TensorRTを用いた推論を担当
 template<typename LoggerType>
 class VadModel
