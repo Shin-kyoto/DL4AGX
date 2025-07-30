@@ -21,6 +21,7 @@ find_package(sensor_msgs REQUIRED)
 find_package(autoware_perception_msgs REQUIRED)
 find_package(autoware_internal_planning_msgs REQUIRED)
 find_package(autoware_planning_msgs REQUIRED)
+find_package(autoware_tensorrt_common REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(rosbag2_cpp REQUIRED)
 find_package(unique_identifier_msgs REQUIRED)
@@ -133,6 +134,7 @@ target_link_libraries(${APP}_app
     ${autoware_perception_msgs_LIBRARIES}
     ${autoware_internal_planning_msgs_LIBRARIES}
     ${autoware_planning_msgs_LIBRARIES}
+    ${autoware_tensorrt_common_LIBRARIES}
     ${geometry_msgs_LIBRARIES}
     ${rosbag2_cpp_LIBRARIES}
 )
@@ -148,6 +150,7 @@ target_include_directories(${APP}_app PUBLIC
     ${autoware_perception_msgs_INCLUDE_DIRS}
     ${autoware_internal_planning_msgs_INCLUDE_DIRS}
     ${autoware_planning_msgs_INCLUDE_DIRS}
+    ${autoware_tensorrt_common_INCLUDE_DIRS}
     ${geometry_msgs_INCLUDE_DIRS}
     ${rosbag2_cpp_INCLUDE_DIRS}
 )
@@ -168,6 +171,7 @@ ament_target_dependencies(${APP}_app
     autoware_perception_msgs
     autoware_internal_planning_msgs
     autoware_planning_msgs
+    autoware_tensorrt_common
     geometry_msgs
     rosbag2_cpp
     unique_identifier_msgs

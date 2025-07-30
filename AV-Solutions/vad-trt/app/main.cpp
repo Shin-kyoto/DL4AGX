@@ -68,7 +68,7 @@
 #include <geometry_msgs/msg/accel_with_covariance_stamped.hpp>
 
 using json = nlohmann::json;
-namespace fs = std::filesystem;
+namespace std_fs = std::filesystem;
 
 #include "autoware/tensorrt_vad/ros_vad_logger.hpp"
 #include "autoware/tensorrt_vad/vad_interface.hpp"
@@ -401,8 +401,6 @@ private:
     // このノード自体からパラメータを読み込み
     vad_model_config_.plugins_path =
         this->declare_parameter<std::string>("model_params.plugins_path", "");
-    vad_model_config_.warm_up_num =
-        this->declare_parameter<int>("model_params.warm_up_num", 20);
 
     // ネットワーク設定の読み込み
     load_net_configs();
@@ -683,8 +681,8 @@ int main(int argc, char **argv) {
   cudaSetDevice(0);
 
   const std::string config = argv[1];
-  fs::path cfg_pth = config;
-  fs::path cfg_dir = cfg_pth.parent_path();
+  std_fs::path cfg_pth = config;
+  std_fs::path cfg_dir = cfg_pth.parent_path();
   printf("[INFO] setting up from %s\n", config.c_str());
   printf("[INFO] assuming data dir is %s\n", cfg_dir.string().c_str());
 
