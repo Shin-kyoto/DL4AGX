@@ -116,9 +116,19 @@ TEST_F(VadIntegrationTest, ModelInitializationWithRealEngines)
     // VadModelのコンストラクタが例外を投げずに完了すればテスト成功
     // これにより、プラグインのロード、エンジンのデシリアライズ、CUDAコンテキストの初期化が
     // 正常に行われることを検証する
+    VadConfig dummy_vad_config{};
+    autoware::tensorrt_common::TrtCommonConfig dummy_backbone_config{"", "", "", 1};
+    autoware::tensorrt_common::TrtCommonConfig dummy_head_config{"", "", "", 1};
+    autoware::tensorrt_common::TrtCommonConfig dummy_head_no_prev_config{"", "", "", 1};
     std::unique_ptr<VadModel<MockVadLogger>> model;
     ASSERT_NO_THROW({
-        model = std::make_unique<VadModel<MockVadLogger>>(config_, mock_logger_);
+        model = std::make_unique<VadModel<MockVadLogger>>(
+            config_,
+            dummy_vad_config,
+            dummy_backbone_config,
+            dummy_head_config,
+            dummy_head_no_prev_config,
+            mock_logger_);
     }) << "VadModel initialization failed with real engine files. "
        << "Check if paths are correct and files are not corrupted.";
     
@@ -239,16 +249,36 @@ protected:
 // 1. モデルが例外を投げずに初期化できることを確認
 TEST_F(VadInferIntegrationTest, ModelInitialization) {
     VadModelConfig config = createRealConfig();
+    VadConfig dummy_vad_config{};
+    autoware::tensorrt_common::TrtCommonConfig dummy_backbone_config{"", "", "", 1};
+    autoware::tensorrt_common::TrtCommonConfig dummy_head_config{"", "", "", 1};
+    autoware::tensorrt_common::TrtCommonConfig dummy_head_no_prev_config{"", "", "", 1};
     std::unique_ptr<VadModel<MockVadLogger>> model;
-    
     ASSERT_NO_THROW({
-        model = std::make_unique<VadModel<MockVadLogger>>(config, logger_);
+        model = std::make_unique<VadModel<MockVadLogger>>(
+            config,
+            dummy_vad_config,
+            dummy_backbone_config,
+            dummy_head_config,
+            dummy_head_no_prev_config,
+            logger_);
     }) << "Model initialization failed. Check paths and permissions.";
 }
 
 // 2. 実際のinfer実行テスト
 TEST_F(VadInferIntegrationTest, RealInferExecution) {
-    auto model = std::make_unique<VadModel<MockVadLogger>>(createRealConfig(), logger_);
+    VadModelConfig config = createRealConfig();
+    VadConfig dummy_vad_config{};
+    autoware::tensorrt_common::TrtCommonConfig dummy_backbone_config{"", "", "", 1};
+    autoware::tensorrt_common::TrtCommonConfig dummy_head_config{"", "", "", 1};
+    autoware::tensorrt_common::TrtCommonConfig dummy_head_no_prev_config{"", "", "", 1};
+    auto model = std::make_unique<VadModel<MockVadLogger>>(
+        config,
+        dummy_vad_config,
+        dummy_backbone_config,
+        dummy_head_config,
+        dummy_head_no_prev_config,
+        logger_);
     
     auto prev_bev_data = loadBevEmbedFromFile("bev_embed_frame1.bin");
     

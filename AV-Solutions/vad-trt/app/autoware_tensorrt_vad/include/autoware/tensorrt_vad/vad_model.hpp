@@ -151,7 +151,13 @@ template<typename LoggerType>
 class VadModel
 {
 public:
-  VadModel(const VadModelConfig& config, std::shared_ptr<LoggerType> logger)
+  VadModel(
+    const VadModelConfig& config,
+    const VadConfig& vad_config,
+    const autoware::tensorrt_common::TrtCommonConfig& backbone_config,
+    const autoware::tensorrt_common::TrtCommonConfig& head_config,
+    const autoware::tensorrt_common::TrtCommonConfig& head_no_prev_config,
+    std::shared_ptr<LoggerType> logger)
     : stream_(nullptr), initialized_(false), is_first_frame_(true), config_(config), logger_(std::move(logger))
   {
     // loggerはVadLoggerを継承したclassのみ受け取る
@@ -166,7 +172,14 @@ public:
     }
     
     cudaStreamCreate(&stream_);
-    
+
+    // TensorRTエンジン初期化
+    auto head_trt = init_tensorrt(vad_config, backbone_config, head_config, head_no_prev_config);
+    if (!head_trt) {
+      logger_->error("Failed to initialize TensorRT engines");
+      initialized_ = false;
+      return;
+    }
     nets_ = init_engines(config.nets_config);
         
     initialized_ = true;

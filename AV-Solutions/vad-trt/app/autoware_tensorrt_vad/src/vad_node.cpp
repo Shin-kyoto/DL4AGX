@@ -242,22 +242,14 @@ void VadNode::initialize_vad_model()
 
   // Create RosVadLogger using the logger
   auto ros_logger = std::make_shared<RosVadLogger>(this->get_logger());
-  vad_model_ptr_ = std::make_unique<VadModel<RosVadLogger>>(vad_model_config, ros_logger);
-
-  // Initialize TensorRT with NetworkIO (init_tensorrt integration)
-  RCLCPP_INFO(this->get_logger(), "Initializing TensorRT engines with NetworkIO");
-  auto tensorrt_engine = vad_model_ptr_->init_tensorrt(
-      vad_config,
-      backbone_trt_config,
-      head_trt_config,
-      head_no_prev_trt_config
+  vad_model_ptr_ = std::make_unique<VadModel<RosVadLogger>>(
+    vad_model_config,
+    vad_config,
+    backbone_trt_config,
+    head_trt_config,
+    head_no_prev_trt_config,
+    ros_logger
   );
-  if (tensorrt_engine) {
-    RCLCPP_INFO(this->get_logger(), "TensorRT initialization completed successfully");
-  } else {
-    RCLCPP_ERROR(this->get_logger(), "TensorRT initialization failed");
-    throw std::runtime_error("Failed to initialize TensorRT engines");
-  }
 
   RCLCPP_INFO(this->get_logger(), "VAD model and interface initialized successfully");
 }
