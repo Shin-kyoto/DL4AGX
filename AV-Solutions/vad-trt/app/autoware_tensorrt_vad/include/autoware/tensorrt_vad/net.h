@@ -39,9 +39,6 @@ struct Net {
   ICudaEngine* engine;
   IExecutionContext* context;
   nv::TensorMap bindings;
-  bool use_cuda_graph = false;
-  cudaGraph_t graph;
-  cudaGraphExec_t graph_exec;
 
   Net(
     std::string engine_path, 
@@ -82,11 +79,7 @@ struct Net {
   }
 
   void Enqueue(cudaStream_t stream) {
-    if( this->use_cuda_graph ) {
-      cudaGraphLaunch(graph_exec, stream);
-    } else {
-      context->enqueueV3(stream);
-    }  
+    context->enqueueV3(stream);
   }
 
   ~Net() {
@@ -98,32 +91,12 @@ struct Net {
           engine->destroy();
           engine = nullptr;
       }
-      if (use_cuda_graph) {
-          cudaGraphDestroy(graph);
-          cudaGraphExecDestroy(graph_exec);
-      }
       
       // bindingsの各Tensorのメモリを解放
       for (auto& pair : bindings) {
           pair.second.reset();
       }
       bindings.clear();
-  }
-
-  void EnableCudaGraph(cudaStream_t stream) {    
-    // run first time to avoid allocation
-    this->Enqueue(stream);
-    cudaStreamSynchronize(stream);
-
-    cudaStreamBeginCapture(stream, cudaStreamCaptureModeGlobal);
-    this->Enqueue(stream);
-    cudaStreamEndCapture(stream, &graph);
-    this->use_cuda_graph = true;
-#if CUDART_VERSION < 12000
-    cudaGraphInstantiate(&graph_exec, graph, NULL, NULL, 0);
-#else
-    cudaGraphInstantiate(&graph_exec, graph, 0);
-#endif
   }
 }; // class Net
 
