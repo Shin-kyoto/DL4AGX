@@ -205,6 +205,57 @@ public:
     return vad_model_config_;
   }
 
+  // TrtCommonConfigを取得する関数
+  std::tuple<
+    autoware::tensorrt_common::TrtCommonConfig,
+    autoware::tensorrt_common::TrtCommonConfig,
+    autoware::tensorrt_common::TrtCommonConfig
+  > load_trt_common_configs() {
+    std::string backbone_onnx_path = this->declare_parameter<std::string>("model_params.nets.backbone.onnx_path", "");
+    std::string backbone_precision = this->declare_parameter<std::string>("model_params.nets.backbone.precision", "fp16");
+    std::string backbone_engine_path = this->declare_parameter<std::string>("model_params.nets.backbone.engine_path", "");
+    autoware::tensorrt_common::TrtCommonConfig backbone_trt_config(
+        backbone_onnx_path, backbone_precision, backbone_engine_path, 5ULL << 30U);
+
+    std::string head_onnx_path = this->declare_parameter<std::string>("model_params.nets.head.onnx_path", "");
+    std::string head_precision = this->declare_parameter<std::string>("model_params.nets.head.precision", "fp16");
+    std::string head_engine_path = this->declare_parameter<std::string>("model_params.nets.head.engine_path", "");
+    autoware::tensorrt_common::TrtCommonConfig head_trt_config(
+        head_onnx_path, head_precision, head_engine_path, 5ULL << 30U);
+
+    std::string head_no_prev_onnx_path = this->declare_parameter<std::string>("model_params.nets.head_no_prev.onnx_path", "");
+    std::string head_no_prev_precision = this->declare_parameter<std::string>("model_params.nets.head_no_prev.precision", "fp16");
+    std::string head_no_prev_engine_path = this->declare_parameter<std::string>("model_params.nets.head_no_prev.engine_path", "");
+    autoware::tensorrt_common::TrtCommonConfig head_no_prev_trt_config(
+        head_no_prev_onnx_path, head_no_prev_precision, head_no_prev_engine_path, 5ULL << 30U);
+
+    return {backbone_trt_config, head_trt_config, head_no_prev_trt_config};
+  }
+
+  autoware::tensorrt_vad::VadConfig load_vad_config() {
+    autoware::tensorrt_vad::VadConfig vad_config;
+    vad_config.num_cameras = this->declare_parameter<int32_t>("model_params.network_io_params.num_cameras");
+    vad_config.bev_h = this->declare_parameter<int32_t>("model_params.network_io_params.bev_h");
+    vad_config.bev_w = this->declare_parameter<int32_t>("model_params.network_io_params.bev_w");
+    vad_config.bev_feature_dim = this->declare_parameter<int32_t>("model_params.network_io_params.bev_feature_dim");
+    vad_config.target_image_width = this->declare_parameter<int32_t>("model_params.network_io_params.target_image_width");
+    vad_config.target_image_height = this->declare_parameter<int32_t>("model_params.network_io_params.target_image_height");
+    vad_config.downsample_factor = this->declare_parameter<int32_t>("model_params.network_io_params.downsample_factor");
+    vad_config.num_decoder_layers = this->declare_parameter<int32_t>("model_params.network_io_params.num_decoder_layers");
+    vad_config.prediction_num_queries = this->declare_parameter<int32_t>("model_params.network_io_params.prediction_num_queries");
+    vad_config.prediction_num_classes = this->declare_parameter<int32_t>("model_params.network_io_params.prediction_num_classes");
+    vad_config.prediction_bbox_pred_dim = this->declare_parameter<int32_t>("model_params.network_io_params.prediction_bbox_pred_dim");
+    vad_config.prediction_trajectory_modes = this->declare_parameter<int32_t>("model_params.network_io_params.prediction_trajectory_modes");
+    vad_config.prediction_timesteps = this->declare_parameter<int32_t>("model_params.network_io_params.prediction_timesteps");
+    vad_config.planning_ego_commands = this->declare_parameter<int32_t>("model_params.network_io_params.planning_ego_commands");
+    vad_config.planning_timesteps = this->declare_parameter<int32_t>("model_params.network_io_params.planning_timesteps");
+    vad_config.map_num_queries = this->declare_parameter<int32_t>("model_params.network_io_params.map_num_queries");
+    vad_config.map_num_class = this->declare_parameter<int32_t>("model_params.network_io_params.map_num_class");
+    vad_config.map_points_per_polylines = this->declare_parameter<int32_t>("model_params.network_io_params.map_points_per_polylines");
+    vad_config.can_bus_dim = this->declare_parameter<int32_t>("model_params.network_io_params.can_bus_dim");
+    return vad_config;
+  }
+
   void publish_trajectory(const std::vector<float> &planning) {
     auto trajectory_msg =
         std::make_unique<autoware_planning_msgs::msg::Trajectory>();
@@ -698,13 +749,19 @@ int main(int argc, char **argv) {
   // VADNodeを作成（yamlパスを渡す）
   auto node = std::make_shared<VADNode>(yaml_config_paths);
 
-  // VADNodeからVadModelConfigを取得
+  // VADNodeからVadModelConfigとTrtCommonConfigを取得
   const auto &vad_model_config = node->getVadModelConfig();
-
-  // VadModelを初期化
-  auto ros_logger =
-      std::make_shared<autoware::tensorrt_vad::RosVadLogger>(node);
-  autoware::tensorrt_vad::VadModel vad_model(vad_model_config, ros_logger);
+  auto ros_logger = std::make_shared<autoware::tensorrt_vad::RosVadLogger>(node);
+  autoware::tensorrt_vad::VadConfig vad_config = node->load_vad_config();
+  auto [backbone_trt_config, head_trt_config, head_no_prev_trt_config] = node->load_trt_common_configs();
+  autoware::tensorrt_vad::VadModel<autoware::tensorrt_vad::RosVadLogger> vad_model(
+    vad_model_config,
+    vad_config,
+    backbone_trt_config,
+    head_trt_config,
+    head_no_prev_trt_config,
+    ros_logger
+  );
 
   EventTimer timer;
   std::string data_dir = cfg_dir.string() + "/data/";
@@ -778,10 +835,8 @@ int main(int argc, char **argv) {
     printf("publish trajectory");
     rclcpp::spin_some(node);
 
-    std::vector<float> bbox_preds =
-        vad_model.nets_["head"]->bindings["out.all_bbox_preds"]->cpu<float>();
-    std::vector<float> cls_scores =
-        vad_model.nets_["head"]->bindings["out.all_cls_scores"]->cpu<float>();
+    std::vector<float> bbox_preds = vad_model.nets_["head"]->bindings["out.all_bbox_preds"]->template cpu<float>();
+    std::vector<float> cls_scores = vad_model.nets_["head"]->bindings["out.all_cls_scores"]->template cpu<float>();
 
     // det to frame.det
     constexpr int32_t N_MAX_DET = 300;
