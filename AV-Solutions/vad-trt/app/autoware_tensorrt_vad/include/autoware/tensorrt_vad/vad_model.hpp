@@ -113,7 +113,6 @@ struct NetConfig
 {
   std::string name;
   std::string engine_file;
-  bool use_graph;
   std::map<std::string, std::map<std::string, std::string>> inputs;
 };
 
@@ -534,10 +533,6 @@ private:
       }
 
       nets[engine_name] = std::make_shared<nv::Net>(engine_file_path, runtime_.get(), external_bindings);
-
-      if (engine.use_graph) {
-        nets[engine_name]->EnableCudaGraph(stream_);
-      }
     }
     
     return nets;
@@ -605,10 +600,6 @@ private:
     }
 
     nets_["head"] = std::make_shared<nv::Net>(engine_file_path, runtime_.get(), external_bindings);
-
-    if (head_engine->use_graph) {
-      nets_["head"]->EnableCudaGraph(stream_);
-    }
   }
 
   VadOutputData postprocess(const std::string& head_name, int32_t cmd) {

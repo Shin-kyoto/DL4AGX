@@ -56,14 +56,12 @@
           engine_path: "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX_ns_rosbag/DL4AGX/AV-Solutions/vad-trt/app/autoware_tensorrt_vad/build/vad-tiny_backbone.engine"
           precision: "fp16"
           engine_file: "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX_ns_rosbag/DL4AGX/AV-Solutions/vad-trt/app/autoware_tensorrt_vad/build/vad-tiny_backbone.engine"
-          use_graph: true
         head:
           name: "head"
           onnx_path: "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/onnx_files/vadv1_prev.pts_bbox_head.forward/sim_vadv1_prev.pts_bbox_head.forward.onnx"
           engine_path: "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX_ns_rosbag/DL4AGX/AV-Solutions/vad-trt/app/autoware_tensorrt_vad/build/vad-tiny_head.engine"
           precision: "fp32"
           engine_file: "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX_ns_rosbag/DL4AGX/AV-Solutions/vad-trt/app/autoware_tensorrt_vad/build/vad-tiny_head.engine"
-          use_graph: true
           inputs:
             "input_feature": "mlvl_feats.0"
             "net": "backbone"
@@ -74,7 +72,6 @@
           engine_path: "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX_ns_rosbag/DL4AGX/AV-Solutions/vad-trt/app/autoware_tensorrt_vad/build/vad-tiny_head_no_prev.engine"
           precision: "fp32"
           engine_file: "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX_ns_rosbag/DL4AGX/AV-Solutions/vad-trt/app/autoware_tensorrt_vad/build/vad-tiny_head_no_prev.engine"
-          use_graph: true
           inputs:
             "input_feature": "mlvl_feats.0"
             "net": "backbone"

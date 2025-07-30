@@ -417,8 +417,6 @@ private:
         "model_params.nets.backbone.name", "backbone");
     backbone_config.engine_file = this->declare_parameter<std::string>(
         "model_params.nets.backbone.engine_file", "");
-    backbone_config.use_graph = this->declare_parameter<bool>(
-        "model_params.nets.backbone.use_graph", true);
 
     // head設定
     autoware::tensorrt_vad::NetConfig head_config;
@@ -426,8 +424,6 @@ private:
         "model_params.nets.head.name", "head");
     head_config.engine_file = this->declare_parameter<std::string>(
         "model_params.nets.head.engine_file", "");
-    head_config.use_graph =
-        this->declare_parameter<bool>("model_params.nets.head.use_graph", true);
 
     // head inputsの読み込み
     std::string input_feature = this->declare_parameter<std::string>(
@@ -445,8 +441,6 @@ private:
         "model_params.nets.head_no_prev.name", "head_no_prev");
     head_no_prev_config.engine_file = this->declare_parameter<std::string>(
         "model_params.nets.head_no_prev.engine_file", "");
-    head_no_prev_config.use_graph = this->declare_parameter<bool>(
-        "model_params.nets.head_no_prev.use_graph", true);
 
     // head_no_prev inputsの読み込み
     std::string input_feature_no_prev = this->declare_parameter<std::string>(

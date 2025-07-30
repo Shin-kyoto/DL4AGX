@@ -54,7 +54,6 @@ std::pair<VadModelConfig, TestConfig> load_config_from_yaml(const std::string& c
             NetConfig net_config;
             net_config.name = net.second["name"].as<std::string>();
             net_config.engine_file = net.second["engine_file"].as<std::string>();
-            net_config.use_graph = net.second["use_graph"].as<bool>();
             
             if (net.second["inputs"]) {
                 const auto& inputs = net.second["inputs"];
@@ -168,18 +167,15 @@ protected:
         NetConfig backbone_config;
         backbone_config.name = config_.nets_config[0].name;
         backbone_config.engine_file = config_.nets_config[0].engine_file;
-        backbone_config.use_graph = config_.nets_config[0].use_graph;
         
         NetConfig head_no_prev_config;
         head_no_prev_config.name = config_.nets_config[1].name;
         head_no_prev_config.engine_file = config_.nets_config[1].engine_file;
-        head_no_prev_config.use_graph = config_.nets_config[1].use_graph;
         head_no_prev_config.inputs["img_feats"] = config_.nets_config[1].inputs["img_feats"];
         
         NetConfig head_config;
         head_config.name = config_.nets_config[2].name;
         head_config.engine_file = config_.nets_config[2].engine_file;
-        head_config.use_graph = config_.nets_config[2].use_graph;
         head_config.inputs["img_feats"] = config_.nets_config[2].inputs["img_feats"];
         
         config.nets_config = {backbone_config, head_no_prev_config, head_config};
