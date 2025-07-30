@@ -198,12 +198,9 @@ public:
       const autoware::tensorrt_common::TrtCommonConfig& head_config,
       const autoware::tensorrt_common::TrtCommonConfig& head_no_prev_config) {
     logger_->info("Initializing TensorRT with pre-build strategy");
-    
-    // Store configurations for dynamic loading (using placement new to reconstruct)
-    vad_config_ = vad_config;
-        
+            
     // NetworkIO arrays generation
-     auto [backbone_network_io, head_network_io, head_no_prev_network_io] = generate_network_io_configs();
+     auto [backbone_network_io, head_network_io, head_no_prev_network_io] = generate_network_io_configs(vad_config);
     
     // Build all engines first (this takes time but done only once)
     logger_->info("Building all TensorRT engines (this may take several minutes)...");
@@ -425,10 +422,6 @@ public:
   // ロガーインスタンス
   std::shared_ptr<VadLogger> logger_;
 
-  // 動的ロード用の設定保存
-  VadConfig vad_config_{};
-
-
 private:
   std::unique_ptr<nvinfer1::IRuntime, std::function<void(nvinfer1::IRuntime*)>> create_runtime() {
     static std::unique_ptr<Logger> logger_instance = std::make_unique<Logger>(logger_);
@@ -443,35 +436,35 @@ private:
     std::vector<tensorrt_common::NetworkIO>,
     std::vector<tensorrt_common::NetworkIO>,
     std::vector<tensorrt_common::NetworkIO>
-  > generate_network_io_configs() {
+  > generate_network_io_configs(VadConfig vad_config) {
     logger_->info("Generating NetworkIO configurations");
     std::vector<tensorrt_common::NetworkIO> backbone_network_io;
     std::vector<tensorrt_common::NetworkIO> head_network_io;
     std::vector<tensorrt_common::NetworkIO> head_no_prev_network_io;
 
     // Backbone Network IO Configuration
-    int32_t downsampled_image_height = vad_config_.target_image_height / vad_config_.downsample_factor;
-    int32_t downsampled_image_width = vad_config_.target_image_width / vad_config_.downsample_factor;
-    nvinfer1::Dims camera_input_dims{4, {vad_config_.num_cameras, 3, vad_config_.target_image_height, vad_config_.target_image_width}};
-    nvinfer1::Dims backbone_output_dims{5, {vad_config_.num_cameras, 1, vad_config_.bev_feature_dim, downsampled_image_height, downsampled_image_width}};
+    int32_t downsampled_image_height = vad_config.target_image_height / vad_config.downsample_factor;
+    int32_t downsampled_image_width = vad_config.target_image_width / vad_config.downsample_factor;
+    nvinfer1::Dims camera_input_dims{4, {vad_config.num_cameras, 3, vad_config.target_image_height, vad_config.target_image_width}};
+    nvinfer1::Dims backbone_output_dims{5, {vad_config.num_cameras, 1, vad_config.bev_feature_dim, downsampled_image_height, downsampled_image_width}};
 
     backbone_network_io.emplace_back("img", camera_input_dims);
     backbone_network_io.emplace_back("out.0", backbone_output_dims);
 
     // Common dimensions for head networks
-    nvinfer1::Dims mlvl_dims{5, {1, vad_config_.num_cameras, vad_config_.bev_feature_dim, downsampled_image_height, downsampled_image_width}};
-    nvinfer1::Dims can_bus_dims{2, {1, vad_config_.can_bus_dim}};
-    nvinfer1::Dims lidar2img_dims{3, {vad_config_.num_cameras, 4, 4}};
+    nvinfer1::Dims mlvl_dims{5, {1, vad_config.num_cameras, vad_config.bev_feature_dim, downsampled_image_height, downsampled_image_width}};
+    nvinfer1::Dims can_bus_dims{2, {1, vad_config.can_bus_dim}};
+    nvinfer1::Dims lidar2img_dims{3, {vad_config.num_cameras, 4, 4}};
     nvinfer1::Dims shift_dims{2, {1, 2}};
-    nvinfer1::Dims prev_bev_dims{3, {vad_config_.bev_h * vad_config_.bev_w, 1, vad_config_.bev_feature_dim}};
-    nvinfer1::Dims ego_fut_preds_dims{4, {1, vad_config_.planning_ego_commands, vad_config_.planning_timesteps, 2}};
-    nvinfer1::Dims traj_preds_dims{5, {3, 1, vad_config_.prediction_num_queries, vad_config_.prediction_trajectory_modes, vad_config_.prediction_timesteps*2}};
-    nvinfer1::Dims traj_cls_dims{4, {3, 1, vad_config_.prediction_num_queries, vad_config_.prediction_trajectory_modes}};
-    nvinfer1::Dims bbox_preds_dims{4, {3, 1, vad_config_.prediction_num_queries, vad_config_.prediction_bbox_pred_dim}};
-    nvinfer1::Dims all_cls_scores_dims{4, {3, 1, vad_config_.prediction_num_queries, vad_config_.prediction_num_classes}};
-    nvinfer1::Dims map_all_cls_scores_dims{4, {3, 1, vad_config_.map_num_queries, vad_config_.map_num_class}};
-    nvinfer1::Dims map_all_pts_preds_dims{5, {3, 1, vad_config_.map_num_queries, vad_config_.map_points_per_polylines, 2}};
-    nvinfer1::Dims map_all_bbox_preds_dims{4, {3, 1, vad_config_.map_num_queries, 4}};
+    nvinfer1::Dims prev_bev_dims{3, {vad_config.bev_h * vad_config.bev_w, 1, vad_config.bev_feature_dim}};
+    nvinfer1::Dims ego_fut_preds_dims{4, {1, vad_config.planning_ego_commands, vad_config.planning_timesteps, 2}};
+    nvinfer1::Dims traj_preds_dims{5, {3, 1, vad_config.prediction_num_queries, vad_config.prediction_trajectory_modes, vad_config.prediction_timesteps*2}};
+    nvinfer1::Dims traj_cls_dims{4, {3, 1, vad_config.prediction_num_queries, vad_config.prediction_trajectory_modes}};
+    nvinfer1::Dims bbox_preds_dims{4, {3, 1, vad_config.prediction_num_queries, vad_config.prediction_bbox_pred_dim}};
+    nvinfer1::Dims all_cls_scores_dims{4, {3, 1, vad_config.prediction_num_queries, vad_config.prediction_num_classes}};
+    nvinfer1::Dims map_all_cls_scores_dims{4, {3, 1, vad_config.map_num_queries, vad_config.map_num_class}};
+    nvinfer1::Dims map_all_pts_preds_dims{5, {3, 1, vad_config.map_num_queries, vad_config.map_points_per_polylines, 2}};
+    nvinfer1::Dims map_all_bbox_preds_dims{4, {3, 1, vad_config.map_num_queries, 4}};
 
     // Head Network IO Configuration (with previous BEV)
     head_network_io.emplace_back("mlvl_feats.0", mlvl_dims);
