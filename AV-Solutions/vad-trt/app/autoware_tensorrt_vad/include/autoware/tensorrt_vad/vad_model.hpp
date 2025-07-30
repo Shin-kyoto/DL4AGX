@@ -172,10 +172,7 @@ class VadModel
 {
 public:
   VadModel(const VadModelConfig& config, std::shared_ptr<LoggerType> logger)
-    : stream_(nullptr), initialized_(false), is_first_frame_(true), config_(config), logger_(std::move(logger)),
-      backbone_config_("", "fp16", "", 5ULL << 30U),
-      head_config_("", "fp16", "", 5ULL << 30U),
-      head_no_prev_config_("", "fp16", "", 5ULL << 30U)
+    : stream_(nullptr), initialized_(false), is_first_frame_(true), config_(config), logger_(std::move(logger))
   {
     // loggerはVadLoggerを継承したclassのみ受け取る
     static_assert(std::is_base_of_v<VadLogger, LoggerType>, 
@@ -222,43 +219,33 @@ public:
     
     // Store configurations for dynamic loading (using placement new to reconstruct)
     vad_config_ = vad_config;
-    
-    // Reconstruct TrtCommonConfig objects using placement new
-    backbone_config_.~TrtCommonConfig();
-    new(&backbone_config_) autoware::tensorrt_common::TrtCommonConfig(backbone_config);
-    
-    head_config_.~TrtCommonConfig();
-    new(&head_config_) autoware::tensorrt_common::TrtCommonConfig(head_config);
-    
-    head_no_prev_config_.~TrtCommonConfig();
-    new(&head_no_prev_config_) autoware::tensorrt_common::TrtCommonConfig(head_no_prev_config);
-    
+        
     // NetworkIO arrays generation
      auto [backbone_network_io, head_network_io, head_no_prev_network_io] = generate_network_io_configs();
     
     // Build all engines first (this takes time but done only once)
     logger_->info("Building all TensorRT engines (this may take several minutes)...");
-    
+
     // 1. Build backbone engine (permanent)
     logger_->info("Building backbone engine...");
-    if (!build_backbone_engine(backbone_network_io)) {
+    if (!build_backbone_engine(backbone_config, backbone_network_io)) {
       logger_->error("Failed to build backbone engine");
       return false;
     }
 
     // 2. Build head engine
     logger_->info("Building head engine...");
-    if (!build_head_engine(head_network_io)) {
+    if (!build_head_engine(head_config, head_network_io)) {
       logger_->error("Failed to build head engine");
       return false;
     }
     // After building, unload head engine to save GPU memory
     logger_->info("Releasing head engine to save GPU memory");
     unload_head_engine();
-    
+
     // 3. Build head_no_prev engine
     logger_->info("Building head_no_prev engine...");
-    if (!build_head_no_prev_engine(head_no_prev_network_io)) {
+    if (!build_head_no_prev_engine(head_no_prev_config, head_no_prev_network_io)) {
       logger_->error("Failed to build head_no_prev engine");
       return false;
     }
@@ -270,11 +257,12 @@ public:
   }
 
   // エンジンビルド専用メソッド
-  bool build_backbone_engine(const std::vector<tensorrt_common::NetworkIO>& backbone_network_io) {
+  bool build_backbone_engine(const autoware::tensorrt_common::TrtCommonConfig& backbone_config,
+                             const std::vector<tensorrt_common::NetworkIO>& backbone_network_io) {
     logger_->info("Building backbone engine...");
     try {
       backbone_trt_ = std::make_unique<autoware::tensorrt_common::TrtCommon>(
-        backbone_config_, std::make_shared<autoware::tensorrt_common::Profiler>(),
+        backbone_config, std::make_shared<autoware::tensorrt_common::Profiler>(),
         std::vector<std::string>{config_.plugins_path});
       auto backbone_network_io_ptr = std::make_unique<std::vector<tensorrt_common::NetworkIO>>(backbone_network_io);
       if (!backbone_trt_->setup(nullptr, std::move(backbone_network_io_ptr))) {
@@ -291,11 +279,12 @@ public:
     }
   }
 
-  bool build_head_engine(const std::vector<tensorrt_common::NetworkIO>& head_network_io) {
+  bool build_head_engine(const autoware::tensorrt_common::TrtCommonConfig& head_config,
+                        const std::vector<tensorrt_common::NetworkIO>& head_network_io) {
     logger_->info("Building head engine...");
     try {
       head_trt_ = std::make_unique<autoware::tensorrt_common::TrtCommon>(
-        head_config_, std::make_shared<autoware::tensorrt_common::Profiler>(),
+        head_config, std::make_shared<autoware::tensorrt_common::Profiler>(),
         std::vector<std::string>{config_.plugins_path});
       auto head_network_io_ptr = std::make_unique<std::vector<tensorrt_common::NetworkIO>>(head_network_io);
       if (!head_trt_->setup(nullptr, std::move(head_network_io_ptr))) {
@@ -312,11 +301,12 @@ public:
     }
   }
 
-  bool build_head_no_prev_engine(const std::vector<tensorrt_common::NetworkIO>& head_no_prev_network_io) {
+  bool build_head_no_prev_engine(const autoware::tensorrt_common::TrtCommonConfig& head_no_prev_config,
+                                const std::vector<tensorrt_common::NetworkIO>& head_no_prev_network_io) {
     logger_->info("Building head_no_prev engine...");
     try {
       head_no_prev_trt_ = std::make_unique<autoware::tensorrt_common::TrtCommon>(
-        head_no_prev_config_, std::make_shared<autoware::tensorrt_common::Profiler>(),
+        head_no_prev_config, std::make_shared<autoware::tensorrt_common::Profiler>(),
         std::vector<std::string>{config_.plugins_path});
       auto head_no_prev_network_io_ptr = std::make_unique<std::vector<tensorrt_common::NetworkIO>>(head_no_prev_network_io);
       if (!head_no_prev_trt_->setup(nullptr, std::move(head_no_prev_network_io_ptr))) {
@@ -334,7 +324,8 @@ public:
   }
 
   // 動的エンジンロード用メソッド（軽量版 - エンジンファイルから直接ロード）
-  bool load_head_engine(const std::vector<tensorrt_common::NetworkIO>& head_network_io) {
+  bool load_head_engine(const autoware::tensorrt_common::TrtCommonConfig& head_config,
+                        const std::vector<tensorrt_common::NetworkIO>& head_network_io) {
     if (head_trt_) {
       logger_->debug("Head engine already loaded");
       return true;
@@ -342,7 +333,7 @@ public:
     logger_->info("Loading head engine from built engine file");
     try {
       head_trt_ = std::make_unique<autoware::tensorrt_common::TrtCommon>(
-        head_config_, std::make_shared<autoware::tensorrt_common::Profiler>(),
+        head_config, std::make_shared<autoware::tensorrt_common::Profiler>(),
         std::vector<std::string>{config_.plugins_path});
       auto head_network_io_ptr = std::make_unique<std::vector<tensorrt_common::NetworkIO>>(head_network_io);
       if (!head_trt_->setup(nullptr, std::move(head_network_io_ptr))) {
@@ -359,7 +350,8 @@ public:
     }
   }
 
-  bool load_head_no_prev_engine(const std::vector<tensorrt_common::NetworkIO>& head_no_prev_network_io) {
+  bool load_head_no_prev_engine(const autoware::tensorrt_common::TrtCommonConfig& head_no_prev_config,
+                                const std::vector<tensorrt_common::NetworkIO>& head_no_prev_network_io) {
     if (head_no_prev_trt_) {
       logger_->debug("Head_no_prev engine already loaded");
       return true;
@@ -367,7 +359,7 @@ public:
     logger_->info("Loading head_no_prev engine from built engine file");
     try {
       head_no_prev_trt_ = std::make_unique<autoware::tensorrt_common::TrtCommon>(
-        head_no_prev_config_, std::make_shared<autoware::tensorrt_common::Profiler>(),
+        head_no_prev_config, std::make_shared<autoware::tensorrt_common::Profiler>(),
         std::vector<std::string>{config_.plugins_path});
       auto head_no_prev_network_io_ptr = std::make_unique<std::vector<tensorrt_common::NetworkIO>>(head_no_prev_network_io);
       if (!head_no_prev_trt_->setup(nullptr, std::move(head_no_prev_network_io_ptr))) {
@@ -453,9 +445,6 @@ public:
 
   // 動的ロード用の設定保存
   VadConfig vad_config_{};
-  autoware::tensorrt_common::TrtCommonConfig backbone_config_;
-  autoware::tensorrt_common::TrtCommonConfig head_config_;
-  autoware::tensorrt_common::TrtCommonConfig head_no_prev_config_;
 
 
 private:
