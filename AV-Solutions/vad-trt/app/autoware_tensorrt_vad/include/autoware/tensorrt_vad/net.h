@@ -32,6 +32,8 @@
 
 #include "tensor.h"
 
+#include <autoware/tensorrt_common/tensorrt_common.hpp>
+
 namespace nv {
 using namespace nvinfer1;
 
