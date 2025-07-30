@@ -174,14 +174,13 @@ public:
     cudaStreamCreate(&stream_);
 
     // TensorRTエンジン初期化
-    auto head_trt = init_tensorrt(vad_config, backbone_config, head_config, head_no_prev_config);
-    if (!head_trt) {
+    auto [backbone_trt, head_trt, head_no_prev_trt] = init_tensorrt(vad_config, backbone_config, head_config, head_no_prev_config);
+    if (!backbone_trt || !head_trt || !head_no_prev_trt) {
       logger_->error("Failed to initialize TensorRT engines");
       initialized_ = false;
       return;
     }
     nets_ = init_engines(config.nets_config);
-        
     initialized_ = true;
   }
 
@@ -200,7 +199,11 @@ public:
   }
 
   // TensorRT初期化API（事前ビルド方式）
-  std::unique_ptr<autoware::tensorrt_common::TrtCommon> init_tensorrt(
+  std::tuple<
+    std::unique_ptr<autoware::tensorrt_common::TrtCommon>,
+    std::unique_ptr<autoware::tensorrt_common::TrtCommon>,
+    std::unique_ptr<autoware::tensorrt_common::TrtCommon>
+  > init_tensorrt(
       const VadConfig& vad_config,
       const autoware::tensorrt_common::TrtCommonConfig& backbone_config,
       const autoware::tensorrt_common::TrtCommonConfig& head_config,
@@ -217,7 +220,7 @@ public:
     auto backbone_trt = build_backbone_engine(backbone_config, backbone_network_io);
     if (!backbone_trt) {
       logger_->error("Failed to build backbone engine");
-      return nullptr;
+      return {nullptr, nullptr, nullptr};
     }
 
     // 2. Build head engine
@@ -225,7 +228,7 @@ public:
     auto head_trt = build_head_engine(head_config, head_network_io);
     if (!head_trt) {
       logger_->error("Failed to build head engine");
-      return nullptr;
+      return {nullptr, nullptr, nullptr};
     }
     // After building, unload head engine to save GPU memory
     logger_->info("Releasing head engine to save GPU memory");
@@ -236,12 +239,12 @@ public:
     auto head_no_prev_trt = build_head_no_prev_engine(head_no_prev_config, head_no_prev_network_io);
     if (!head_no_prev_trt) {
       logger_->error("Failed to build head_no_prev engine");
-      return nullptr;
+      return {nullptr, nullptr, nullptr};
     }
 
     logger_->info("TensorRT pre-build initialization completed successfully");
     logger_->info("Ready for inference with dynamic head engine loading");
-    return head_trt;
+    return {std::move(backbone_trt), std::move(head_trt), std::move(head_no_prev_trt)};
   }
 
   // エンジンビルド専用メソッド
