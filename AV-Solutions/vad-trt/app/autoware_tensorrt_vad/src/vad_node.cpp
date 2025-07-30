@@ -246,13 +246,13 @@ void VadNode::initialize_vad_model()
 
   // Initialize TensorRT with NetworkIO (init_tensorrt integration)
   RCLCPP_INFO(this->get_logger(), "Initializing TensorRT engines with NetworkIO");
-  bool tensorrt_success = vad_model_ptr_->init_tensorrt(
+  auto tensorrt_engine = vad_model_ptr_->init_tensorrt(
       vad_config,
       backbone_trt_config,
       head_trt_config,
       head_no_prev_trt_config
   );
-  if (tensorrt_success) {
+  if (tensorrt_engine) {
     RCLCPP_INFO(this->get_logger(), "TensorRT initialization completed successfully");
   } else {
     RCLCPP_ERROR(this->get_logger(), "TensorRT initialization failed");
