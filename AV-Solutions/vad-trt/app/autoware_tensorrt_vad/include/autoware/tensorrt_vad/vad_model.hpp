@@ -232,7 +232,6 @@ public:
     }
     // After building, unload head engine to save GPU memory
     logger_->info("Releasing head engine to save GPU memory");
-    // unload_head_engine(head_trt); // head_trtは返すのでアンロードは呼び出し側で
 
     // 3. Build head_no_prev engine
     logger_->info("Building head_no_prev engine...");
