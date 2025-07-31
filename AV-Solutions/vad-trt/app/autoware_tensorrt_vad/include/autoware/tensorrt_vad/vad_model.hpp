@@ -174,12 +174,13 @@ public:
     cudaStreamCreate(&stream_);
 
     // TensorRTエンジン初期化
-    auto [backbone_trt, head_trt, head_no_prev_trt] = init_tensorrt(vad_config, backbone_config, head_config, head_no_prev_config);
-    if (!backbone_trt || !head_trt || !head_no_prev_trt) {
+    auto [backbone_trt, head_trt_tmp, head_no_prev_trt] = init_tensorrt(vad_config, backbone_config, head_config, head_no_prev_config);
+    if (!backbone_trt || !head_trt_tmp || !head_no_prev_trt) {
       logger_->error("Failed to initialize TensorRT engines");
       initialized_ = false;
       return;
     }
+    head_trt_ = std::move(head_trt_tmp);
     nets_ = init_engines(config.nets_config, std::move(backbone_trt), std::move(head_no_prev_trt));
     initialized_ = true;
   }
@@ -428,6 +429,7 @@ public:
   std::shared_ptr<VadLogger> logger_;
 
 private:
+  std::unique_ptr<autoware::tensorrt_common::TrtCommon> head_trt_;
   std::unique_ptr<nvinfer1::IRuntime, std::function<void(nvinfer1::IRuntime*)>> create_runtime() {
     static std::unique_ptr<Logger> logger_instance = std::make_unique<Logger>(logger_);
     auto runtime_deleter = []([[maybe_unused]] nvinfer1::IRuntime *runtime) {};
@@ -619,7 +621,8 @@ private:
       external_bindings[k] = nets_[ext_net]->bindings[ext_name];
     }
 
-    nets_["head"] = std::make_shared<nv::Net>(engine_file_path, runtime_.get(), external_bindings);
+    // head_trtを使ってNetを生成
+    nets_["head"] = std::make_shared<nv::Net>(engine_file_path, runtime_.get(), external_bindings, std::move(head_trt_));
   }
 
   VadOutputData postprocess(const std::string& head_name, int32_t cmd) {
