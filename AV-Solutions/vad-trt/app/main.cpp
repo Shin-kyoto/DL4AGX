@@ -464,15 +464,11 @@ private:
     autoware::tensorrt_vad::NetConfig backbone_config;
     backbone_config.name = this->declare_parameter<std::string>(
         "model_params.nets.backbone.name", "backbone");
-    backbone_config.engine_file = this->declare_parameter<std::string>(
-        "model_params.nets.backbone.engine_file", "");
 
     // head設定
     autoware::tensorrt_vad::NetConfig head_config;
     head_config.name = this->declare_parameter<std::string>(
         "model_params.nets.head.name", "head");
-    head_config.engine_file = this->declare_parameter<std::string>(
-        "model_params.nets.head.engine_file", "");
 
     // head inputsの読み込み
     std::string input_feature = this->declare_parameter<std::string>(
@@ -488,8 +484,6 @@ private:
     autoware::tensorrt_vad::NetConfig head_no_prev_config;
     head_no_prev_config.name = this->declare_parameter<std::string>(
         "model_params.nets.head_no_prev.name", "head_no_prev");
-    head_no_prev_config.engine_file = this->declare_parameter<std::string>(
-        "model_params.nets.head_no_prev.engine_file", "");
 
     // head_no_prev inputsの読み込み
     std::string input_feature_no_prev = this->declare_parameter<std::string>(
