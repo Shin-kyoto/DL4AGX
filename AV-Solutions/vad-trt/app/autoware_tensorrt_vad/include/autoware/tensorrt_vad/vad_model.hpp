@@ -552,8 +552,6 @@ private:
       } else if (engine_name == "head_no_prev") {
         nets[engine_name] = std::make_shared<nv::Net>(
           engine_file_path, runtime_.get(), external_bindings, std::move(head_no_prev_trt));
-      } else {
-        nets[engine_name] = std::make_shared<nv::Net>(engine_file_path, runtime_.get(), external_bindings);
       }
     }
     
