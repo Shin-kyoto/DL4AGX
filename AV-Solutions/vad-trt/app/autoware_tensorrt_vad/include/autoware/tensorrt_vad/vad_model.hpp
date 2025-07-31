@@ -180,7 +180,7 @@ public:
       initialized_ = false;
       return;
     }
-    nets_ = init_engines(config.nets_config);
+    nets_ = init_engines(config.nets_config, backbone_trt, head_no_prev_trt);
     initialized_ = true;
   }
 
@@ -519,7 +519,9 @@ private:
   }
 
   std::unordered_map<std::string, std::shared_ptr<nv::Net>> init_engines(
-      const std::vector<NetConfig>& nets_config) {
+      const std::vector<NetConfig>& nets_config,
+      const std::unique_ptr<autoware::tensorrt_common::TrtCommon>& backbone_trt,
+      const std::unique_ptr<autoware::tensorrt_common::TrtCommon>& head_no_prev_trt) {
     
     std::unordered_map<std::string, std::shared_ptr<nv::Net>> nets;
     
@@ -541,6 +543,14 @@ private:
         std::string ext_name = ext_map.at("name");
         logger_->info(k + " <- " + ext_net + "[" + ext_name + "]");
         external_bindings[k] = nets[ext_net]->bindings[ext_name];
+      }
+
+      if (engine_name == "backbone") {
+        nets[engine_name] = std::make_shared<nv::Net>(
+          engine_file_path, runtime_.get(), external_bindings, std::ref(*backbone_trt));
+      } else if (engine_name == "head_no_prev") {
+        nets[engine_name] = std::make_shared<nv::Net>(
+          engine_file_path, runtime_.get(), external_bindings, std::ref(*head_no_prev_trt));
       }
 
       nets[engine_name] = std::make_shared<nv::Net>(engine_file_path, runtime_.get(), external_bindings);
