@@ -530,11 +530,6 @@ private:
       if (engine.name == "head") {
         continue;  // headは後で初期化
       }
-      
-      std::string engine_name = engine.name;
-      std::string engine_file_path = engine.engine_file;
-      logger_->info("-> engine: " + engine_name);
-      
       std::unordered_map<std::string, std::shared_ptr<nv::Tensor>> external_bindings;
       // reuse memory
       for (const auto& input_pair : engine.inputs) {
@@ -546,12 +541,12 @@ private:
         external_bindings[k] = nets[ext_net]->bindings[ext_name];
       }
 
-      if (engine_name == "backbone") {
-        nets[engine_name] = std::make_shared<nv::Net>(
-          engine_file_path, runtime_.get(), external_bindings, std::move(backbone_trt));
-      } else if (engine_name == "head_no_prev") {
-        nets[engine_name] = std::make_shared<nv::Net>(
-          engine_file_path, runtime_.get(), external_bindings, std::move(head_no_prev_trt));
+      if (engine.name == "backbone") {
+        nets[engine.name] = std::make_shared<nv::Net>(
+          runtime_.get(), external_bindings, std::move(backbone_trt));
+      } else if (engine.name == "head_no_prev") {
+        nets[engine.name] = std::make_shared<nv::Net>(
+          runtime_.get(), external_bindings, std::move(head_no_prev_trt));
       }
     }
     
@@ -606,9 +601,6 @@ private:
       return;
     }
     
-    std::string engine_file_path = head_engine->engine_file;
-    logger_->info("-> loading head engine: " + engine_file_path);
-    
     std::unordered_map<std::string, std::shared_ptr<nv::Tensor>> external_bindings;
     for (const auto& input_pair : head_engine->inputs) {
       const std::string& k = input_pair.first;
@@ -620,7 +612,7 @@ private:
     }
 
     // head_trtを使ってNetを生成
-    nets_["head"] = std::make_shared<nv::Net>(engine_file_path, runtime_.get(), external_bindings, std::move(head_trt_));
+    nets_["head"] = std::make_shared<nv::Net>(runtime_.get(), external_bindings, std::move(head_trt_));
   }
 
   VadOutputData postprocess(const std::string& head_name, int32_t cmd) {

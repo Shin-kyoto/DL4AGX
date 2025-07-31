@@ -44,12 +44,12 @@ struct Net {
   std::unique_ptr<autoware::tensorrt_common::TrtCommon> trt_common;
 
   Net(
-    std::string engine_path, 
     IRuntime* runtime, 
     nv::TensorMap& ext,
     std::unique_ptr<autoware::tensorrt_common::TrtCommon> trt_common_to_own
   ): trt_common{std::move(trt_common_to_own)}
   {
+    std::string engine_path = trt_common->getTrtCommonConfig()->engine_path.string();
     std::ifstream engine_file(engine_path, std::ios::binary);
     if (!engine_file) {
       throw std::runtime_error("Error opening engine file: " + engine_path);
