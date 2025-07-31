@@ -205,7 +205,9 @@ public:
       const autoware::tensorrt_common::TrtCommonConfig& head_no_prev_config) {
     logger_->info("Initializing TensorRT with pre-build strategy");
     // NetworkIO arrays generation
-    auto [backbone_network_io, head_network_io, head_no_prev_network_io] = generate_network_io_configs(vad_config);
+    std::vector<tensorrt_common::NetworkIO> backbone_network_io = generate_network_io_backbone(vad_config);
+    std::vector<tensorrt_common::NetworkIO> head_network_io = generate_network_io_head(vad_config);
+    std::vector<tensorrt_common::NetworkIO> head_no_prev_network_io = generate_network_io_head_no_prev(vad_config);
 
     // Build all engines first (this takes time but done only once)
     logger_->info("Building all TensorRT engines (this may take several minutes)...");
@@ -398,21 +400,6 @@ private:
     head_no_prev_network_io.emplace_back("out.map_all_pts_preds", map_all_pts_preds_dims);
     head_no_prev_network_io.emplace_back("out.map_all_bbox_preds", map_all_bbox_preds_dims);
     return head_no_prev_network_io;
-  }
-
-  // NetworkIO設定を生成するメソッド
-  std::tuple<
-    std::vector<tensorrt_common::NetworkIO>,
-    std::vector<tensorrt_common::NetworkIO>,
-    std::vector<tensorrt_common::NetworkIO>
-  > generate_network_io_configs(VadConfig vad_config) {
-    logger_->info("Generating NetworkIO configurations");
-    std::vector<tensorrt_common::NetworkIO> backbone_network_io = generate_network_io_backbone(vad_config);
-    std::vector<tensorrt_common::NetworkIO> head_network_io = generate_network_io_head(vad_config);
-    std::vector<tensorrt_common::NetworkIO> head_no_prev_network_io = generate_network_io_head_no_prev(vad_config);
-
-    logger_->info("NetworkIO configurations generated successfully");
-    return {backbone_network_io, head_network_io, head_no_prev_network_io};
   }
 
   std::unordered_map<std::string, std::shared_ptr<nv::Net>> init_engines(
