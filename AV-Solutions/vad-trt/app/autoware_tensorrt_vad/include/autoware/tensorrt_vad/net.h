@@ -45,7 +45,8 @@ struct Net {
   Net(
     std::string engine_path, 
     IRuntime* runtime, 
-    nv::TensorMap& ext
+    nv::TensorMap& ext,
+    std::optional<std::reference_wrapper<autoware::tensorrt_common::TrtCommon>> trt_common_opt = std::nullopt
   ) {
     std::ifstream engine_file(engine_path, std::ios::binary);
     if (!engine_file) {
@@ -63,6 +64,26 @@ struct Net {
     context = engine->createExecutionContext(); 
 
     int nb = engine->getNbIOTensors();  
+
+    if (trt_common_opt.has_value()) {
+      autoware::tensorrt_common::TrtCommon & trt_common = trt_common_opt->get();
+      int32_t nb = trt_common.getNbIOTensors();
+      
+      for (int32_t n = 0; n < nb; n++) {
+        std::string name = trt_common.getIOTensorName(n);
+        Dims d = trt_common.getTensorShape(name.c_str());
+        DataType dtype = engine->getTensorDataType(name.c_str());
+        
+        if (ext.find(name) != ext.end()) {
+          // use external memory
+          trt_common.setTensorAddress(name.c_str(), ext[name]->ptr);
+        } else {
+          bindings[name] = std::make_shared<Tensor>(name, d, dtype);
+          trt_common.setTensorAddress(name.c_str(), bindings[name]->ptr);
+        }
+      }
+      
+    }
 
     for( int n=0; n<nb; n++ ) {
       std::string name = engine->getIOTensorName(n);
