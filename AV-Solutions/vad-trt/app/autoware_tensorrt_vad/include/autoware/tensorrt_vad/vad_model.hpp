@@ -319,6 +319,18 @@ private:
     return runtime;
   }
 
+  // Backbone NetworkIO設定生成関数
+  std::vector<tensorrt_common::NetworkIO> generate_network_io_backbone(const VadConfig& vad_config) {
+    int32_t downsampled_image_height = vad_config.target_image_height / vad_config.downsample_factor;
+    int32_t downsampled_image_width = vad_config.target_image_width / vad_config.downsample_factor;
+    nvinfer1::Dims camera_input_dims{4, {vad_config.num_cameras, 3, vad_config.target_image_height, vad_config.target_image_width}};
+    nvinfer1::Dims backbone_output_dims{5, {vad_config.num_cameras, 1, vad_config.bev_feature_dim, downsampled_image_height, downsampled_image_width}};
+    std::vector<tensorrt_common::NetworkIO> backbone_network_io;
+    backbone_network_io.emplace_back("img", camera_input_dims);
+    backbone_network_io.emplace_back("out.0", backbone_output_dims);
+    return backbone_network_io;
+  }
+
   // NetworkIO設定を生成するメソッド
   std::tuple<
     std::vector<tensorrt_common::NetworkIO>,
@@ -326,20 +338,13 @@ private:
     std::vector<tensorrt_common::NetworkIO>
   > generate_network_io_configs(VadConfig vad_config) {
     logger_->info("Generating NetworkIO configurations");
-    std::vector<tensorrt_common::NetworkIO> backbone_network_io;
+    std::vector<tensorrt_common::NetworkIO> backbone_network_io = generate_network_io_backbone(vad_config);
     std::vector<tensorrt_common::NetworkIO> head_network_io;
     std::vector<tensorrt_common::NetworkIO> head_no_prev_network_io;
 
-    // Backbone Network IO Configuration
+    // Common dimensions for head networks
     int32_t downsampled_image_height = vad_config.target_image_height / vad_config.downsample_factor;
     int32_t downsampled_image_width = vad_config.target_image_width / vad_config.downsample_factor;
-    nvinfer1::Dims camera_input_dims{4, {vad_config.num_cameras, 3, vad_config.target_image_height, vad_config.target_image_width}};
-    nvinfer1::Dims backbone_output_dims{5, {vad_config.num_cameras, 1, vad_config.bev_feature_dim, downsampled_image_height, downsampled_image_width}};
-
-    backbone_network_io.emplace_back("img", camera_input_dims);
-    backbone_network_io.emplace_back("out.0", backbone_output_dims);
-
-    // Common dimensions for head networks
     nvinfer1::Dims mlvl_dims{5, {1, vad_config.num_cameras, vad_config.bev_feature_dim, downsampled_image_height, downsampled_image_width}};
     nvinfer1::Dims can_bus_dims{2, {1, vad_config.can_bus_dim}};
     nvinfer1::Dims lidar2img_dims{3, {vad_config.num_cameras, 4, 4}};
