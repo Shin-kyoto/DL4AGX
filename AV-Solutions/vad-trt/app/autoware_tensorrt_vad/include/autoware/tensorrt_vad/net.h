@@ -41,13 +41,15 @@ struct Net {
   ICudaEngine* engine;
   IExecutionContext* context;
   nv::TensorMap bindings;
+  std::unique_ptr<autoware::tensorrt_common::TrtCommon> trt_common;
 
   Net(
     std::string engine_path, 
     IRuntime* runtime, 
     nv::TensorMap& ext,
-    std::optional<std::reference_wrapper<autoware::tensorrt_common::TrtCommon>> trt_common_opt = std::nullopt
-  ) {
+    std::unique_ptr<autoware::tensorrt_common::TrtCommon> trt_common_to_own = nullptr
+  ): trt_common{std::move(trt_common_to_own)}
+  {
     std::ifstream engine_file(engine_path, std::ios::binary);
     if (!engine_file) {
       throw std::runtime_error("Error opening engine file: " + engine_path);
@@ -65,44 +67,47 @@ struct Net {
 
     int nb = engine->getNbIOTensors();  
 
-    if (trt_common_opt.has_value()) {
-      autoware::tensorrt_common::TrtCommon & trt_common = trt_common_opt->get();
-      int32_t nb = trt_common.getNbIOTensors();
-      
+    if (trt_common) {
+      int32_t nb = trt_common->getNbIOTensors();
+
       for (int32_t n = 0; n < nb; n++) {
-        std::string name = trt_common.getIOTensorName(n);
-        Dims d = trt_common.getTensorShape(name.c_str());
+        std::string name = trt_common->getIOTensorName(n);
+        Dims d = trt_common->getTensorShape(name.c_str());
         DataType dtype = engine->getTensorDataType(name.c_str());
         
         if (ext.find(name) != ext.end()) {
           // use external memory
-          trt_common.setTensorAddress(name.c_str(), ext[name]->ptr);
+          trt_common->setTensorAddress(name.c_str(), ext[name]->ptr);
         } else {
           bindings[name] = std::make_shared<Tensor>(name, d, dtype);
-          trt_common.setTensorAddress(name.c_str(), bindings[name]->ptr);
+          trt_common->setTensorAddress(name.c_str(), bindings[name]->ptr);
         }
       }
       
-    }
-
-    for( int n=0; n<nb; n++ ) {
-      std::string name = engine->getIOTensorName(n);
-      Dims d = engine->getTensorShape(name.c_str());      
-      DataType dtype = engine->getTensorDataType(name.c_str());
-      if( ext.find(name) != ext.end() ) {
-        // use external memory
-        context->setTensorAddress(name.c_str(), ext[name]->ptr);
-      } else {
-        bindings[name] = std::make_shared<Tensor>(name, d, dtype);
-        // bindings[name]->iomode = engine->getTensorIOMode(name.c_str());
-        std::cout << *(bindings[name]) << std::endl;
-        context->setTensorAddress(name.c_str(), bindings[name]->ptr);
-      }      
+    } else {
+      for( int n=0; n<nb; n++ ) {
+        std::string name = engine->getIOTensorName(n);
+        Dims d = engine->getTensorShape(name.c_str());      
+        DataType dtype = engine->getTensorDataType(name.c_str());
+        if( ext.find(name) != ext.end() ) {
+          // use external memory
+          context->setTensorAddress(name.c_str(), ext[name]->ptr);
+        } else {
+          bindings[name] = std::make_shared<Tensor>(name, d, dtype);
+          // bindings[name]->iomode = engine->getTensorIOMode(name.c_str());
+          std::cout << *(bindings[name]) << std::endl;
+          context->setTensorAddress(name.c_str(), bindings[name]->ptr);
+        }      
+      }
     }
   }
 
   void Enqueue(cudaStream_t stream) {
-    context->enqueueV3(stream);
+    if (trt_common) {
+      trt_common->enqueueV3(stream);
+    } else {
+      context->enqueueV3(stream);
+    }
   }
 
   ~Net() {
