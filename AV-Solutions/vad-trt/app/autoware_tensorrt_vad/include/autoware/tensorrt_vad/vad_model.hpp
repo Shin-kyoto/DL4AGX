@@ -211,16 +211,14 @@ public:
     logger_->info("Building all TensorRT engines (this may take several minutes)...");
 
     // 1. Build backbone engine (permanent)
-    logger_->info("Building backbone engine...");
-    auto backbone_trt = build_backbone_engine(backbone_config, backbone_network_io);
+    auto backbone_trt = build_engine(backbone_config, backbone_network_io, "backbone");
     if (!backbone_trt) {
       logger_->error("Failed to build backbone engine");
       return {nullptr, nullptr, nullptr};
     }
 
     // 2. Build head engine
-    logger_->info("Building head engine...");
-    auto head_trt = build_head_engine(head_config, head_network_io);
+    auto head_trt = build_engine(head_config, head_network_io, "head");
     if (!head_trt) {
       logger_->error("Failed to build head engine");
       return {nullptr, nullptr, nullptr};
@@ -229,8 +227,7 @@ public:
     logger_->info("Releasing head engine to save GPU memory");
 
     // 3. Build head_no_prev engine
-    logger_->info("Building head_no_prev engine...");
-    auto head_no_prev_trt = build_head_no_prev_engine(head_no_prev_config, head_no_prev_network_io);
+    auto head_no_prev_trt = build_engine(head_no_prev_config, head_no_prev_network_io, "head_no_prev");
     if (!head_no_prev_trt) {
       logger_->error("Failed to build head_no_prev engine");
       return {nullptr, nullptr, nullptr};
@@ -242,65 +239,24 @@ public:
   }
 
   // エンジンビルド専用メソッド
-  std::unique_ptr<autoware::tensorrt_common::TrtCommon> build_backbone_engine(
-      const autoware::tensorrt_common::TrtCommonConfig& backbone_config,
-      const std::vector<tensorrt_common::NetworkIO>& backbone_network_io) {
-    logger_->info("Building backbone engine...");
+  std::unique_ptr<autoware::tensorrt_common::TrtCommon> build_engine(
+      const autoware::tensorrt_common::TrtCommonConfig& config,
+      const std::vector<tensorrt_common::NetworkIO>& network_io,
+      const std::string& engine_name) {
+    logger_->info("Building " + engine_name + " engine...");
     try {
-      auto backbone_trt = std::make_unique<autoware::tensorrt_common::TrtCommon>(
-        backbone_config, std::make_shared<autoware::tensorrt_common::Profiler>(),
+      auto trt = std::make_unique<autoware::tensorrt_common::TrtCommon>(
+        config, std::make_shared<autoware::tensorrt_common::Profiler>(),
         std::vector<std::string>{config_.plugins_path});
-      auto backbone_network_io_ptr = std::make_unique<std::vector<tensorrt_common::NetworkIO>>(backbone_network_io);
-      if (!backbone_trt->setup(nullptr, std::move(backbone_network_io_ptr))) {
-        logger_->error("Failed to setup backbone TrtCommon");
+      auto network_io_ptr = std::make_unique<std::vector<tensorrt_common::NetworkIO>>(network_io);
+      if (!trt->setup(nullptr, std::move(network_io_ptr))) {
+        logger_->error("Failed to setup " + engine_name + " TrtCommon");
         return nullptr;
       }
-      logger_->info("Backbone engine built successfully");
-      return backbone_trt;
+      logger_->info(engine_name + " engine built successfully");
+      return trt;
     } catch (const std::exception& e) {
-      logger_->error("Exception building backbone engine: " + std::string(e.what()));
-      return nullptr;
-    }
-  }
-
-  std::unique_ptr<autoware::tensorrt_common::TrtCommon> build_head_engine(
-      const autoware::tensorrt_common::TrtCommonConfig& head_config,
-      const std::vector<tensorrt_common::NetworkIO>& head_network_io) {
-    logger_->info("Building head engine...");
-    try {
-      auto head_trt = std::make_unique<autoware::tensorrt_common::TrtCommon>(
-        head_config, std::make_shared<autoware::tensorrt_common::Profiler>(),
-        std::vector<std::string>{config_.plugins_path});
-      auto head_network_io_ptr = std::make_unique<std::vector<tensorrt_common::NetworkIO>>(head_network_io);
-      if (!head_trt->setup(nullptr, std::move(head_network_io_ptr))) {
-        logger_->error("Failed to setup head TrtCommon");
-        return nullptr;
-      }
-      logger_->info("Head engine built successfully");
-      return head_trt;
-    } catch (const std::exception& e) {
-      logger_->error("Exception building head engine: " + std::string(e.what()));
-      return nullptr;
-    }
-  }
-
-  std::unique_ptr<autoware::tensorrt_common::TrtCommon> build_head_no_prev_engine(
-      const autoware::tensorrt_common::TrtCommonConfig& head_no_prev_config,
-      const std::vector<tensorrt_common::NetworkIO>& head_no_prev_network_io) {
-    logger_->info("Building head_no_prev engine...");
-    try {
-      auto head_no_prev_trt = std::make_unique<autoware::tensorrt_common::TrtCommon>(
-        head_no_prev_config, std::make_shared<autoware::tensorrt_common::Profiler>(),
-        std::vector<std::string>{config_.plugins_path});
-      auto head_no_prev_network_io_ptr = std::make_unique<std::vector<tensorrt_common::NetworkIO>>(head_no_prev_network_io);
-      if (!head_no_prev_trt->setup(nullptr, std::move(head_no_prev_network_io_ptr))) {
-        logger_->error("Failed to setup head_no_prev TrtCommon");
-        return nullptr;
-      }
-      logger_->info("Head_no_prev engine built successfully");
-      return head_no_prev_trt;
-    } catch (const std::exception& e) {
-      logger_->error("Exception building head_no_prev engine: " + std::string(e.what()));
+      logger_->error("Exception building " + engine_name + " engine: " + std::string(e.what()));
       return nullptr;
     }
   }
