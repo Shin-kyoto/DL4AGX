@@ -4,11 +4,11 @@
       num_cameras: 6
     interface_params:
       # # awsim
-      input_image_width: 1920
-      input_image_height: 1080
+      # input_image_width: 1920
+      # input_image_height: 1080
       # # autoware xx1
-      # input_image_width: 1466
-      # input_image_height: 1122
+      input_image_width: 1466
+      input_image_height: 1122
       # nuScenes
       # input_image_width: 1653
       # input_image_height: 940
@@ -52,13 +52,13 @@
       nets:
         backbone:
           name: "backbone"
-          onnx_path: "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/onnx_files/vadv1.extract_img_feat/sim_vadv1.extract_img_feat.onnx"
-          engine_path: "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX_ns_rosbag/DL4AGX/AV-Solutions/vad-trt/app/autoware_tensorrt_vad/build/vad-tiny_backbone.engine"
+          onnx_path: "./data/sim_vadv1.extract_img_feat.onnx"
+          engine_path: "./data/vad-tiny_backbone.engine"
           precision: "fp16"
         head:
           name: "head"
-          onnx_path: "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/onnx_files/vadv1_prev.pts_bbox_head.forward/sim_vadv1_prev.pts_bbox_head.forward.onnx"
-          engine_path: "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX_ns_rosbag/DL4AGX/AV-Solutions/vad-trt/app/autoware_tensorrt_vad/build/vad-tiny_head.engine"
+          onnx_path: "./data/sim_vadv1_prev.pts_bbox_head.forward.onnx"
+          engine_path: "./data/vad-tiny_head.engine"
           precision: "fp32"
           inputs:
             "input_feature": "mlvl_feats.0"
@@ -66,8 +66,8 @@
             "name": "out.0"
         head_no_prev:
           name: "head_no_prev"
-          onnx_path: "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/onnx_files/vadv1.pts_bbox_head.forward/sim_vadv1.pts_bbox_head.forward.onnx"
-          engine_path: "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX_ns_rosbag/DL4AGX/AV-Solutions/vad-trt/app/autoware_tensorrt_vad/build/vad-tiny_head_no_prev.engine"
+          onnx_path: "./data/sim_vadv1.pts_bbox_head.forward.onnx"
+          engine_path: "./data/vad-tiny_head_no_prev.engine"
           precision: "fp32"
           inputs:
             "input_feature": "mlvl_feats.0"
