@@ -366,18 +366,8 @@ private:
     return head_network_io;
   }
 
-  // NetworkIO設定を生成するメソッド
-  std::tuple<
-    std::vector<tensorrt_common::NetworkIO>,
-    std::vector<tensorrt_common::NetworkIO>,
-    std::vector<tensorrt_common::NetworkIO>
-  > generate_network_io_configs(VadConfig vad_config) {
-    logger_->info("Generating NetworkIO configurations");
-    std::vector<tensorrt_common::NetworkIO> backbone_network_io = generate_network_io_backbone(vad_config);
-    std::vector<tensorrt_common::NetworkIO> head_network_io = generate_network_io_head(vad_config);
-    std::vector<tensorrt_common::NetworkIO> head_no_prev_network_io;
-
-    // Common dimensions for head networks
+  // Head No Previous NetworkIO設定生成関数
+  std::vector<tensorrt_common::NetworkIO> generate_network_io_head_no_prev(const VadConfig& vad_config) {
     int32_t downsampled_image_height = vad_config.target_image_height / vad_config.downsample_factor;
     int32_t downsampled_image_width = vad_config.target_image_width / vad_config.downsample_factor;
     nvinfer1::Dims mlvl_dims{5, {1, vad_config.num_cameras, vad_config.bev_feature_dim, downsampled_image_height, downsampled_image_width}};
@@ -393,8 +383,7 @@ private:
     nvinfer1::Dims map_all_cls_scores_dims{4, {3, 1, vad_config.map_num_queries, vad_config.map_num_class}};
     nvinfer1::Dims map_all_pts_preds_dims{5, {3, 1, vad_config.map_num_queries, vad_config.map_points_per_polylines, 2}};
     nvinfer1::Dims map_all_bbox_preds_dims{4, {3, 1, vad_config.map_num_queries, 4}};
-
-    // Head No Previous Network IO Configuration (without prev_bev input)
+    std::vector<tensorrt_common::NetworkIO> head_no_prev_network_io;
     head_no_prev_network_io.emplace_back("mlvl_feats.0", mlvl_dims);
     head_no_prev_network_io.emplace_back("img_metas.0[can_bus]", can_bus_dims);
     head_no_prev_network_io.emplace_back("img_metas.0[lidar2img]", lidar2img_dims);
@@ -408,6 +397,19 @@ private:
     head_no_prev_network_io.emplace_back("out.map_all_cls_scores", map_all_cls_scores_dims);
     head_no_prev_network_io.emplace_back("out.map_all_pts_preds", map_all_pts_preds_dims);
     head_no_prev_network_io.emplace_back("out.map_all_bbox_preds", map_all_bbox_preds_dims);
+    return head_no_prev_network_io;
+  }
+
+  // NetworkIO設定を生成するメソッド
+  std::tuple<
+    std::vector<tensorrt_common::NetworkIO>,
+    std::vector<tensorrt_common::NetworkIO>,
+    std::vector<tensorrt_common::NetworkIO>
+  > generate_network_io_configs(VadConfig vad_config) {
+    logger_->info("Generating NetworkIO configurations");
+    std::vector<tensorrt_common::NetworkIO> backbone_network_io = generate_network_io_backbone(vad_config);
+    std::vector<tensorrt_common::NetworkIO> head_network_io = generate_network_io_head(vad_config);
+    std::vector<tensorrt_common::NetworkIO> head_no_prev_network_io = generate_network_io_head_no_prev(vad_config);
 
     logger_->info("NetworkIO configurations generated successfully");
     return {backbone_network_io, head_network_io, head_no_prev_network_io};
