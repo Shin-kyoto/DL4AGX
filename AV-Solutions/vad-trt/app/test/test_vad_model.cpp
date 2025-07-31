@@ -24,7 +24,6 @@ protected:
         
         NetConfig backbone_config;
         backbone_config.name = "backbone";
-        backbone_config.engine_file = "/tmp/test_backbone.engine";
         
         config_.nets_config.push_back(backbone_config);
     }
@@ -92,7 +91,6 @@ TEST_F(VadModelTest, VadModelConfigStructure)
     // ネットワーク設定の検証
     const auto& net_conf = config_.nets_config[0];
     EXPECT_EQ(net_conf.name, "backbone");
-    EXPECT_EQ(net_conf.engine_file, "/tmp/test_backbone.engine");
 }
 
 }  // namespace autoware::tensorrt_vad

@@ -53,7 +53,6 @@ std::pair<VadModelConfig, TestConfig> load_config_from_yaml(const std::string& c
         for (const auto& net : nets) {
             NetConfig net_config;
             net_config.name = net.second["name"].as<std::string>();
-            net_config.engine_file = net.second["engine_file"].as<std::string>();
             
             if (net.second["inputs"]) {
                 const auto& inputs = net.second["inputs"];
@@ -144,17 +143,13 @@ protected:
         test_config_ = test_config;
         
         // 前提条件のチェック
-        bool engines_exist = 
-            std::filesystem::exists(config_.nets_config[0].engine_file) &&
-            std::filesystem::exists(config_.nets_config[1].engine_file) &&
-            std::filesystem::exists(config_.nets_config[2].engine_file);
         bool plugin_exists = std::filesystem::exists(config_.plugins_path);
         
         int device_count = 0;
         cudaError_t cuda_status = cudaGetDeviceCount(&device_count);
         bool cuda_available = (cuda_status == cudaSuccess && device_count > 0);
         
-        integration_test_enabled_ = engines_exist && plugin_exists && cuda_available;
+        integration_test_enabled_ =  plugin_exists && cuda_available;
 
         if (!integration_test_enabled_) {
             GTEST_SKIP() << "Integration test requirements not met.";
@@ -176,16 +171,13 @@ protected:
         
         NetConfig backbone_config;
         backbone_config.name = config_.nets_config[0].name;
-        backbone_config.engine_file = config_.nets_config[0].engine_file;
         
         NetConfig head_no_prev_config;
         head_no_prev_config.name = config_.nets_config[1].name;
-        head_no_prev_config.engine_file = config_.nets_config[1].engine_file;
         head_no_prev_config.inputs["img_feats"] = config_.nets_config[1].inputs["img_feats"];
         
         NetConfig head_config;
         head_config.name = config_.nets_config[2].name;
-        head_config.engine_file = config_.nets_config[2].engine_file;
         head_config.inputs["img_feats"] = config_.nets_config[2].inputs["img_feats"];
         
         config.nets_config = {backbone_config, head_no_prev_config, head_config};

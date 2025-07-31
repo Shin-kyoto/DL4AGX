@@ -112,7 +112,6 @@ std::vector<std::vector<float>> postprocess_bbox_preds(
 struct NetConfig
 {
   std::string name;
-  std::string engine_file;
   std::map<std::string, std::map<std::string, std::string>> inputs;
 };
 

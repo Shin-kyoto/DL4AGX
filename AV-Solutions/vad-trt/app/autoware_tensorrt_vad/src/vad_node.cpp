@@ -262,12 +262,10 @@ VadModelConfig VadNode::load_vad_model_config()
   // backbone configuration
   NetConfig backbone_config;
   backbone_config.name = this->declare_parameter<std::string>("model_params.nets.backbone.name");
-  backbone_config.engine_file = this->declare_parameter<std::string>("model_params.nets.backbone.engine_file");
 
   // head configuration
   NetConfig head_config;
   head_config.name = this->declare_parameter<std::string>("model_params.nets.head.name");
-  head_config.engine_file = this->declare_parameter<std::string>("model_params.nets.head.engine_file");
 
   // head inputs
   std::string input_feature = this->declare_parameter<std::string>("model_params.nets.head.inputs.input_feature");
@@ -279,7 +277,6 @@ VadModelConfig VadNode::load_vad_model_config()
   // head_no_prev configuration
   NetConfig head_no_prev_config;
   head_no_prev_config.name = this->declare_parameter<std::string>("model_params.nets.head_no_prev.name");
-  head_no_prev_config.engine_file = this->declare_parameter<std::string>("model_params.nets.head_no_prev.engine_file");
 
   // head_no_prev inputs
   std::string input_feature_no_prev = this->declare_parameter<std::string>("model_params.nets.head_no_prev.inputs.input_feature");
