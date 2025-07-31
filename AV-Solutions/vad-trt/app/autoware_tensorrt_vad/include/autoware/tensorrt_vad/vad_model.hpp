@@ -165,11 +165,6 @@ public:
     // 初期化を実行
     runtime_ = create_runtime();
     
-    if (!load_plugin(config.plugins_path)) {
-      logger_->error("Failed to load plugin");
-      return;
-    }
-    
     cudaStreamCreate(&stream_);
 
     // TensorRTエンジン初期化
@@ -436,17 +431,6 @@ private:
 
     logger_->info("NetworkIO configurations generated successfully");
     return {backbone_network_io, head_network_io, head_no_prev_network_io};
-  }
-
-  bool load_plugin(const std::string& plugin_dir) {
-    void* h_ = dlopen(plugin_dir.c_str(), RTLD_NOW);
-    logger_->info("loading plugin from: " + plugin_dir);
-    if (!h_) {
-      const char* error = dlerror();
-      logger_->error("Failed to load library: " + std::string(error ? error : "unknown error"));
-      return false;
-    }
-    return true;
   }
 
   std::unordered_map<std::string, std::shared_ptr<nv::Net>> init_engines(
