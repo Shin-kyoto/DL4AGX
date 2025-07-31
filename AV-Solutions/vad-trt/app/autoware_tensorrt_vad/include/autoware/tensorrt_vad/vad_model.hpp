@@ -122,7 +122,7 @@ struct VadModelConfig
   std::vector<NetConfig> nets_config;
 };
 
-// NetworkIO configuration parameters (Task 3.1)
+// NetworkIO configuration parameters
 struct VadConfig
 {
   int32_t num_cameras;
