@@ -37,22 +37,6 @@ namespace autoware::tensorrt_vad
 // Forward declarations
 struct VadModelConfig;
 
-// Loggerクラス（VadModel内で使用）
-class Logger : public nvinfer1::ILogger {
-private:
-    std::shared_ptr<VadLogger> custom_logger_;
-
-public:
-    Logger(std::shared_ptr<VadLogger> logger) : custom_logger_(logger) {}
-    
-    void log(nvinfer1::ILogger::Severity severity, const char* msg) noexcept override {
-        // Only print error messages
-        if (severity == nvinfer1::ILogger::Severity::kERROR && custom_logger_) {
-            custom_logger_->error(std::string(msg));
-        }
-    }
-};
-
 // VAD推論の入力データ構造
 struct VadInputData
 {
