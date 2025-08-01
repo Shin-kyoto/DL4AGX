@@ -111,7 +111,7 @@ public:
     const autoware::tensorrt_common::TrtCommonConfig& head_config,
     const autoware::tensorrt_common::TrtCommonConfig& head_no_prev_config,
     std::shared_ptr<LoggerType> logger)
-    : stream_(nullptr), initialized_(false), is_first_frame_(true), 
+    : stream_(nullptr), is_first_frame_(true), 
       config_(config), logger_(std::move(logger)), vad_config_(vad_config), head_trt_config_(head_config)
   {
     // loggerはVadLoggerを継承したclassのみ受け取る
@@ -121,7 +121,6 @@ public:
     cudaStreamCreate(&stream_);
     
     nets_ = init_engines(config.nets_config, vad_config, backbone_config, head_config, head_no_prev_config);
-    initialized_ = true;
   }
 
   // デストラクタ
@@ -134,8 +133,6 @@ public:
     
     // netsのクリーンアップ
     nets_.clear();
-    
-    initialized_ = false;
   }
 
   // メイン推論API
@@ -173,7 +170,6 @@ public:
   // メンバ変数
   cudaStream_t stream_;
   std::unordered_map<std::string, std::shared_ptr<Net>> nets_;
-  bool initialized_;
 
   // 前回のBEV特徴量保存用
   std::shared_ptr<Tensor> saved_prev_bev_;

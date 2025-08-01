@@ -130,8 +130,6 @@ TEST_F(VadIntegrationTest, ModelInitializationWithRealEngines)
             mock_logger_);
     }) << "VadModel initialization failed with real engine files. "
        << "Check if paths are correct and files are not corrupted.";
-    
-    ASSERT_TRUE(model->initialized_) << "Model should be marked as initialized.";
 }
 
 class VadInferIntegrationTest : public ::testing::Test {
