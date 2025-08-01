@@ -27,6 +27,7 @@
 #include <cuda_runtime_api.h>
 #include <NvInfer.h>
 #include <NvInferRuntime.h>
+#include "autoware/tensorrt_vad/ros_vad_logger.hpp"
 
 namespace autoware::tensorrt_vad {
 
@@ -39,9 +40,10 @@ struct Tensor {
   nvinfer1::Dims dim;
   int32_t volume = 1;
   nvinfer1::DataType dtype;
+  std::shared_ptr<VadLogger> logger_;
 
   // Constructor
-  Tensor(std::string name, nvinfer1::Dims dim, nvinfer1::DataType dtype);
+  Tensor(std::string name, nvinfer1::Dims dim, nvinfer1::DataType dtype, std::shared_ptr<VadLogger> logger = nullptr);
 
   // Get number of bytes
   int32_t nbytes();

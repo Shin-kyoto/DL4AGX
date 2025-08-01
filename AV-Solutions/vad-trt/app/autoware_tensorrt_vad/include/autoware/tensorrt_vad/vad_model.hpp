@@ -243,7 +243,7 @@ private:
 
   std::shared_ptr<Tensor> save_prev_bev(const std::string& head_name) {
     auto bev_embed = nets_[head_name]->bindings["out.bev_embed"];
-    auto prev_bev = std::make_shared<Tensor>("prev_bev", bev_embed->dim, bev_embed->dtype);
+    auto prev_bev = std::make_shared<Tensor>("prev_bev", bev_embed->dim, bev_embed->dtype, logger_);
     cudaMemcpyAsync(prev_bev->ptr, bev_embed->ptr, bev_embed->nbytes(), 
                     cudaMemcpyDeviceToDevice, stream_);
     return prev_bev;

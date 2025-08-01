@@ -42,8 +42,8 @@ unsigned int getElementSize(nvinfer1::DataType t) {
   }
 }
 
-Tensor::Tensor(std::string name, nvinfer1::Dims dim, nvinfer1::DataType dtype): 
-  name(name), dim(dim), dtype(dtype) 
+Tensor::Tensor(std::string name, nvinfer1::Dims dim, nvinfer1::DataType dtype, std::shared_ptr<VadLogger> logger): 
+  name(name), dim(dim), dtype(dtype), logger_(logger) 
 {
   if( dim.nbDims == 0 ) {
     volume = 0;
@@ -63,7 +63,7 @@ int32_t Tensor::nbytes() {
 template<class Dtype>
 void Tensor::load(const std::vector<float>& data, cudaStream_t stream) {
   if (static_cast<int32_t>(data.size()) != volume) {
-    // Note: Error logging should be handled by caller std::cerr << "Data size mismatch: expected " << volume << ", got " << data.size() << std::endl;
+    logger_->error("Data size mismatch: expected " + std::to_string(volume) + ", got " + std::to_string(data.size()));
     return;
   }
   

@@ -187,7 +187,7 @@ void Net::set_input_tensor_backbone(TensorMap& ext) {
       // use external memory
       trt_common->setTensorAddress(name.c_str(), ext[name]->ptr);
     } else {
-      bindings[name] = std::make_shared<Tensor>(name, d, dtype);
+      bindings[name] = std::make_shared<Tensor>(name, d, dtype, logger_);
       trt_common->setTensorAddress(name.c_str(), bindings[name]->ptr);
     }
   }
@@ -205,7 +205,7 @@ void Net::set_input_tensor_head(TensorMap& ext) {
       // use external memory
       trt_common->setTensorAddress(name.c_str(), ext[name]->ptr);
     } else {
-      bindings[name] = std::make_shared<Tensor>(name, d, dtype);
+      bindings[name] = std::make_shared<Tensor>(name, d, dtype, logger_);
       trt_common->setTensorAddress(name.c_str(), bindings[name]->ptr);
     }
   }
