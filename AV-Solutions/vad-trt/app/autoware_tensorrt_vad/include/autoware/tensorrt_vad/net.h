@@ -81,7 +81,7 @@ std::unique_ptr<autoware::tensorrt_common::TrtCommon> build_engine(
 // TensorRT初期化API（事前ビルド方式）
 std::unique_ptr<autoware::tensorrt_common::TrtCommon> init_tensorrt(
     const VadConfig& vad_config,
-    const autoware::tensorrt_common::TrtCommonConfig& config,
+    const autoware::tensorrt_common::TrtCommonConfig& trt_common_config,
     const std::string& name,
     const std::string& plugins_path);
 
@@ -272,7 +272,7 @@ inline std::unique_ptr<autoware::tensorrt_common::TrtCommon> build_engine(
 // TensorRT初期化API（事前ビルド方式）
 inline std::unique_ptr<autoware::tensorrt_common::TrtCommon> init_tensorrt(
     const VadConfig& vad_config,
-    const autoware::tensorrt_common::TrtCommonConfig& config,
+    const autoware::tensorrt_common::TrtCommonConfig& trt_common_config,
     const std::string& name,
     const std::string& plugins_path) {
   std::cout << "Initializing TensorRT engine: " << name << std::endl;
@@ -291,7 +291,7 @@ inline std::unique_ptr<autoware::tensorrt_common::TrtCommon> init_tensorrt(
   }
 
   // Build engine
-  auto engine = build_engine(config, network_io, name, plugins_path);
+  auto engine = build_engine(trt_common_config, network_io, name, plugins_path);
   if (!engine) {
     std::cout << "Failed to build " << name << " engine" << std::endl;
     return nullptr;
