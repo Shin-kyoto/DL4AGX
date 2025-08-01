@@ -28,6 +28,7 @@
 #include <map>
 
 #include <autoware/tensorrt_common/tensorrt_common.hpp>
+#include "ros_vad_logger.hpp"
 
 namespace autoware::tensorrt_vad
 {

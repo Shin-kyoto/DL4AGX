@@ -28,22 +28,11 @@
 #include <cuda_runtime_api.h>
 
 #include "tensor.hpp"
+#include "ros_vad_logger.hpp"
 
 #include <autoware/tensorrt_common/tensorrt_common.hpp>
 
 namespace autoware::tensorrt_vad {
-
-// VadLogger interface definition
-class VadLogger {
-public:
-  virtual ~VadLogger() = default;
-  
-  // 各ログレベルのメソッドを純粋仮想関数として定義
-  virtual void debug(const std::string& message) = 0;
-  virtual void info(const std::string& message) = 0;
-  virtual void warn(const std::string& message) = 0;
-  virtual void error(const std::string& message) = 0;
-};
 
 // NetworkIO configuration parameters
 struct VadConfig
