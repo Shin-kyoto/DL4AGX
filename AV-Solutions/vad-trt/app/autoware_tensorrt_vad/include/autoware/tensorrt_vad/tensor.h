@@ -19,7 +19,6 @@
 #define _TENSOR_H_
 
 #include <memory>
-#include <fstream>
 #include <vector>
 #include <unordered_map>
 
@@ -109,13 +108,6 @@ struct Tensor {
     return buffer;
   }
 
-  std::vector<char> load_ref(std::string fname) {
-    size_t bsize = volume * sizeof(float);
-    std::vector<char> buffer(bsize);
-    std::ifstream file_(fname, std::ios::binary);
-    file_.read(buffer.data(), bsize);
-    return buffer;
-  }
 }; // struct Tensor
 
 using TensorMap = std::unordered_map<std::string, std::shared_ptr<Tensor>>;
