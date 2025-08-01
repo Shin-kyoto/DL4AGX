@@ -171,7 +171,6 @@ Net::Net(
   trt_common = init_tensorrt(vad_config, trt_common_config, name, plugins_path, logger_);
   if (!trt_common) {
     logger_->error("Failed to initialize TensorRT engine: " + name);
-    throw std::runtime_error("Failed to initialize TensorRT engine: " + name);
   }
 }
 
