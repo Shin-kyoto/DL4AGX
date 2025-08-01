@@ -17,7 +17,7 @@
 
 #include "autoware/tensorrt_vad/tensor.h"
 
-std::ostream& operator<<(std::ostream& os, nv::Tensor& t) {
+std::ostream& operator<<(std::ostream& os, autoware::tensorrt_vad::Tensor& t) {
   // os << "[" << (int)(t.iomode) << "] ";
   os << t.name << ", [";
   

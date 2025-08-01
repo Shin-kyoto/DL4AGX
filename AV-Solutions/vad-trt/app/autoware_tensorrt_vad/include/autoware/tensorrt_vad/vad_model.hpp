@@ -34,34 +34,8 @@ namespace autoware::tensorrt_vad
 {
 
 // Forward declarations
-struct VadConfig;
 struct VadModelConfig;
 class VadLogger;
-
-// Standalone functions for NetworkIO generation and engine building
-
-// Backbone NetworkIO設定生成関数
-std::vector<tensorrt_common::NetworkIO> generate_network_io_backbone(const VadConfig& vad_config);
-
-// Head NetworkIO設定生成関数
-std::vector<tensorrt_common::NetworkIO> generate_network_io_head(const VadConfig& vad_config);
-
-// Head No Previous NetworkIO設定生成関数
-std::vector<tensorrt_common::NetworkIO> generate_network_io_head_no_prev(const VadConfig& vad_config);
-
-// エンジンビルド専用関数
-std::unique_ptr<autoware::tensorrt_common::TrtCommon> build_engine(
-    const autoware::tensorrt_common::TrtCommonConfig& config,
-    const std::vector<tensorrt_common::NetworkIO>& network_io,
-    const std::string& engine_name,
-    const std::string& plugins_path);
-
-// TensorRT初期化API（事前ビルド方式）
-std::unique_ptr<autoware::tensorrt_common::TrtCommon> init_tensorrt(
-    const VadConfig& vad_config,
-    const autoware::tensorrt_common::TrtCommonConfig& trt_common_config,
-    const std::string& name,
-    const std::string& plugins_path);
 
 // ロガーインターフェース
 class VadLogger {
@@ -153,29 +127,6 @@ struct VadModelConfig
   std::vector<NetConfig> nets_config;
 };
 
-// NetworkIO configuration parameters
-struct VadConfig
-{
-  int32_t num_cameras;
-  int32_t bev_h, bev_w;
-  int32_t bev_feature_dim;
-  int32_t num_decoder_layers;
-  int32_t prediction_num_queries;
-  int32_t prediction_num_classes;
-  int32_t prediction_bbox_pred_dim;
-  int32_t prediction_trajectory_modes;
-  int32_t prediction_timesteps;
-  int32_t planning_ego_commands;
-  int32_t planning_timesteps;
-  int32_t can_bus_dim;
-  int32_t target_image_width;
-  int32_t target_image_height;
-  int32_t downsample_factor;
-  int32_t map_num_queries;
-  int32_t map_num_class;
-  int32_t map_points_per_polylines;
-};
-
 // VADモデルクラス - CUDA/TensorRTを用いた推論を担当
 template<typename LoggerType>
 class VadModel
@@ -188,7 +139,8 @@ public:
     const autoware::tensorrt_common::TrtCommonConfig& head_config,
     const autoware::tensorrt_common::TrtCommonConfig& head_no_prev_config,
     std::shared_ptr<LoggerType> logger)
-    : stream_(nullptr), initialized_(false), is_first_frame_(true), config_(config), logger_(std::move(logger))
+    : stream_(nullptr), initialized_(false), is_first_frame_(true), 
+      config_(config), logger_(std::move(logger)), vad_config_(vad_config), head_trt_config_(head_config)
   {
     // loggerはVadLoggerを継承したclassのみ受け取る
     static_assert(std::is_base_of_v<VadLogger, LoggerType>, 
@@ -198,36 +150,11 @@ public:
     
     cudaStreamCreate(&stream_);
 
-    // TensorRTエンジン初期化
     std::cout << "Building all TensorRT engines (this may take several minutes)..." << std::endl;
     
-    // 1. Build backbone engine (permanent)
-    auto backbone_trt = init_tensorrt(vad_config, backbone_config, "backbone", config.plugins_path);
-    if (!backbone_trt) {
-      logger_->error("Failed to initialize backbone TensorRT engine");
-      initialized_ = false;
-      return;
-    }
-
-    // 2. Build head engine
-    auto head_trt_tmp = init_tensorrt(vad_config, head_config, "head", config.plugins_path);
-    if (!head_trt_tmp) {
-      logger_->error("Failed to initialize head TensorRT engine");
-      initialized_ = false;
-      return;
-    }
-    
-    // 3. Build head_no_prev engine
-    auto head_no_prev_trt = init_tensorrt(vad_config, head_no_prev_config, "head_no_prev", config.plugins_path);
-    if (!head_no_prev_trt) {
-      logger_->error("Failed to initialize head_no_prev TensorRT engine");
-      initialized_ = false;
-      return;
-    }
-
+    // 今回は個別に作るのではなく、init_enginesで作成
+    nets_ = init_engines(config.nets_config, vad_config, backbone_config, head_no_prev_config);
     std::cout << "All TensorRT engines initialized successfully" << std::endl;
-    head_trt_ = std::move(head_trt_tmp);
-    nets_ = init_engines(config.nets_config, std::move(backbone_trt), std::move(head_no_prev_trt));
     initialized_ = true;
   }
 
@@ -280,11 +207,11 @@ public:
   // メンバ変数
   std::unique_ptr<nvinfer1::IRuntime, std::function<void(nvinfer1::IRuntime*)>> runtime_;
   cudaStream_t stream_;
-  std::unordered_map<std::string, std::shared_ptr<nv::Net>> nets_;
+  std::unordered_map<std::string, std::shared_ptr<Net>> nets_;
   bool initialized_;
 
   // 前回のBEV特徴量保存用
-  std::shared_ptr<nv::Tensor> saved_prev_bev_;
+  std::shared_ptr<Tensor> saved_prev_bev_;
   bool is_first_frame_;
 
   // 設定情報の保存
@@ -294,7 +221,8 @@ public:
   std::shared_ptr<VadLogger> logger_;
 
 private:
-  std::unique_ptr<autoware::tensorrt_common::TrtCommon> head_trt_;
+  VadConfig vad_config_;
+  autoware::tensorrt_common::TrtCommonConfig head_trt_config_;
   std::unique_ptr<nvinfer1::IRuntime, std::function<void(nvinfer1::IRuntime*)>> create_runtime() {
     static std::unique_ptr<Logger> logger_instance = std::make_unique<Logger>(logger_);
     auto runtime_deleter = []([[maybe_unused]] nvinfer1::IRuntime *runtime) {};
@@ -303,18 +231,20 @@ private:
     return runtime;
   }
 
-  std::unordered_map<std::string, std::shared_ptr<nv::Net>> init_engines(
+  std::unordered_map<std::string, std::shared_ptr<Net>> init_engines(
       const std::vector<NetConfig>& nets_config,
-      std::unique_ptr<autoware::tensorrt_common::TrtCommon> backbone_trt,
-      std::unique_ptr<autoware::tensorrt_common::TrtCommon> head_no_prev_trt) {
+      const VadConfig& vad_config,
+      const autoware::tensorrt_common::TrtCommonConfig& backbone_config,
+      const autoware::tensorrt_common::TrtCommonConfig& head_no_prev_config) {
     
-    std::unordered_map<std::string, std::shared_ptr<nv::Net>> nets;
+    std::unordered_map<std::string, std::shared_ptr<Net>> nets;
     
     for (const auto& engine : nets_config) {
       if (engine.name == "head") {
-        continue;  // headは後で初期化
+        continue;  // headは後で初期化（最初のフレーム処理後）
       }
-      std::unordered_map<std::string, std::shared_ptr<nv::Tensor>> external_bindings;
+      
+      std::unordered_map<std::string, std::shared_ptr<Tensor>> external_bindings;
       // reuse memory
       for (const auto& input_pair : engine.inputs) {
         const std::string& k = input_pair.first;
@@ -326,11 +256,11 @@ private:
       }
 
       if (engine.name == "backbone") {
-        nets[engine.name] = std::make_shared<nv::Net>(
-          runtime_.get(), external_bindings, std::move(backbone_trt));
+        nets[engine.name] = std::make_shared<Net>(
+          runtime_.get(), external_bindings, vad_config, backbone_config, "backbone", config_.plugins_path);
       } else if (engine.name == "head_no_prev") {
-        nets[engine.name] = std::make_shared<nv::Net>(
-          runtime_.get(), external_bindings, std::move(head_no_prev_trt));
+        nets[engine.name] = std::make_shared<Net>(
+          runtime_.get(), external_bindings, vad_config, head_no_prev_config, "head_no_prev", config_.plugins_path);
       }
     }
     
@@ -355,9 +285,9 @@ private:
     cudaStreamSynchronize(stream_);
   }
 
-  std::shared_ptr<nv::Tensor> save_prev_bev(const std::string& head_name) {
+  std::shared_ptr<Tensor> save_prev_bev(const std::string& head_name) {
     auto bev_embed = nets_[head_name]->bindings["out.bev_embed"];
-    auto prev_bev = std::make_shared<nv::Tensor>("prev_bev", bev_embed->dim, bev_embed->dtype);
+    auto prev_bev = std::make_shared<Tensor>("prev_bev", bev_embed->dim, bev_embed->dtype);
     cudaMemcpyAsync(prev_bev->ptr, bev_embed->ptr, bev_embed->nbytes(), 
                     cudaMemcpyDeviceToDevice, stream_);
     return prev_bev;
@@ -385,7 +315,7 @@ private:
       return;
     }
     
-    std::unordered_map<std::string, std::shared_ptr<nv::Tensor>> external_bindings;
+    std::unordered_map<std::string, std::shared_ptr<Tensor>> external_bindings;
     for (const auto& input_pair : head_engine->inputs) {
       const std::string& k = input_pair.first;
       const auto& ext_map = input_pair.second;      
@@ -395,8 +325,9 @@ private:
       external_bindings[k] = nets_[ext_net]->bindings[ext_name];
     }
 
-    // head_trtを使ってNetを生成
-    nets_["head"] = std::make_shared<nv::Net>(runtime_.get(), external_bindings, std::move(head_trt_));
+    // 新しいNetコンストラクタを使用してheadを生成
+    nets_["head"] = std::make_shared<Net>(
+      runtime_.get(), external_bindings, vad_config_, head_trt_config_, "head", config_.plugins_path);
   }
 
   VadOutputData postprocess(const std::string& head_name, int32_t cmd) {
@@ -443,145 +374,6 @@ private:
     return VadOutputData{planning, all_trajectories};
   }
 };
-
-// Implementation of standalone functions
-
-// Backbone NetworkIO設定生成関数
-inline std::vector<tensorrt_common::NetworkIO> generate_network_io_backbone(const VadConfig& vad_config) {
-  int32_t downsampled_image_height = vad_config.target_image_height / vad_config.downsample_factor;
-  int32_t downsampled_image_width = vad_config.target_image_width / vad_config.downsample_factor;
-  nvinfer1::Dims camera_input_dims{4, {vad_config.num_cameras, 3, vad_config.target_image_height, vad_config.target_image_width}};
-  nvinfer1::Dims backbone_output_dims{5, {vad_config.num_cameras, 1, vad_config.bev_feature_dim, downsampled_image_height, downsampled_image_width}};
-  std::vector<tensorrt_common::NetworkIO> backbone_network_io;
-  backbone_network_io.emplace_back("img", camera_input_dims);
-  backbone_network_io.emplace_back("out.0", backbone_output_dims);
-  return backbone_network_io;
-}
-
-// Head NetworkIO設定生成関数
-inline std::vector<tensorrt_common::NetworkIO> generate_network_io_head(const VadConfig& vad_config) {
-  int32_t downsampled_image_height = vad_config.target_image_height / vad_config.downsample_factor;
-  int32_t downsampled_image_width = vad_config.target_image_width / vad_config.downsample_factor;
-  nvinfer1::Dims mlvl_dims{5, {1, vad_config.num_cameras, vad_config.bev_feature_dim, downsampled_image_height, downsampled_image_width}};
-  nvinfer1::Dims can_bus_dims{2, {1, vad_config.can_bus_dim}};
-  nvinfer1::Dims lidar2img_dims{3, {vad_config.num_cameras, 4, 4}};
-  nvinfer1::Dims shift_dims{2, {1, 2}};
-  nvinfer1::Dims prev_bev_dims{3, {vad_config.bev_h * vad_config.bev_w, 1, vad_config.bev_feature_dim}};
-  nvinfer1::Dims ego_fut_preds_dims{4, {1, vad_config.planning_ego_commands, vad_config.planning_timesteps, 2}};
-  nvinfer1::Dims traj_preds_dims{5, {3, 1, vad_config.prediction_num_queries, vad_config.prediction_trajectory_modes, vad_config.prediction_timesteps*2}};
-  nvinfer1::Dims traj_cls_dims{4, {3, 1, vad_config.prediction_num_queries, vad_config.prediction_trajectory_modes}};
-  nvinfer1::Dims bbox_preds_dims{4, {3, 1, vad_config.prediction_num_queries, vad_config.prediction_bbox_pred_dim}};
-  nvinfer1::Dims all_cls_scores_dims{4, {3, 1, vad_config.prediction_num_queries, vad_config.prediction_num_classes}};
-  nvinfer1::Dims map_all_cls_scores_dims{4, {3, 1, vad_config.map_num_queries, vad_config.map_num_class}};
-  nvinfer1::Dims map_all_pts_preds_dims{5, {3, 1, vad_config.map_num_queries, vad_config.map_points_per_polylines, 2}};
-  nvinfer1::Dims map_all_bbox_preds_dims{4, {3, 1, vad_config.map_num_queries, 4}};
-  std::vector<tensorrt_common::NetworkIO> head_network_io;
-  head_network_io.emplace_back("mlvl_feats.0", mlvl_dims);
-  head_network_io.emplace_back("img_metas.0[can_bus]", can_bus_dims);
-  head_network_io.emplace_back("img_metas.0[lidar2img]", lidar2img_dims);
-  head_network_io.emplace_back("img_metas.0[shift]", shift_dims);
-  head_network_io.emplace_back("prev_bev", prev_bev_dims);
-  head_network_io.emplace_back("out.bev_embed", prev_bev_dims);
-  head_network_io.emplace_back("out.ego_fut_preds", ego_fut_preds_dims);
-  head_network_io.emplace_back("out.all_traj_preds", traj_preds_dims);
-  head_network_io.emplace_back("out.all_traj_cls_scores", traj_cls_dims);
-  head_network_io.emplace_back("out.all_bbox_preds", bbox_preds_dims);
-  head_network_io.emplace_back("out.all_cls_scores", all_cls_scores_dims);
-  head_network_io.emplace_back("out.map_all_cls_scores", map_all_cls_scores_dims);
-  head_network_io.emplace_back("out.map_all_pts_preds", map_all_pts_preds_dims);
-  head_network_io.emplace_back("out.map_all_bbox_preds", map_all_bbox_preds_dims);
-  return head_network_io;
-}
-
-// Head No Previous NetworkIO設定生成関数
-inline std::vector<tensorrt_common::NetworkIO> generate_network_io_head_no_prev(const VadConfig& vad_config) {
-  int32_t downsampled_image_height = vad_config.target_image_height / vad_config.downsample_factor;
-  int32_t downsampled_image_width = vad_config.target_image_width / vad_config.downsample_factor;
-  nvinfer1::Dims mlvl_dims{5, {1, vad_config.num_cameras, vad_config.bev_feature_dim, downsampled_image_height, downsampled_image_width}};
-  nvinfer1::Dims can_bus_dims{2, {1, vad_config.can_bus_dim}};
-  nvinfer1::Dims lidar2img_dims{3, {vad_config.num_cameras, 4, 4}};
-  nvinfer1::Dims shift_dims{2, {1, 2}};
-  nvinfer1::Dims prev_bev_dims{3, {vad_config.bev_h * vad_config.bev_w, 1, vad_config.bev_feature_dim}};
-  nvinfer1::Dims ego_fut_preds_dims{4, {1, vad_config.planning_ego_commands, vad_config.planning_timesteps, 2}};
-  nvinfer1::Dims traj_preds_dims{5, {3, 1, vad_config.prediction_num_queries, vad_config.prediction_trajectory_modes, vad_config.prediction_timesteps*2}};
-  nvinfer1::Dims traj_cls_dims{4, {3, 1, vad_config.prediction_num_queries, vad_config.prediction_trajectory_modes}};
-  nvinfer1::Dims bbox_preds_dims{4, {3, 1, vad_config.prediction_num_queries, vad_config.prediction_bbox_pred_dim}};
-  nvinfer1::Dims all_cls_scores_dims{4, {3, 1, vad_config.prediction_num_queries, vad_config.prediction_num_classes}};
-  nvinfer1::Dims map_all_cls_scores_dims{4, {3, 1, vad_config.map_num_queries, vad_config.map_num_class}};
-  nvinfer1::Dims map_all_pts_preds_dims{5, {3, 1, vad_config.map_num_queries, vad_config.map_points_per_polylines, 2}};
-  nvinfer1::Dims map_all_bbox_preds_dims{4, {3, 1, vad_config.map_num_queries, 4}};
-  std::vector<tensorrt_common::NetworkIO> head_no_prev_network_io;
-  head_no_prev_network_io.emplace_back("mlvl_feats.0", mlvl_dims);
-  head_no_prev_network_io.emplace_back("img_metas.0[can_bus]", can_bus_dims);
-  head_no_prev_network_io.emplace_back("img_metas.0[lidar2img]", lidar2img_dims);
-  head_no_prev_network_io.emplace_back("img_metas.0[shift]", shift_dims);
-  head_no_prev_network_io.emplace_back("out.bev_embed", prev_bev_dims);
-  head_no_prev_network_io.emplace_back("out.ego_fut_preds", ego_fut_preds_dims);
-  head_no_prev_network_io.emplace_back("out.all_traj_preds", traj_preds_dims);
-  head_no_prev_network_io.emplace_back("out.all_traj_cls_scores", traj_cls_dims);
-  head_no_prev_network_io.emplace_back("out.all_bbox_preds", bbox_preds_dims);
-  head_no_prev_network_io.emplace_back("out.all_cls_scores", all_cls_scores_dims);
-  head_no_prev_network_io.emplace_back("out.map_all_cls_scores", map_all_cls_scores_dims);
-  head_no_prev_network_io.emplace_back("out.map_all_pts_preds", map_all_pts_preds_dims);
-  head_no_prev_network_io.emplace_back("out.map_all_bbox_preds", map_all_bbox_preds_dims);
-  return head_no_prev_network_io;
-}
-
-// エンジンビルド専用関数
-inline std::unique_ptr<autoware::tensorrt_common::TrtCommon> build_engine(
-    const autoware::tensorrt_common::TrtCommonConfig& trt_common_config,
-    const std::vector<tensorrt_common::NetworkIO>& network_io,
-    const std::string& engine_name,
-    const std::string& plugins_path) {
-  std::cout << "Building " << engine_name << " engine..." << std::endl;
-  try {
-    auto trt_common = std::make_unique<autoware::tensorrt_common::TrtCommon>(
-      trt_common_config, std::make_shared<autoware::tensorrt_common::Profiler>(),
-      std::vector<std::string>{plugins_path});
-    auto network_io_ptr = std::make_unique<std::vector<tensorrt_common::NetworkIO>>(network_io);
-    if (!trt_common->setup(nullptr, std::move(network_io_ptr))) {
-      std::cout << "Failed to setup " << engine_name << " TrtCommon" << std::endl;
-      return nullptr;
-    }
-    std::cout << engine_name << " engine built successfully" << std::endl;
-    return trt_common;
-  } catch (const std::exception& e) {
-    std::cout << "Exception building " << engine_name << " engine: " << e.what() << std::endl;
-    return nullptr;
-  }
-}
-
-// TensorRT初期化API（事前ビルド方式）
-inline std::unique_ptr<autoware::tensorrt_common::TrtCommon> init_tensorrt(
-    const VadConfig& vad_config,
-    const autoware::tensorrt_common::TrtCommonConfig& config,
-    const std::string& name,
-    const std::string& plugins_path) {
-  std::cout << "Initializing TensorRT engine: " << name << std::endl;
-  
-  // NetworkIO arrays generation based on name
-  std::vector<tensorrt_common::NetworkIO> network_io;
-  if (name == "backbone") {
-    network_io = generate_network_io_backbone(vad_config);
-  } else if (name == "head") {
-    network_io = generate_network_io_head(vad_config);
-  } else if (name == "head_no_prev") {
-    network_io = generate_network_io_head_no_prev(vad_config);
-  } else {
-    std::cout << "Unknown engine name: " << name << std::endl;
-    return nullptr;
-  }
-
-  // Build engine
-  auto engine = build_engine(config, network_io, name, plugins_path);
-  if (!engine) {
-    std::cout << "Failed to build " << name << " engine" << std::endl;
-    return nullptr;
-  }
-
-  std::cout << name << " engine initialization completed successfully" << std::endl;
-  return engine;
-}
 
 }  // namespace autoware::tensorrt_vad
 

@@ -29,7 +29,7 @@
 #include <NvInfer.h>
 #include <NvInferRuntime.h>
 
-namespace nv {
+namespace autoware::tensorrt_vad {
 
 inline unsigned int getElementSize(nvinfer1::DataType t) {
   switch (t) {
@@ -121,8 +121,8 @@ struct Tensor {
 
 using TensorMap = std::unordered_map<std::string, std::shared_ptr<Tensor>>;
 
-} // namespace nv
+} // namespace autoware::tensorrt_vad
 
-std::ostream& operator<<(std::ostream& os, nv::Tensor& t);
+std::ostream& operator<<(std::ostream& os, autoware::tensorrt_vad::Tensor& t);
 
 #endif // _TENSOR_H_
