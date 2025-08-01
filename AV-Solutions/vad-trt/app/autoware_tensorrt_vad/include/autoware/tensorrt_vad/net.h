@@ -86,8 +86,6 @@ std::unique_ptr<autoware::tensorrt_common::TrtCommon> init_tensorrt(
     const std::string& plugins_path);
 
 struct Net {
-  nvinfer1::ICudaEngine* engine;
-  nvinfer1::IExecutionContext* context;
   TensorMap bindings;
   std::unique_ptr<autoware::tensorrt_common::TrtCommon> trt_common;
 
@@ -105,29 +103,13 @@ struct Net {
     }
   }
 
-  void set_input_tensor(nvinfer1::IRuntime* runtime, TensorMap& ext) {
-    std::string engine_path = trt_common->getTrtCommonConfig()->engine_path.string();
-    std::ifstream engine_file(engine_path, std::ios::binary);
-    if (!engine_file) {
-      throw std::runtime_error("Error opening engine file: " + engine_path);
-    }
-    engine_file.seekg(0, engine_file.end);
-    long int fsize = engine_file.tellg();
-    engine_file.seekg(0, engine_file.beg);
-
-    // Read the engine file into a buffer
-    std::vector<char> engineData(fsize);
-
-    engine_file.read(engineData.data(), fsize);
-    engine = runtime->deserializeCudaEngine(engineData.data(), fsize);
-    context = engine->createExecutionContext(); 
-
+  void set_input_tensor_backbone(TensorMap& ext) {
     int32_t nb = trt_common->getNbIOTensors();
 
     for (int32_t n = 0; n < nb; n++) {
       std::string name = trt_common->getIOTensorName(n);
       nvinfer1::Dims d = trt_common->getTensorShape(name.c_str());
-      nvinfer1::DataType dtype = engine->getTensorDataType(name.c_str());
+      nvinfer1::DataType dtype = nvinfer1::DataType::kFLOAT;
       
       if (ext.find(name) != ext.end()) {
         // use external memory
@@ -139,20 +121,39 @@ struct Net {
     }
   }
 
+  void set_input_tensor_head(TensorMap& ext) {
+    int32_t nb = trt_common->getNbIOTensors();
+
+    for (int32_t n = 0; n < nb; n++) {
+      std::string name = trt_common->getIOTensorName(n);
+      nvinfer1::Dims d = trt_common->getTensorShape(name.c_str());
+      nvinfer1::DataType dtype = nvinfer1::DataType::kFLOAT;
+      
+      if (ext.find(name) != ext.end()) {
+        // use external memory
+        trt_common->setTensorAddress(name.c_str(), ext[name]->ptr);
+      } else {
+        bindings[name] = std::make_shared<Tensor>(name, d, dtype);
+        trt_common->setTensorAddress(name.c_str(), bindings[name]->ptr);
+      }
+    }
+  }
+
+  void set_input_tensor(TensorMap& ext, const std::string& name) {
+    if (name == "backbone") {
+      set_input_tensor_backbone(ext);
+    } else if (name == "head" || name == "head_no_prev") {
+      set_input_tensor_head(ext);
+    } else {
+      throw std::runtime_error("Unknown engine name: " + name);
+    }
+  }
+
   void Enqueue(cudaStream_t stream) {
     trt_common->enqueueV3(stream);
   }
 
   ~Net() {
-      if (context) {
-          context->destroy();
-          context = nullptr;
-      }
-      if (engine) {
-          engine->destroy();
-          engine = nullptr;
-      }
-      
       // bindingsの各Tensorのメモリを解放
       for (auto& pair : bindings) {
           pair.second.reset();

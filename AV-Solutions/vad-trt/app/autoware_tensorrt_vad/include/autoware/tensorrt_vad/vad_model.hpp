@@ -254,11 +254,11 @@ private:
       if (engine.name == "backbone") {
         nets[engine.name] = std::make_shared<Net>(
           vad_config, backbone_config, "backbone", config_.plugins_path);
-        nets[engine.name]->set_input_tensor(runtime_.get(), external_bindings);
+        nets[engine.name]->set_input_tensor(external_bindings, "backbone");
       } else if (engine.name == "head_no_prev") {
         nets[engine.name] = std::make_shared<Net>(
           vad_config, head_no_prev_config, "head_no_prev", config_.plugins_path);
-        nets[engine.name]->set_input_tensor(runtime_.get(), external_bindings);
+        nets[engine.name]->set_input_tensor(external_bindings, "head_no_prev");
       } else if (engine.name == "head") {
         nets[engine.name] = std::make_shared<Net>(
           vad_config, head_config, "head", config_.plugins_path);
@@ -326,7 +326,7 @@ private:
       external_bindings[k] = nets_[ext_net]->bindings[ext_name];
     }
 
-    nets_["head"]->set_input_tensor(runtime_.get(), external_bindings);
+    nets_["head"]->set_input_tensor(external_bindings, "head");
   }
 
   VadOutputData postprocess(const std::string& head_name, int32_t cmd) {
