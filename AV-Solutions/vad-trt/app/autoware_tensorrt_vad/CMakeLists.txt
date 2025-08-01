@@ -58,7 +58,6 @@ link_directories(
 
 # メインライブラリの追加（ヘッダーファイルは除外）
 ament_auto_add_library(${PROJECT_NAME}_lib SHARED
-    lib/tensor.cpp
     lib/vad_interface.cpp
     lib/vad_model.cpp
     lib/synchronization_strategy.cpp
@@ -104,7 +103,6 @@ function(add_testcase filepath)
       ${TENSORRT_LIBRARY_DIRS}
   )
   target_sources(${test_name} PRIVATE
-      ${CMAKE_CURRENT_SOURCE_DIR}/lib/tensor.cpp
       ${CMAKE_CURRENT_SOURCE_DIR}/lib/vad_interface.cpp
       ${CMAKE_CURRENT_SOURCE_DIR}/lib/vad_model.cpp
   )
