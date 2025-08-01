@@ -114,6 +114,4 @@ using TensorMap = std::unordered_map<std::string, std::shared_ptr<Tensor>>;
 
 } // namespace autoware::tensorrt_vad
 
-std::ostream& operator<<(std::ostream& os, autoware::tensorrt_vad::Tensor& t);
-
 #endif // _TENSOR_H_
