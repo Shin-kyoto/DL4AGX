@@ -145,15 +145,10 @@ public:
     // loggerはVadLoggerを継承したclassのみ受け取る
     static_assert(std::is_base_of_v<VadLogger, LoggerType>, 
       "LoggerType must be VadLogger or derive from VadLogger.");    
-    // 初期化を実行
-    runtime_ = create_runtime();
     
     cudaStreamCreate(&stream_);
-
-    std::cout << "Building all TensorRT engines (this may take several minutes)..." << std::endl;
     
     nets_ = init_engines(config.nets_config, vad_config, backbone_config, head_config, head_no_prev_config);
-    std::cout << "All TensorRT engines initialized successfully" << std::endl;
     initialized_ = true;
   }
 
@@ -204,7 +199,6 @@ public:
   }
 
   // メンバ変数
-  std::unique_ptr<nvinfer1::IRuntime, std::function<void(nvinfer1::IRuntime*)>> runtime_;
   cudaStream_t stream_;
   std::unordered_map<std::string, std::shared_ptr<Net>> nets_;
   bool initialized_;
@@ -222,13 +216,6 @@ public:
 private:
   VadConfig vad_config_;
   autoware::tensorrt_common::TrtCommonConfig head_trt_config_;
-  std::unique_ptr<nvinfer1::IRuntime, std::function<void(nvinfer1::IRuntime*)>> create_runtime() {
-    static std::unique_ptr<Logger> logger_instance = std::make_unique<Logger>(logger_);
-    auto runtime_deleter = []([[maybe_unused]] nvinfer1::IRuntime *runtime) {};
-    std::unique_ptr<nvinfer1::IRuntime, decltype(runtime_deleter)> runtime{
-        nvinfer1::createInferRuntime(*logger_instance), runtime_deleter};
-    return runtime;
-  }
 
   std::unordered_map<std::string, std::shared_ptr<Net>> init_engines(
       const std::vector<NetConfig>& nets_config,
