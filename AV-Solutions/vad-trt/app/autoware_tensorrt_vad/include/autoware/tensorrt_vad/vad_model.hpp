@@ -29,6 +29,7 @@
 
 #include <autoware/tensorrt_common/tensorrt_common.hpp>
 #include "ros_vad_logger.hpp"
+#include "vad_config.hpp"
 
 namespace autoware::tensorrt_vad
 {

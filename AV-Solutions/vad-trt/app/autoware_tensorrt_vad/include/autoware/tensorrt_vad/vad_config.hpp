@@ -15,9 +15,34 @@
 #ifndef AUTOWARE_TENSORRT_VAD_VAD_CONFIG_HPP_
 #define AUTOWARE_TENSORRT_VAD_VAD_CONFIG_HPP_
 
+#include <cstdint>
+
 namespace autoware::tensorrt_vad
 {
-// Configuration structures will be added here
+
+// NetworkIO configuration parameters
+struct VadConfig
+{
+  int32_t num_cameras;
+  int32_t bev_h, bev_w;
+  int32_t bev_feature_dim;
+  int32_t num_decoder_layers;
+  int32_t prediction_num_queries;
+  int32_t prediction_num_classes;
+  int32_t prediction_bbox_pred_dim;
+  int32_t prediction_trajectory_modes;
+  int32_t prediction_timesteps;
+  int32_t planning_ego_commands;
+  int32_t planning_timesteps;
+  int32_t can_bus_dim;
+  int32_t target_image_width;
+  int32_t target_image_height;
+  int32_t downsample_factor;
+  int32_t map_num_queries;
+  int32_t map_num_class;
+  int32_t map_points_per_polylines;
+};
+
 }  // namespace autoware::tensorrt_vad
 
 #endif  // AUTOWARE_TENSORRT_VAD_VAD_CONFIG_HPP_
