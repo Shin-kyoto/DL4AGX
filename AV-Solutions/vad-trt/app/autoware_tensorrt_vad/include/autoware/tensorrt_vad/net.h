@@ -92,8 +92,6 @@ struct Net {
   std::unique_ptr<autoware::tensorrt_common::TrtCommon> trt_common;
 
   Net(
-    nvinfer1::IRuntime* runtime, 
-    TensorMap& ext,
     const VadConfig& vad_config,
     const autoware::tensorrt_common::TrtCommonConfig& trt_common_config,
     const std::string& name,
@@ -105,6 +103,9 @@ struct Net {
     if (!trt_common) {
       throw std::runtime_error("Failed to initialize TensorRT engine: " + name);
     }
+  }
+
+  void set_input_tensor(nvinfer1::IRuntime* runtime, TensorMap& ext) {
     std::string engine_path = trt_common->getTrtCommonConfig()->engine_path.string();
     std::ifstream engine_file(engine_path, std::ios::binary);
     if (!engine_file) {

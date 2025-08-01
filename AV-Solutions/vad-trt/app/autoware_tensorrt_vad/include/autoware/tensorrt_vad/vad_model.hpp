@@ -152,8 +152,7 @@ public:
 
     std::cout << "Building all TensorRT engines (this may take several minutes)..." << std::endl;
     
-    // 今回は個別に作るのではなく、init_enginesで作成
-    nets_ = init_engines(config.nets_config, vad_config, backbone_config, head_no_prev_config);
+    nets_ = init_engines(config.nets_config, vad_config, backbone_config, head_config, head_no_prev_config);
     std::cout << "All TensorRT engines initialized successfully" << std::endl;
     initialized_ = true;
   }
@@ -235,15 +234,12 @@ private:
       const std::vector<NetConfig>& nets_config,
       const VadConfig& vad_config,
       const autoware::tensorrt_common::TrtCommonConfig& backbone_config,
+      const autoware::tensorrt_common::TrtCommonConfig& head_config,
       const autoware::tensorrt_common::TrtCommonConfig& head_no_prev_config) {
     
     std::unordered_map<std::string, std::shared_ptr<Net>> nets;
     
     for (const auto& engine : nets_config) {
-      if (engine.name == "head") {
-        continue;  // headは後で初期化（最初のフレーム処理後）
-      }
-      
       std::unordered_map<std::string, std::shared_ptr<Tensor>> external_bindings;
       // reuse memory
       for (const auto& input_pair : engine.inputs) {
@@ -257,10 +253,15 @@ private:
 
       if (engine.name == "backbone") {
         nets[engine.name] = std::make_shared<Net>(
-          runtime_.get(), external_bindings, vad_config, backbone_config, "backbone", config_.plugins_path);
+          vad_config, backbone_config, "backbone", config_.plugins_path);
+        nets[engine.name]->set_input_tensor(runtime_.get(), external_bindings);
       } else if (engine.name == "head_no_prev") {
         nets[engine.name] = std::make_shared<Net>(
-          runtime_.get(), external_bindings, vad_config, head_no_prev_config, "head_no_prev", config_.plugins_path);
+          vad_config, head_no_prev_config, "head_no_prev", config_.plugins_path);
+        nets[engine.name]->set_input_tensor(runtime_.get(), external_bindings);
+      } else if (engine.name == "head") {
+        nets[engine.name] = std::make_shared<Net>(
+          vad_config, head_config, "head", config_.plugins_path);
       }
     }
     
@@ -325,9 +326,7 @@ private:
       external_bindings[k] = nets_[ext_net]->bindings[ext_name];
     }
 
-    // 新しいNetコンストラクタを使用してheadを生成
-    nets_["head"] = std::make_shared<Net>(
-      runtime_.get(), external_bindings, vad_config_, head_trt_config_, "head", config_.plugins_path);
+    nets_["head"]->set_input_tensor(runtime_.get(), external_bindings);
   }
 
   VadOutputData postprocess(const std::string& head_name, int32_t cmd) {
