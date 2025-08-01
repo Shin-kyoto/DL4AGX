@@ -57,15 +57,10 @@ std::unique_ptr<autoware::tensorrt_common::TrtCommon> build_engine(
     const std::string& plugins_path);
 
 // TensorRT初期化API（事前ビルド方式）
-std::tuple<
-  std::unique_ptr<autoware::tensorrt_common::TrtCommon>,
-  std::unique_ptr<autoware::tensorrt_common::TrtCommon>,
-  std::unique_ptr<autoware::tensorrt_common::TrtCommon>
-> init_tensorrt(
+std::unique_ptr<autoware::tensorrt_common::TrtCommon> init_tensorrt(
     const VadConfig& vad_config,
-    const autoware::tensorrt_common::TrtCommonConfig& backbone_config,
-    const autoware::tensorrt_common::TrtCommonConfig& head_config,
-    const autoware::tensorrt_common::TrtCommonConfig& head_no_prev_config,
+    const autoware::tensorrt_common::TrtCommonConfig& trt_common_config,
+    const std::string& name,
     const std::string& plugins_path);
 
 // ロガーインターフェース
@@ -204,13 +199,33 @@ public:
     cudaStreamCreate(&stream_);
 
     // TensorRTエンジン初期化
-    auto [backbone_trt, head_trt_tmp, head_no_prev_trt] = init_tensorrt(
-        vad_config, backbone_config, head_config, head_no_prev_config, config.plugins_path);
-    if (!backbone_trt || !head_trt_tmp || !head_no_prev_trt) {
-      logger_->error("Failed to initialize TensorRT engines");
+    std::cout << "Building all TensorRT engines (this may take several minutes)..." << std::endl;
+    
+    // 1. Build backbone engine (permanent)
+    auto backbone_trt = init_tensorrt(vad_config, backbone_config, "backbone", config.plugins_path);
+    if (!backbone_trt) {
+      logger_->error("Failed to initialize backbone TensorRT engine");
       initialized_ = false;
       return;
     }
+
+    // 2. Build head engine
+    auto head_trt_tmp = init_tensorrt(vad_config, head_config, "head", config.plugins_path);
+    if (!head_trt_tmp) {
+      logger_->error("Failed to initialize head TensorRT engine");
+      initialized_ = false;
+      return;
+    }
+    
+    // 3. Build head_no_prev engine
+    auto head_no_prev_trt = init_tensorrt(vad_config, head_no_prev_config, "head_no_prev", config.plugins_path);
+    if (!head_no_prev_trt) {
+      logger_->error("Failed to initialize head_no_prev TensorRT engine");
+      initialized_ = false;
+      return;
+    }
+
+    std::cout << "All TensorRT engines initialized successfully" << std::endl;
     head_trt_ = std::move(head_trt_tmp);
     nets_ = init_engines(config.nets_config, std::move(backbone_trt), std::move(head_no_prev_trt));
     initialized_ = true;
@@ -514,22 +529,22 @@ inline std::vector<tensorrt_common::NetworkIO> generate_network_io_head_no_prev(
 
 // エンジンビルド専用関数
 inline std::unique_ptr<autoware::tensorrt_common::TrtCommon> build_engine(
-    const autoware::tensorrt_common::TrtCommonConfig& config,
+    const autoware::tensorrt_common::TrtCommonConfig& trt_common_config,
     const std::vector<tensorrt_common::NetworkIO>& network_io,
     const std::string& engine_name,
     const std::string& plugins_path) {
   std::cout << "Building " << engine_name << " engine..." << std::endl;
   try {
-    auto trt = std::make_unique<autoware::tensorrt_common::TrtCommon>(
-      config, std::make_shared<autoware::tensorrt_common::Profiler>(),
+    auto trt_common = std::make_unique<autoware::tensorrt_common::TrtCommon>(
+      trt_common_config, std::make_shared<autoware::tensorrt_common::Profiler>(),
       std::vector<std::string>{plugins_path});
     auto network_io_ptr = std::make_unique<std::vector<tensorrt_common::NetworkIO>>(network_io);
-    if (!trt->setup(nullptr, std::move(network_io_ptr))) {
+    if (!trt_common->setup(nullptr, std::move(network_io_ptr))) {
       std::cout << "Failed to setup " << engine_name << " TrtCommon" << std::endl;
       return nullptr;
     }
     std::cout << engine_name << " engine built successfully" << std::endl;
-    return trt;
+    return trt_common;
   } catch (const std::exception& e) {
     std::cout << "Exception building " << engine_name << " engine: " << e.what() << std::endl;
     return nullptr;
@@ -537,51 +552,35 @@ inline std::unique_ptr<autoware::tensorrt_common::TrtCommon> build_engine(
 }
 
 // TensorRT初期化API（事前ビルド方式）
-inline std::tuple<
-  std::unique_ptr<autoware::tensorrt_common::TrtCommon>,
-  std::unique_ptr<autoware::tensorrt_common::TrtCommon>,
-  std::unique_ptr<autoware::tensorrt_common::TrtCommon>
-> init_tensorrt(
+inline std::unique_ptr<autoware::tensorrt_common::TrtCommon> init_tensorrt(
     const VadConfig& vad_config,
-    const autoware::tensorrt_common::TrtCommonConfig& backbone_config,
-    const autoware::tensorrt_common::TrtCommonConfig& head_config,
-    const autoware::tensorrt_common::TrtCommonConfig& head_no_prev_config,
+    const autoware::tensorrt_common::TrtCommonConfig& config,
+    const std::string& name,
     const std::string& plugins_path) {
-  std::cout << "Initializing TensorRT with pre-build strategy" << std::endl;
-  // NetworkIO arrays generation
-  std::vector<tensorrt_common::NetworkIO> backbone_network_io = generate_network_io_backbone(vad_config);
-  std::vector<tensorrt_common::NetworkIO> head_network_io = generate_network_io_head(vad_config);
-  std::vector<tensorrt_common::NetworkIO> head_no_prev_network_io = generate_network_io_head_no_prev(vad_config);
-
-  // Build all engines first (this takes time but done only once)
-  std::cout << "Building all TensorRT engines (this may take several minutes)..." << std::endl;
-
-  // 1. Build backbone engine (permanent)
-  auto backbone_trt = build_engine(backbone_config, backbone_network_io, "backbone", plugins_path);
-  if (!backbone_trt) {
-    std::cout << "Failed to build backbone engine" << std::endl;
-    return {nullptr, nullptr, nullptr};
+  std::cout << "Initializing TensorRT engine: " << name << std::endl;
+  
+  // NetworkIO arrays generation based on name
+  std::vector<tensorrt_common::NetworkIO> network_io;
+  if (name == "backbone") {
+    network_io = generate_network_io_backbone(vad_config);
+  } else if (name == "head") {
+    network_io = generate_network_io_head(vad_config);
+  } else if (name == "head_no_prev") {
+    network_io = generate_network_io_head_no_prev(vad_config);
+  } else {
+    std::cout << "Unknown engine name: " << name << std::endl;
+    return nullptr;
   }
 
-  // 2. Build head engine
-  auto head_trt = build_engine(head_config, head_network_io, "head", plugins_path);
-  if (!head_trt) {
-    std::cout << "Failed to build head engine" << std::endl;
-    return {nullptr, nullptr, nullptr};
-  }
-  // After building, unload head engine to save GPU memory
-  std::cout << "Releasing head engine to save GPU memory" << std::endl;
-
-  // 3. Build head_no_prev engine
-  auto head_no_prev_trt = build_engine(head_no_prev_config, head_no_prev_network_io, "head_no_prev", plugins_path);
-  if (!head_no_prev_trt) {
-    std::cout << "Failed to build head_no_prev engine" << std::endl;
-    return {nullptr, nullptr, nullptr};
+  // Build engine
+  auto engine = build_engine(config, network_io, name, plugins_path);
+  if (!engine) {
+    std::cout << "Failed to build " << name << " engine" << std::endl;
+    return nullptr;
   }
 
-  std::cout << "TensorRT pre-build initialization completed successfully" << std::endl;
-  std::cout << "Ready for inference with dynamic head engine loading" << std::endl;
-  return {std::move(backbone_trt), std::move(head_trt), std::move(head_no_prev_trt)};
+  std::cout << name << " engine initialization completed successfully" << std::endl;
+  return engine;
 }
 
 }  // namespace autoware::tensorrt_vad
