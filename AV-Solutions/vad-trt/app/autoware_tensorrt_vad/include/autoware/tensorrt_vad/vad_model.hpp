@@ -24,7 +24,7 @@
 #include <cuda_runtime.h>
 #include <NvInfer.h>
 #include <dlfcn.h>
-#include "net.h"
+#include "net.hpp"
 #include <map>
 
 #include <autoware/tensorrt_common/tensorrt_common.hpp>
