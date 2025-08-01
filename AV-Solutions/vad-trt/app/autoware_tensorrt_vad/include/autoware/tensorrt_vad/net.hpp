@@ -27,7 +27,7 @@
 #include <cuda_fp16.h>
 #include <cuda_runtime_api.h>
 
-#include "tensor.h"
+#include "tensor.hpp"
 
 #include <autoware/tensorrt_common/tensorrt_common.hpp>
 
