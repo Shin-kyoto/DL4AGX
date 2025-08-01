@@ -20,7 +20,6 @@
 
 #include <memory>
 #include <fstream>
-#include <iostream>
 #include <vector>
 #include <unordered_map>
 
@@ -81,7 +80,7 @@ struct Tensor {
   template<class Dtype=float>
   void load(const std::vector<float>& data, cudaStream_t stream = 0) {
     if (static_cast<int32_t>(data.size()) != volume) {
-      std::cerr << "Data size mismatch: expected " << volume << ", got " << data.size() << std::endl;
+      // Note: Error logging should be handled by caller std::cerr << "Data size mismatch: expected " << volume << ", got " << data.size() << std::endl;
       return;
     }
     

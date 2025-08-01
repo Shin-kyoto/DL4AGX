@@ -18,8 +18,6 @@
 #ifndef NET_H_
 #define NET_H_
 
-#include <iostream>
-#include <fstream>
 #include <filesystem>
 #include <string>
 #include <vector>
@@ -36,6 +34,18 @@
 #include <autoware/tensorrt_common/tensorrt_common.hpp>
 
 namespace autoware::tensorrt_vad {
+
+// VadLogger interface definition
+class VadLogger {
+public:
+  virtual ~VadLogger() = default;
+  
+  // 各ログレベルのメソッドを純粋仮想関数として定義
+  virtual void debug(const std::string& message) = 0;
+  virtual void info(const std::string& message) = 0;
+  virtual void warn(const std::string& message) = 0;
+  virtual void error(const std::string& message) = 0;
+};
 
 // NetworkIO configuration parameters
 struct VadConfig
@@ -76,30 +86,34 @@ std::unique_ptr<autoware::tensorrt_common::TrtCommon> build_engine(
     const autoware::tensorrt_common::TrtCommonConfig& trt_common_config,
     const std::vector<autoware::tensorrt_common::NetworkIO>& network_io,
     const std::string& engine_name,
-    const std::string& plugins_path);
+    const std::string& plugins_path,
+    std::shared_ptr<VadLogger> logger);
 
 // TensorRT初期化API（事前ビルド方式）
 std::unique_ptr<autoware::tensorrt_common::TrtCommon> init_tensorrt(
     const VadConfig& vad_config,
     const autoware::tensorrt_common::TrtCommonConfig& trt_common_config,
     const std::string& name,
-    const std::string& plugins_path);
+    const std::string& plugins_path,
+    std::shared_ptr<VadLogger> logger);
 
 struct Net {
   TensorMap bindings;
   std::unique_ptr<autoware::tensorrt_common::TrtCommon> trt_common;
+  std::shared_ptr<VadLogger> logger_;
 
   Net(
     const VadConfig& vad_config,
     const autoware::tensorrt_common::TrtCommonConfig& trt_common_config,
     const std::string& name,
-    const std::string& plugins_path
-  )
+    const std::string& plugins_path,
+    std::shared_ptr<VadLogger> logger
+  ) : logger_(logger)
   {
     // init_tensorrtを呼び出してTrtCommonを初期化
-    trt_common = init_tensorrt(vad_config, trt_common_config, name, plugins_path);
+    trt_common = init_tensorrt(vad_config, trt_common_config, name, plugins_path, logger_);
     if (!trt_common) {
-      throw std::runtime_error("Failed to initialize TensorRT engine: " + name);
+      logger_->error("Failed to initialize TensorRT engine: " + name);
     }
   }
 
@@ -145,7 +159,7 @@ struct Net {
     } else if (name == "head" || name == "head_no_prev") {
       set_input_tensor_head(ext);
     } else {
-      throw std::runtime_error("Unknown engine name: " + name);
+      logger_->error("Unknown engine name: " + name);
     }
   }
 
@@ -250,21 +264,22 @@ inline std::unique_ptr<autoware::tensorrt_common::TrtCommon> build_engine(
     const autoware::tensorrt_common::TrtCommonConfig& trt_common_config,
     const std::vector<autoware::tensorrt_common::NetworkIO>& network_io,
     const std::string& engine_name,
-    const std::string& plugins_path) {
-  std::cout << "Building " << engine_name << " engine..." << std::endl;
+    const std::string& plugins_path,
+    std::shared_ptr<VadLogger> logger) {
+  logger->info("Building " + engine_name + " engine...");
   try {
     auto trt_common = std::make_unique<autoware::tensorrt_common::TrtCommon>(
       trt_common_config, std::make_shared<autoware::tensorrt_common::Profiler>(),
       std::vector<std::string>{plugins_path});
     auto network_io_ptr = std::make_unique<std::vector<autoware::tensorrt_common::NetworkIO>>(network_io);
     if (!trt_common->setup(nullptr, std::move(network_io_ptr))) {
-      std::cout << "Failed to setup " << engine_name << " TrtCommon" << std::endl;
+      logger->error("Failed to setup " + engine_name + " TrtCommon");
       return nullptr;
     }
-    std::cout << engine_name << " engine built successfully" << std::endl;
+    logger->info(engine_name + " engine built successfully");
     return trt_common;
   } catch (const std::exception& e) {
-    std::cout << "Exception building " << engine_name << " engine: " << e.what() << std::endl;
+    logger->error("Exception building " + engine_name + " engine: " + std::string(e.what()));
     return nullptr;
   }
 }
@@ -274,8 +289,9 @@ inline std::unique_ptr<autoware::tensorrt_common::TrtCommon> init_tensorrt(
     const VadConfig& vad_config,
     const autoware::tensorrt_common::TrtCommonConfig& trt_common_config,
     const std::string& name,
-    const std::string& plugins_path) {
-  std::cout << "Initializing TensorRT engine: " << name << std::endl;
+    const std::string& plugins_path,
+    std::shared_ptr<VadLogger> logger) {
+  logger->info("Initializing TensorRT engine: " + name);
   
   // NetworkIO arrays generation based on name
   std::vector<autoware::tensorrt_common::NetworkIO> network_io;
@@ -286,18 +302,18 @@ inline std::unique_ptr<autoware::tensorrt_common::TrtCommon> init_tensorrt(
   } else if (name == "head_no_prev") {
     network_io = generate_network_io_head_no_prev(vad_config);
   } else {
-    std::cout << "Unknown engine name: " << name << std::endl;
+    logger->error("Unknown engine name: " + name);
     return nullptr;
   }
 
   // Build engine
-  auto engine = build_engine(trt_common_config, network_io, name, plugins_path);
+  auto engine = build_engine(trt_common_config, network_io, name, plugins_path, logger);
   if (!engine) {
-    std::cout << "Failed to build " << name << " engine" << std::endl;
+    logger->error("Failed to build " + name + " engine");
     return nullptr;
   }
 
-  std::cout << name << " engine initialization completed successfully" << std::endl;
+  logger->info(name + " engine initialization completed successfully");
   return engine;
 }
 

@@ -26,7 +26,6 @@
 #include <dlfcn.h>
 #include "net.h"
 #include <map>
-#include <iostream>
 
 #include <autoware/tensorrt_common/tensorrt_common.hpp>
 
@@ -35,19 +34,6 @@ namespace autoware::tensorrt_vad
 
 // Forward declarations
 struct VadModelConfig;
-class VadLogger;
-
-// ロガーインターフェース
-class VadLogger {
-public:
-  virtual ~VadLogger() = default;
-  
-  // 各ログレベルのメソッドを純粋仮想関数として定義
-  virtual void debug(const std::string& message) = 0;
-  virtual void info(const std::string& message) = 0;
-  virtual void warn(const std::string& message) = 0;
-  virtual void error(const std::string& message) = 0;
-};
 
 // Loggerクラス（VadModel内で使用）
 class Logger : public nvinfer1::ILogger {
@@ -240,15 +226,15 @@ private:
 
       if (engine.name == "backbone") {
         nets[engine.name] = std::make_shared<Net>(
-          vad_config, backbone_config, "backbone", config_.plugins_path);
+          vad_config, backbone_config, "backbone", config_.plugins_path, logger_);
         nets[engine.name]->set_input_tensor(external_bindings, "backbone");
       } else if (engine.name == "head_no_prev") {
         nets[engine.name] = std::make_shared<Net>(
-          vad_config, head_no_prev_config, "head_no_prev", config_.plugins_path);
+          vad_config, head_no_prev_config, "head_no_prev", config_.plugins_path, logger_);
         nets[engine.name]->set_input_tensor(external_bindings, "head_no_prev");
       } else if (engine.name == "head") {
         nets[engine.name] = std::make_shared<Net>(
-          vad_config, head_config, "head", config_.plugins_path);
+          vad_config, head_config, "head", config_.plugins_path, logger_);
       }
     }
     
