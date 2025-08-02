@@ -3,6 +3,8 @@
   <arg name="log_level" default="info"/>
   <arg name="rviz" default="false" description="launch rviz"/>
   <arg name="rviz_respawn" default="true" description="respawn rviz"/>
+  <arg name="data_path" default="$(env HOME)/autoware_data" description="packages data and artifacts directory path"/>
+  <arg name="model_path" default="$(var data_path)/vad"/>
 
   <arg name="camera_info0" default="/sensing/camera/camera0/camera_info"/>
   <arg name="camera_info1" default="/sensing/camera/camera1/camera_info"/>
@@ -27,9 +29,9 @@
   <arg name="output/map" default="debug/vad/map"/>
 
   <node pkg="autoware_tensorrt_vad" exec="vad_node" name="vad" output="screen" args="--ros-args --log-level $(var log_level)">
-    <param from="$(find-pkg-share autoware_tensorrt_vad)/config/vad_tiny.param.yaml"/>
-    <param from="$(find-pkg-share autoware_tensorrt_vad)/config/ml_package_vad_tiny.param.yaml"/>
-    
+    <param from="$(find-pkg-share autoware_tensorrt_vad)/config/vad_tiny.param.yaml" allow_substs="true"/>
+    <param from="$(find-pkg-share autoware_tensorrt_vad)/config/ml_package_vad_tiny.param.yaml" allow_substs="true"/>
+
     <remap from="~/output/objects" to="$(var output/objects)"/>
     <remap from="~/output/trajectory" to="$(var output/trajectory)"/>
     <remap from="~/output/trajectories" to="$(var output/trajectories)"/>

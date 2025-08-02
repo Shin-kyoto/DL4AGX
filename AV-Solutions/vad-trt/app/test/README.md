@@ -65,8 +65,7 @@ make test_help
 - **VadInputDataStructure**: 入力データ構造体のテスト
 - **VadOutputDataStructure**: 出力データ構造体のテスト
 - **LoggerFunctionality**: ロガー機能のテスト
-- **VadConfigStructure**: 設定構造体のテスト
-- **NetworkParamClass**: NetworkParamクラスのテスト
+- **VadModelConfigStructure**: 設定構造体のテスト
 - **TensorRTLoggerClass**: TensorRT用Loggerクラスのテスト
 - **VadModelTypeConstraints**: 型安全性のテスト
 - **TrajectoryPostprocessAlgorithm**: 軌道計算アルゴリズムのテスト

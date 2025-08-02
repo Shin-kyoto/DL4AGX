@@ -22,6 +22,7 @@ find_package(visualization_msgs REQUIRED)
 find_package(autoware_perception_msgs REQUIRED)
 find_package(autoware_internal_planning_msgs REQUIRED)
 find_package(autoware_planning_msgs REQUIRED)
+find_package(autoware_tensorrt_common REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(rosbag2_cpp REQUIRED)
 find_package(unique_identifier_msgs REQUIRED)
@@ -74,6 +75,7 @@ endif()
 include_directories(
     ${CMAKE_SOURCE_DIR}/include 
     ${CMAKE_SOURCE_DIR}/lib 
+    ${CMAKE_SOURCE_DIR}/lib/networks
     ${CMAKE_SOURCE_DIR}/lib/cuOSD
     ${CUDA_INCLUDE_DIRS}
     ${CUDA_TOOLKIT_ROOT_DIR}/include
@@ -105,13 +107,32 @@ target_compile_options(${APP}_cu PRIVATE
     $<$<COMPILE_LANGUAGE:CUDA>:-arch=sm_86>
 )
 
+# CUDAライブラリにもROS2のインクルードディレクトリを追加
+target_include_directories(${APP}_cu PUBLIC
+    ${rclcpp_INCLUDE_DIRS}
+    ${sensor_msgs_INCLUDE_DIRS}
+    ${tf2_ros_INCLUDE_DIRS}
+    ${tf2_eigen_INCLUDE_DIRS}
+    ${eigen3_cmake_module_INCLUDE_DIRS}
+    ${Eigen3_INCLUDE_DIRS}
+    ${autoware_perception_msgs_INCLUDE_DIRS}
+    ${autoware_internal_planning_msgs_INCLUDE_DIRS}
+    ${autoware_planning_msgs_INCLUDE_DIRS}
+    ${autoware_tensorrt_common_INCLUDE_DIRS}
+    ${geometry_msgs_INCLUDE_DIRS}
+    ${rosbag2_cpp_INCLUDE_DIRS}
+)
+
 # Main application
 add_executable(${APP}_app 
     main.cpp 
     ${CMAKE_SOURCE_DIR}/lib/vad_model.cpp
     ${CMAKE_SOURCE_DIR}/lib/vad_interface.cpp
     ${CMAKE_SOURCE_DIR}/lib/visualize.cpp 
-    ${CMAKE_SOURCE_DIR}/lib/tensor.cpp 
+    ${CMAKE_SOURCE_DIR}/lib/networks/tensor.cpp 
+    ${CMAKE_SOURCE_DIR}/lib/networks/net.cpp
+    ${CMAKE_SOURCE_DIR}/lib/networks/backbone.cpp
+    ${CMAKE_SOURCE_DIR}/lib/networks/head.cpp
     ${CMAKE_SOURCE_DIR}/lib/cuOSD/cuosd.cpp
     ${CMAKE_SOURCE_DIR}/lib/cuOSD/textbackend/backend.cpp 
     ${CMAKE_SOURCE_DIR}/lib/cuOSD/textbackend/stb.cpp
@@ -135,6 +156,7 @@ target_link_libraries(${APP}_app
     ${autoware_perception_msgs_LIBRARIES}
     ${autoware_internal_planning_msgs_LIBRARIES}
     ${autoware_planning_msgs_LIBRARIES}
+    ${autoware_tensorrt_common_LIBRARIES}
     ${geometry_msgs_LIBRARIES}
     ${rosbag2_cpp_LIBRARIES}
 )
@@ -151,6 +173,7 @@ target_include_directories(${APP}_app PUBLIC
     ${autoware_perception_msgs_INCLUDE_DIRS}
     ${autoware_internal_planning_msgs_INCLUDE_DIRS}
     ${autoware_planning_msgs_INCLUDE_DIRS}
+    ${autoware_tensorrt_common_INCLUDE_DIRS}
     ${geometry_msgs_INCLUDE_DIRS}
     ${rosbag2_cpp_INCLUDE_DIRS}
 )
@@ -172,6 +195,7 @@ ament_target_dependencies(${APP}_app
     autoware_perception_msgs
     autoware_internal_planning_msgs
     autoware_planning_msgs
+    autoware_tensorrt_common
     geometry_msgs
     rosbag2_cpp
     unique_identifier_msgs

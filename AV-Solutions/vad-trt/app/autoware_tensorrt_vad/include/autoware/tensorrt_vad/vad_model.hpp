@@ -24,39 +24,17 @@
 #include <cuda_runtime.h>
 #include <NvInfer.h>
 #include <dlfcn.h>
-#include "net.h"
+#include "networks/net.hpp"
+#include "networks/backbone.hpp"
+#include "networks/head.hpp"
 #include <map>
+
+#include <autoware/tensorrt_common/tensorrt_common.hpp>
+#include "ros_vad_logger.hpp"
+#include "vad_config.hpp"
 
 namespace autoware::tensorrt_vad
 {
-
-// ロガーインターフェース
-class VadLogger {
-public:
-  virtual ~VadLogger() = default;
-  
-  // 各ログレベルのメソッドを純粋仮想関数として定義
-  virtual void debug(const std::string& message) = 0;
-  virtual void info(const std::string& message) = 0;
-  virtual void warn(const std::string& message) = 0;
-  virtual void error(const std::string& message) = 0;
-};
-
-// Loggerクラス（VadModel内で使用）
-class Logger : public nvinfer1::ILogger {
-private:
-    std::shared_ptr<VadLogger> custom_logger_;
-
-public:
-    Logger(std::shared_ptr<VadLogger> logger) : custom_logger_(logger) {}
-    
-    void log(nvinfer1::ILogger::Severity severity, const char* msg) noexcept override {
-        // Only print error messages
-        if (severity == nvinfer1::ILogger::Severity::kERROR && custom_logger_) {
-            custom_logger_->error(std::string(msg));
-        }
-    }
-};
 
 // VAD推論の入力データ構造
 struct VadInputData
@@ -114,68 +92,33 @@ std::vector<std::vector<std::vector<float>>> postprocess_map_preds(
     const std::vector<float>& all_map_cls_preds_flat,
     const std::vector<float>& all_map_pts_preds_flat);
 
-// config for Net class
-struct NetConfig
-{
-  std::string name;
-  std::string engine_file;
-  bool use_graph;
-  std::map<std::string, std::map<std::string, std::string>> inputs;
-};
-
-// config for VadModel class
-struct VadConfig
-{
-  std::string plugins_path;
-  int32_t warm_up_num;
-  std::vector<NetConfig> nets_config;
-};
-
-class NetworkParam
-{
-public:
-  NetworkParam(std::string onnx_path, std::string engine_path, std::string trt_precision)
-  : onnx_path_(std::move(onnx_path)), engine_path_(std::move(engine_path)), trt_precision_(std::move(trt_precision))
-  {
-  }
-
-  std::string onnx_path() const { return onnx_path_; }
-  std::string engine_path() const { return engine_path_; }
-  std::string trt_precision() const { return trt_precision_; }
-
-private:
-  std::string onnx_path_;
-  std::string engine_path_;
-  std::string trt_precision_;
-};
+// Helper function to parse external input configuration
+inline std::pair<std::string, std::string> parse_external_inputs(const std::pair<std::string, std::map<std::string, std::string>>& input_pair) {
+  const auto& ext_map = input_pair.second;
+  return {ext_map.at("net"), ext_map.at("name")};
+}
 
 // VADモデルクラス - CUDA/TensorRTを用いた推論を担当
 template<typename LoggerType>
 class VadModel
 {
 public:
-  VadModel(const VadConfig& config, std::shared_ptr<LoggerType> logger)
-    : stream_(nullptr), initialized_(false), is_first_frame_(true), config_(config), logger_(std::move(logger))
+  VadModel(
+    const VadConfig& vad_config,
+    const autoware::tensorrt_common::TrtCommonConfig& backbone_config,
+    const autoware::tensorrt_common::TrtCommonConfig& head_config,
+    const autoware::tensorrt_common::TrtCommonConfig& head_no_prev_config,
+    std::shared_ptr<LoggerType> logger)
+    : stream_(nullptr), is_first_frame_(true), 
+      vad_config_(vad_config), logger_(std::move(logger)), head_trt_config_(head_config)
   {
     // loggerはVadLoggerを継承したclassのみ受け取る
     static_assert(std::is_base_of_v<VadLogger, LoggerType>, 
       "LoggerType must be VadLogger or derive from VadLogger.");    
-    // 初期化を実行
-    runtime_ = create_runtime();
-    
-    if (!load_plugin(config.plugins_path)) {
-      logger_->error("Failed to load plugin");
-      return;
-    }
     
     cudaStreamCreate(&stream_);
-    
-    nets_ = init_engines(config.nets_config);
-    
-    logger_->info("warm_up=" + std::to_string(config.warm_up_num));
-    warm_up(config.warm_up_num);
-    
-    initialized_ = true;
+
+    nets_ = init_engines(vad_config_.nets_config, vad_config_, backbone_config, head_config, head_no_prev_config);
   }
 
   // デストラクタ
@@ -188,8 +131,6 @@ public:
     
     // netsのクリーンアップ
     nets_.clear();
-    
-    initialized_ = false;
   }
 
   // メイン推論API
@@ -225,85 +166,58 @@ public:
   }
 
   // メンバ変数
-  std::unique_ptr<nvinfer1::IRuntime, std::function<void(nvinfer1::IRuntime*)>> runtime_;
   cudaStream_t stream_;
-  std::unordered_map<std::string, std::shared_ptr<nv::Net>> nets_;
-  bool initialized_;
+  std::unordered_map<std::string, std::shared_ptr<Net>> nets_;
 
   // 前回のBEV特徴量保存用
-  std::shared_ptr<nv::Tensor> saved_prev_bev_;
+  std::shared_ptr<Tensor> saved_prev_bev_;
   bool is_first_frame_;
 
   // 設定情報の保存
-  VadConfig config_;
+  VadConfig vad_config_;
 
   // ロガーインスタンス
   std::shared_ptr<VadLogger> logger_;
 
 private:
-  // メンバ関数
-  std::unique_ptr<nvinfer1::IRuntime, std::function<void(nvinfer1::IRuntime*)>> create_runtime() {
-    static std::unique_ptr<Logger> logger_instance = std::make_unique<Logger>(logger_);
-    auto runtime_deleter = []([[maybe_unused]] nvinfer1::IRuntime *runtime) {};
-    std::unique_ptr<nvinfer1::IRuntime, decltype(runtime_deleter)> runtime{
-        nvinfer1::createInferRuntime(*logger_instance), runtime_deleter};
-    return runtime;
-  }
+  autoware::tensorrt_common::TrtCommonConfig head_trt_config_;
 
-  bool load_plugin(const std::string& plugin_dir) {
-    void* h_ = dlopen(plugin_dir.c_str(), RTLD_NOW);
-    logger_->info("loading plugin from: " + plugin_dir);
-    if (!h_) {
-      const char* error = dlerror();
-      logger_->error("Failed to load library: " + std::string(error ? error : "unknown error"));
-      return false;
-    }
-    return true;
-  }
-
-  std::unordered_map<std::string, std::shared_ptr<nv::Net>> init_engines(
-      const std::vector<NetConfig>& nets_config) {
+  std::unordered_map<std::string, std::shared_ptr<Net>> init_engines(
+      const std::vector<NetConfig>& nets_config,
+      const VadConfig& vad_config,
+      const autoware::tensorrt_common::TrtCommonConfig& backbone_config,
+      const autoware::tensorrt_common::TrtCommonConfig& head_config,
+      const autoware::tensorrt_common::TrtCommonConfig& head_no_prev_config) {
     
-    std::unordered_map<std::string, std::shared_ptr<nv::Net>> nets;
+    std::unordered_map<std::string, std::shared_ptr<Net>> nets;
     
     for (const auto& engine : nets_config) {
-      if (engine.name == "head") {
-        continue;  // headは後で初期化
-      }
-      
-      std::string engine_name = engine.name;
-      std::string engine_file_path = engine.engine_file;
-      logger_->info("-> engine: " + engine_name);
-      
-      std::unordered_map<std::string, std::shared_ptr<nv::Tensor>> external_bindings;
+      std::unordered_map<std::string, std::shared_ptr<Tensor>> external_bindings;
       // reuse memory
       for (const auto& input_pair : engine.inputs) {
         const std::string& k = input_pair.first;
-        const auto& ext_map = input_pair.second;      
-        std::string ext_net = ext_map.at("net");
-        std::string ext_name = ext_map.at("name");
-        logger_->info(k + " <- " + ext_net + "[" + ext_name + "]");
-        external_bindings[k] = nets[ext_net]->bindings[ext_name];
+        auto [external_network, external_input_name] = parse_external_inputs(input_pair);
+        logger_->info(k + " <- " + external_network + "[" + external_input_name + "]");
+        external_bindings[k] = nets[external_network]->bindings[external_input_name];
       }
 
-      nets[engine_name] = std::make_shared<nv::Net>(engine_file_path, runtime_.get(), external_bindings);
-
-      if (engine.use_graph) {
-        nets[engine_name]->EnableCudaGraph(stream_);
+      if (engine.name == "backbone") {
+        nets[engine.name] = std::make_shared<Backbone>(
+          vad_config, backbone_config, vad_config_.plugins_path, logger_);
+        nets[engine.name]->set_input_tensor(external_bindings);
+      } else if (engine.name == "head_no_prev") {
+        nets[engine.name] = std::make_shared<Head>(
+          vad_config, head_no_prev_config, NetworkType::HEAD_NO_PREV, vad_config_.plugins_path, logger_);
+        nets[engine.name]->set_input_tensor(external_bindings);
+      } else if (engine.name == "head") {
+        nets[engine.name] = std::make_shared<Head>(
+          vad_config, head_config, NetworkType::HEAD, vad_config_.plugins_path, logger_);
       }
     }
     
     return nets;
   }
 
-  void warm_up(int32_t warm_up_num) {
-    for(int32_t iw=0; iw < warm_up_num; iw++) {
-      nets_["backbone"]->Enqueue(stream_);
-      nets_["head_no_prev"]->Enqueue(stream_);
-      cudaStreamSynchronize(stream_);
-    }
-  }
-  
   // infer関数で使用するヘルパー関数
   void load_inputs(const VadInputData& vad_input, const std::string& head_name) {
     nets_["backbone"]->bindings["img"]->load(vad_input.camera_images_, stream_);
@@ -322,9 +236,9 @@ private:
     cudaStreamSynchronize(stream_);
   }
 
-  std::shared_ptr<nv::Tensor> save_prev_bev(const std::string& head_name) {
+  std::shared_ptr<Tensor> save_prev_bev(const std::string& head_name) {
     auto bev_embed = nets_[head_name]->bindings["out.bev_embed"];
-    auto prev_bev = std::make_shared<nv::Tensor>("prev_bev", bev_embed->dim, bev_embed->dtype);
+    auto prev_bev = std::make_shared<Tensor>("prev_bev", bev_embed->dim, bev_embed->dtype, logger_);
     cudaMemcpyAsync(prev_bev->ptr, bev_embed->ptr, bev_embed->nbytes(), 
                     cudaMemcpyDeviceToDevice, stream_);
     return prev_bev;
@@ -344,32 +258,23 @@ private:
   }
 
   void load_head() {
-    auto head_engine = std::find_if(config_.nets_config.begin(), config_.nets_config.end(),
+    auto head_engine = std::find_if(vad_config_.nets_config.begin(), vad_config_.nets_config.end(),
         [](const NetConfig& engine) { return engine.name == "head"; });
     
-    if (head_engine == config_.nets_config.end()) {
+    if (head_engine == vad_config_.nets_config.end()) {
       logger_->error("Head engine configuration not found");
       return;
     }
     
-    std::string engine_file_path = head_engine->engine_file;
-    logger_->info("-> loading head engine: " + engine_file_path);
-    
-    std::unordered_map<std::string, std::shared_ptr<nv::Tensor>> external_bindings;
+    std::unordered_map<std::string, std::shared_ptr<Tensor>> external_bindings;
     for (const auto& input_pair : head_engine->inputs) {
       const std::string& k = input_pair.first;
-      const auto& ext_map = input_pair.second;      
-      std::string ext_net = ext_map.at("net");
-      std::string ext_name = ext_map.at("name");
-      logger_->info(k + " <- " + ext_net + "[" + ext_name + "]");
-      external_bindings[k] = nets_[ext_net]->bindings[ext_name];
+      auto [external_network, external_input_name] = parse_external_inputs(input_pair);
+      logger_->info(k + " <- " + external_network + "[" + external_input_name + "]");
+      external_bindings[k] = nets_[external_network]->bindings[external_input_name];
     }
 
-    nets_["head"] = std::make_shared<nv::Net>(engine_file_path, runtime_.get(), external_bindings);
-
-    if (head_engine->use_graph) {
-      nets_["head"]->EnableCudaGraph(stream_);
-    }
+    nets_["head"]->set_input_tensor(external_bindings);
   }
 
   VadOutputData postprocess(const std::string& head_name, int32_t cmd) {
