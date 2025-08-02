@@ -64,14 +64,12 @@ public:
 
 private:
   // Config loading function
-  VadModelConfig load_vad_model_config();
   VadConfig load_vad_config();
   std::tuple<
     autoware::tensorrt_common::TrtCommonConfig,
     autoware::tensorrt_common::TrtCommonConfig,
     autoware::tensorrt_common::TrtCommonConfig
   > load_trt_common_configs();
-  VadModelConfig load_net_configs();
   void initialize_vad_model();
   void create_camera_image_subscribers(const rclcpp::QoS& sensor_qos);
   void create_camera_info_subscribers(const rclcpp::QoS& camera_info_qos);

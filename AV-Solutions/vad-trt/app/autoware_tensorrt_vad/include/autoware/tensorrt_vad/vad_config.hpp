@@ -16,9 +16,19 @@
 #define AUTOWARE_TENSORRT_VAD_VAD_CONFIG_HPP_
 
 #include <cstdint>
+#include <string>
+#include <vector>
+#include <map>
 
 namespace autoware::tensorrt_vad
 {
+
+// config for Net class
+struct NetConfig
+{
+  std::string name;
+  std::map<std::string, std::map<std::string, std::string>> inputs;
+};
 
 // NetworkIO configuration parameters
 struct VadConfig
@@ -41,6 +51,8 @@ struct VadConfig
   int32_t map_num_queries;
   int32_t map_num_class;
   int32_t map_points_per_polylines;
+  std::string plugins_path;
+  std::vector<NetConfig> nets_config;
 };
 
 }  // namespace autoware::tensorrt_vad

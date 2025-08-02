@@ -38,7 +38,7 @@ public:
  * 
  * 使用例:
  * auto ros_logger = std::make_shared<RosVadLogger>(node);
- * VadModelConfig config;
+ * VadConfig config;
  * // configを設定...
  * VadModel model(config, ros_logger);
  */

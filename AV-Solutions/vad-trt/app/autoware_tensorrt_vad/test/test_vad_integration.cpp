@@ -35,19 +35,19 @@ struct TestConfig {
 };
 
 /**
- * @brief load VadModelConfig and TestConfig from a YAML file
+ * @brief load VadConfig and TestConfig from a YAML file
  * 
  * @param config_path path to the YAML file
- * @return pair of VadModelConfig and TestConfig
+ * @return pair of VadConfig and TestConfig
  * @throws std::runtime_error if YAML loading fails
  */
-std::pair<VadModelConfig, TestConfig> load_config_from_yaml(const std::string& config_path) {
+std::pair<VadConfig, TestConfig> load_config_from_yaml(const std::string& config_path) {
     try {
         YAML::Node yaml_config = YAML::LoadFile(config_path);
         const auto& test_config_node = yaml_config["test_config"];
         
-        VadModelConfig vad_model_config;
-        vad_model_config.plugins_path = test_config_node["plugins_path"].as<std::string>();
+        VadConfig vad_config;
+        vad_config.plugins_path = test_config_node["plugins_path"].as<std::string>();
         
         const auto& nets = test_config_node["nets"];
         for (const auto& net : nets) {
@@ -64,7 +64,7 @@ std::pair<VadModelConfig, TestConfig> load_config_from_yaml(const std::string& c
                     net_config.inputs[input.first.as<std::string>()] = input_map;
                 }
             }
-            vad_model_config.nets_config.push_back(net_config);
+            vad_config.nets_config.push_back(net_config);
         }
 
         TestConfig test_config;
@@ -81,7 +81,7 @@ std::pair<VadModelConfig, TestConfig> load_config_from_yaml(const std::string& c
         const auto& expected_output = test_data["expected_output"];
         test_config.expected_output.trajectory = expected_output["trajectory"].as<std::vector<float>>();
 
-        return {vad_model_config, test_config};
+        return {vad_config, test_config};
     } catch (const YAML::Exception& e) {
         throw std::runtime_error("Failed to load config from YAML: " + std::string(e.what()));
     }
@@ -94,13 +94,13 @@ class VadIntegrationTest : public ::testing::Test {
 protected:
     void SetUp() override {
         mock_logger_ = std::make_shared<MockVadLogger>();
-        auto [vad_model_config, test_config] = test::load_config_from_yaml(autoware::tensorrt_vad::test::getTestConfigPath());
-        config_ = vad_model_config;
+        auto [vad_config, test_config] = test::load_config_from_yaml(autoware::tensorrt_vad::test::getTestConfigPath());
+        config_ = vad_config;
         test_config_ = test_config;
     }
 
     std::shared_ptr<MockVadLogger> mock_logger_;
-    VadModelConfig config_;
+    VadConfig config_;
     test::TestConfig test_config_;
 };
 
@@ -115,7 +115,6 @@ TEST_F(VadIntegrationTest, ModelInitializationWithRealEngines)
     // VadModelのコンストラクタが例外を投げずに完了すればテスト成功
     // これにより、プラグインのロード、エンジンのデシリアライズ、CUDAコンテキストの初期化が
     // 正常に行われることを検証する
-    VadConfig dummy_vad_config{};
     autoware::tensorrt_common::TrtCommonConfig dummy_backbone_config{"", "", "", 1};
     autoware::tensorrt_common::TrtCommonConfig dummy_head_config{"", "", "", 1};
     autoware::tensorrt_common::TrtCommonConfig dummy_head_no_prev_config{"", "", "", 1};
@@ -123,7 +122,6 @@ TEST_F(VadIntegrationTest, ModelInitializationWithRealEngines)
     ASSERT_NO_THROW({
         model = std::make_unique<VadModel<MockVadLogger>>(
             config_,
-            dummy_vad_config,
             dummy_backbone_config,
             dummy_head_config,
             dummy_head_no_prev_config,
@@ -136,8 +134,8 @@ class VadInferIntegrationTest : public ::testing::Test {
 protected:
     void SetUp() override {
         logger_ = std::make_shared<MockVadLogger>();
-        auto [vad_model_config, test_config] = test::load_config_from_yaml(autoware::tensorrt_vad::test::getTestConfigPath());
-        config_ = vad_model_config;
+        auto [vad_config, test_config] = test::load_config_from_yaml(autoware::tensorrt_vad::test::getTestConfigPath());
+        config_ = vad_config;
         test_config_ = test_config;
         
         // 前提条件のチェック
@@ -163,8 +161,8 @@ protected:
         }
     }
 
-    VadModelConfig createRealConfig() {
-        VadModelConfig config;
+    VadConfig createRealConfig() {
+        VadConfig config;
         config.plugins_path = config_.plugins_path;
         
         NetConfig backbone_config;
@@ -231,15 +229,14 @@ protected:
     }
 
     std::shared_ptr<MockVadLogger> logger_;
-    VadModelConfig config_;
+    VadConfig config_;
     test::TestConfig test_config_;
     bool integration_test_enabled_ = false;
 };
 
 // 1. モデルが例外を投げずに初期化できることを確認
 TEST_F(VadInferIntegrationTest, ModelInitialization) {
-    VadModelConfig config = createRealConfig();
-    VadConfig dummy_vad_config{};
+    VadConfig config = createRealConfig();
     autoware::tensorrt_common::TrtCommonConfig dummy_backbone_config{"", "", "", 1};
     autoware::tensorrt_common::TrtCommonConfig dummy_head_config{"", "", "", 1};
     autoware::tensorrt_common::TrtCommonConfig dummy_head_no_prev_config{"", "", "", 1};
@@ -247,7 +244,6 @@ TEST_F(VadInferIntegrationTest, ModelInitialization) {
     ASSERT_NO_THROW({
         model = std::make_unique<VadModel<MockVadLogger>>(
             config,
-            dummy_vad_config,
             dummy_backbone_config,
             dummy_head_config,
             dummy_head_no_prev_config,
@@ -257,14 +253,12 @@ TEST_F(VadInferIntegrationTest, ModelInitialization) {
 
 // 2. 実際のinfer実行テスト
 TEST_F(VadInferIntegrationTest, RealInferExecution) {
-    VadModelConfig config = createRealConfig();
-    VadConfig dummy_vad_config{};
+    VadConfig config = createRealConfig();
     autoware::tensorrt_common::TrtCommonConfig dummy_backbone_config{"", "", "", 1};
     autoware::tensorrt_common::TrtCommonConfig dummy_head_config{"", "", "", 1};
     autoware::tensorrt_common::TrtCommonConfig dummy_head_no_prev_config{"", "", "", 1};
     auto model = std::make_unique<VadModel<MockVadLogger>>(
         config,
-        dummy_vad_config,
         dummy_backbone_config,
         dummy_head_config,
         dummy_head_no_prev_config,

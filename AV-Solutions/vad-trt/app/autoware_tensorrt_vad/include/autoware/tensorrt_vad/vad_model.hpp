@@ -36,9 +36,6 @@
 namespace autoware::tensorrt_vad
 {
 
-// Forward declarations
-struct VadModelConfig;
-
 // VAD推論の入力データ構造
 struct VadInputData
 {
@@ -87,25 +84,11 @@ std::vector<std::vector<float>> postprocess_traj_cls_scores(
 std::vector<std::vector<float>> postprocess_bbox_preds(
     const std::vector<float>& all_bbox_preds_flat);
 
-// config for Net class
-struct NetConfig
-{
-  std::string name;
-  std::map<std::string, std::map<std::string, std::string>> inputs;
-};
-
 // Helper function to parse external input configuration
 inline std::pair<std::string, std::string> parse_external_inputs(const std::pair<std::string, std::map<std::string, std::string>>& input_pair) {
   const auto& ext_map = input_pair.second;
   return {ext_map.at("net"), ext_map.at("name")};
 }
-
-// config for VadModel class
-struct VadModelConfig
-{
-  std::string plugins_path;
-  std::vector<NetConfig> nets_config;
-};
 
 // VADモデルクラス - CUDA/TensorRTを用いた推論を担当
 template<typename LoggerType>
@@ -113,22 +96,21 @@ class VadModel
 {
 public:
   VadModel(
-    const VadModelConfig& config,
     const VadConfig& vad_config,
     const autoware::tensorrt_common::TrtCommonConfig& backbone_config,
     const autoware::tensorrt_common::TrtCommonConfig& head_config,
     const autoware::tensorrt_common::TrtCommonConfig& head_no_prev_config,
     std::shared_ptr<LoggerType> logger)
     : stream_(nullptr), is_first_frame_(true), 
-      config_(config), logger_(std::move(logger)), vad_config_(vad_config), head_trt_config_(head_config)
+      vad_config_(vad_config), logger_(std::move(logger)), head_trt_config_(head_config)
   {
     // loggerはVadLoggerを継承したclassのみ受け取る
     static_assert(std::is_base_of_v<VadLogger, LoggerType>, 
       "LoggerType must be VadLogger or derive from VadLogger.");    
     
     cudaStreamCreate(&stream_);
-    
-    nets_ = init_engines(config.nets_config, vad_config, backbone_config, head_config, head_no_prev_config);
+
+    nets_ = init_engines(vad_config_.nets_config, vad_config_, backbone_config, head_config, head_no_prev_config);
   }
 
   // デストラクタ
@@ -184,13 +166,12 @@ public:
   bool is_first_frame_;
 
   // 設定情報の保存
-  VadModelConfig config_;
+  VadConfig vad_config_;
 
   // ロガーインスタンス
   std::shared_ptr<VadLogger> logger_;
 
 private:
-  VadConfig vad_config_;
   autoware::tensorrt_common::TrtCommonConfig head_trt_config_;
 
   std::unordered_map<std::string, std::shared_ptr<Net>> init_engines(
@@ -214,15 +195,15 @@ private:
 
       if (engine.name == "backbone") {
         nets[engine.name] = std::make_shared<Backbone>(
-          vad_config, backbone_config, config_.plugins_path, logger_);
+          vad_config, backbone_config, vad_config_.plugins_path, logger_);
         nets[engine.name]->set_input_tensor(external_bindings);
       } else if (engine.name == "head_no_prev") {
         nets[engine.name] = std::make_shared<Head>(
-          vad_config, head_no_prev_config, NetworkType::HEAD_NO_PREV, config_.plugins_path, logger_);
+          vad_config, head_no_prev_config, NetworkType::HEAD_NO_PREV, vad_config_.plugins_path, logger_);
         nets[engine.name]->set_input_tensor(external_bindings);
       } else if (engine.name == "head") {
         nets[engine.name] = std::make_shared<Head>(
-          vad_config, head_config, NetworkType::HEAD, config_.plugins_path, logger_);
+          vad_config, head_config, NetworkType::HEAD, vad_config_.plugins_path, logger_);
       }
     }
     
@@ -269,10 +250,10 @@ private:
   }
 
   void load_head() {
-    auto head_engine = std::find_if(config_.nets_config.begin(), config_.nets_config.end(),
+    auto head_engine = std::find_if(vad_config_.nets_config.begin(), vad_config_.nets_config.end(),
         [](const NetConfig& engine) { return engine.name == "head"; });
     
-    if (head_engine == config_.nets_config.end()) {
+    if (head_engine == vad_config_.nets_config.end()) {
       logger_->error("Head engine configuration not found");
       return;
     }

@@ -234,7 +234,6 @@ void VadNode::initialize_vad_model()
   // load configs
   VadConfig vad_config = load_vad_config();
   auto [backbone_trt_config, head_trt_config, head_no_prev_trt_config] = load_trt_common_configs();
-  VadModelConfig vad_model_config = load_vad_model_config();
 
   // Initialize VAD interface and model
   auto tf_buffer_shared = std::shared_ptr<tf2_ros::Buffer>(&tf_buffer_, [](tf2_ros::Buffer*){});
@@ -243,7 +242,6 @@ void VadNode::initialize_vad_model()
   // Create RosVadLogger using the logger
   auto ros_logger = std::make_shared<RosVadLogger>(this->get_logger());
   vad_model_ptr_ = std::make_unique<VadModel<RosVadLogger>>(
-    vad_model_config,
     vad_config,
     backbone_trt_config,
     head_trt_config,
@@ -254,10 +252,29 @@ void VadNode::initialize_vad_model()
   RCLCPP_INFO(this->get_logger(), "VAD model and interface initialized successfully");
 }
 
-VadModelConfig VadNode::load_vad_model_config()
+VadConfig VadNode::load_vad_config()
 {
-  VadModelConfig vad_model_config;
-  vad_model_config.plugins_path = this->declare_parameter<std::string>("model_params.plugins_path");
+  VadConfig vad_config;
+  vad_config.num_cameras = this->declare_parameter<int32_t>("model_params.network_io_params.num_cameras");
+  vad_config.bev_h = this->declare_parameter<int32_t>("model_params.network_io_params.bev_h");
+  vad_config.bev_w = this->declare_parameter<int32_t>("model_params.network_io_params.bev_w");
+  vad_config.bev_feature_dim = this->declare_parameter<int32_t>("model_params.network_io_params.bev_feature_dim");
+  vad_config.target_image_width = this->declare_parameter<int32_t>("model_params.network_io_params.target_image_width");
+  vad_config.target_image_height = this->declare_parameter<int32_t>("model_params.network_io_params.target_image_height");
+  vad_config.downsample_factor = this->declare_parameter<int32_t>("model_params.network_io_params.downsample_factor");
+  vad_config.num_decoder_layers = this->declare_parameter<int32_t>("model_params.network_io_params.num_decoder_layers");
+  vad_config.prediction_num_queries = this->declare_parameter<int32_t>("model_params.network_io_params.prediction_num_queries");
+  vad_config.prediction_num_classes = this->declare_parameter<int32_t>("model_params.network_io_params.prediction_num_classes");
+  vad_config.prediction_bbox_pred_dim = this->declare_parameter<int32_t>("model_params.network_io_params.prediction_bbox_pred_dim");
+  vad_config.prediction_trajectory_modes = this->declare_parameter<int32_t>("model_params.network_io_params.prediction_trajectory_modes");
+  vad_config.prediction_timesteps = this->declare_parameter<int32_t>("model_params.network_io_params.prediction_timesteps");
+  vad_config.planning_ego_commands = this->declare_parameter<int32_t>("model_params.network_io_params.planning_ego_commands");
+  vad_config.planning_timesteps = this->declare_parameter<int32_t>("model_params.network_io_params.planning_timesteps");
+  vad_config.map_num_queries = this->declare_parameter<int32_t>("model_params.network_io_params.map_num_queries");
+  vad_config.map_num_class = this->declare_parameter<int32_t>("model_params.network_io_params.map_num_class");
+  vad_config.map_points_per_polylines = this->declare_parameter<int32_t>("model_params.network_io_params.map_points_per_polylines");
+  vad_config.can_bus_dim = this->declare_parameter<int32_t>("model_params.network_io_params.can_bus_dim");
+  vad_config.plugins_path = this->declare_parameter<std::string>("model_params.plugins_path");
 
   // backbone configuration
   NetConfig backbone_config;
@@ -285,10 +302,11 @@ VadModelConfig VadNode::load_vad_model_config()
   head_no_prev_config.inputs[input_feature_no_prev]["net"] = net_param_no_prev;
   head_no_prev_config.inputs[input_feature_no_prev]["name"] = name_param_no_prev;
 
-  vad_model_config.nets_config.push_back(backbone_config);
-  vad_model_config.nets_config.push_back(head_config);
-  vad_model_config.nets_config.push_back(head_no_prev_config);
-  return vad_model_config;
+  vad_config.nets_config.push_back(backbone_config);
+  vad_config.nets_config.push_back(head_config);
+  vad_config.nets_config.push_back(head_no_prev_config);
+  
+  return vad_config;
 }
 
 std::tuple<
@@ -321,31 +339,6 @@ std::tuple<
   RCLCPP_INFO(this->get_logger(), "  Head No Prev - ONNX: %s, Precision: %s", head_no_prev_onnx_path.c_str(), head_no_prev_precision.c_str());
 
   return {backbone_trt_config, head_trt_config, head_no_prev_trt_config};
-}
-
-VadConfig VadNode::load_vad_config()
-{
-  VadConfig vad_config;
-  vad_config.num_cameras = this->declare_parameter<int32_t>("model_params.network_io_params.num_cameras");
-  vad_config.bev_h = this->declare_parameter<int32_t>("model_params.network_io_params.bev_h");
-  vad_config.bev_w = this->declare_parameter<int32_t>("model_params.network_io_params.bev_w");
-  vad_config.bev_feature_dim = this->declare_parameter<int32_t>("model_params.network_io_params.bev_feature_dim");
-  vad_config.target_image_width = this->declare_parameter<int32_t>("model_params.network_io_params.target_image_width");
-  vad_config.target_image_height = this->declare_parameter<int32_t>("model_params.network_io_params.target_image_height");
-  vad_config.downsample_factor = this->declare_parameter<int32_t>("model_params.network_io_params.downsample_factor");
-  vad_config.num_decoder_layers = this->declare_parameter<int32_t>("model_params.network_io_params.num_decoder_layers");
-  vad_config.prediction_num_queries = this->declare_parameter<int32_t>("model_params.network_io_params.prediction_num_queries");
-  vad_config.prediction_num_classes = this->declare_parameter<int32_t>("model_params.network_io_params.prediction_num_classes");
-  vad_config.prediction_bbox_pred_dim = this->declare_parameter<int32_t>("model_params.network_io_params.prediction_bbox_pred_dim");
-  vad_config.prediction_trajectory_modes = this->declare_parameter<int32_t>("model_params.network_io_params.prediction_trajectory_modes");
-  vad_config.prediction_timesteps = this->declare_parameter<int32_t>("model_params.network_io_params.prediction_timesteps");
-  vad_config.planning_ego_commands = this->declare_parameter<int32_t>("model_params.network_io_params.planning_ego_commands");
-  vad_config.planning_timesteps = this->declare_parameter<int32_t>("model_params.network_io_params.planning_timesteps");
-  vad_config.map_num_queries = this->declare_parameter<int32_t>("model_params.network_io_params.map_num_queries");
-  vad_config.map_num_class = this->declare_parameter<int32_t>("model_params.network_io_params.map_num_class");
-  vad_config.map_points_per_polylines = this->declare_parameter<int32_t>("model_params.network_io_params.map_points_per_polylines");
-  vad_config.can_bus_dim = this->declare_parameter<int32_t>("model_params.network_io_params.can_bus_dim");
-  return vad_config;
 }
 
 void VadNode::publish_trajectories(const autoware_internal_planning_msgs::msg::CandidateTrajectories & candidate_trajectories)
