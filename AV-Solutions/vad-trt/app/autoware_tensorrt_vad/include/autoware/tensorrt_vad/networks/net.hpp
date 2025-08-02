@@ -35,6 +35,16 @@
 
 namespace autoware::tensorrt_vad {
 
+// Network type enumeration
+enum class NetworkType {
+  BACKBONE,
+  HEAD,
+  HEAD_NO_PREV
+};
+
+// Helper function to convert NetworkType to string (for backward compatibility)
+std::string toString(NetworkType type);
+
 // Standalone functions for NetworkIO generation and engine building
 
 // Backbone NetworkIO設定生成関数
@@ -62,11 +72,13 @@ std::unique_ptr<autoware::tensorrt_common::TrtCommon> init_tensorrt(
     const std::string& plugins_path,
     std::shared_ptr<VadLogger> logger);
 
-struct Net {
+class Net {
+public:
   TensorMap bindings;
   std::unique_ptr<autoware::tensorrt_common::TrtCommon> trt_common;
   std::shared_ptr<VadLogger> logger_;
 
+public:
   Net(
     const VadConfig& vad_config,
     const autoware::tensorrt_common::TrtCommonConfig& trt_common_config,
@@ -75,12 +87,55 @@ struct Net {
     std::shared_ptr<VadLogger> logger
   );
 
+  Net(
+    const VadConfig& vad_config,
+    const autoware::tensorrt_common::TrtCommonConfig& trt_common_config,
+    NetworkType network_type,
+    const std::string& plugins_path,
+    std::shared_ptr<VadLogger> logger
+  );
+
+  virtual std::vector<autoware::tensorrt_common::NetworkIO> generate_network_io(const VadConfig& vad_config) = 0;
+  virtual void set_input_tensor(TensorMap& ext) = 0;
+    
+  // 既存のメソッドは残すが、deprecatedとして扱う
   void set_input_tensor_backbone(TensorMap& ext);
   void set_input_tensor_head(TensorMap& ext);
   void set_input_tensor(TensorMap& ext, const std::string& name);
   void Enqueue(cudaStream_t stream);
 
-  ~Net();
+  virtual ~Net();
+};
+
+// BackboneクラスとHeadクラスの定義
+class Backbone : public Net {
+public:
+  Backbone(
+    const VadConfig& vad_config,
+    const autoware::tensorrt_common::TrtCommonConfig& trt_common_config,
+    const std::string& plugins_path,
+    std::shared_ptr<VadLogger> logger
+  );
+
+  std::vector<autoware::tensorrt_common::NetworkIO> generate_network_io(const VadConfig& vad_config) override;
+  void set_input_tensor(TensorMap& ext) override;
+};
+
+class Head : public Net {
+private:
+  NetworkType network_type_;
+
+public:
+  Head(
+    const VadConfig& vad_config,
+    const autoware::tensorrt_common::TrtCommonConfig& trt_common_config,
+    NetworkType network_type,
+    const std::string& plugins_path,
+    std::shared_ptr<VadLogger> logger
+  );
+
+  std::vector<autoware::tensorrt_common::NetworkIO> generate_network_io(const VadConfig& vad_config) override;
+  void set_input_tensor(TensorMap& ext) override;
 };
 
 } // namespace autoware::tensorrt_vad

@@ -19,6 +19,20 @@
 
 namespace autoware::tensorrt_vad {
 
+// NetworkType utility functions implementation
+std::string toString(NetworkType type) {
+  switch (type) {
+    case NetworkType::BACKBONE:
+      return "backbone";
+    case NetworkType::HEAD:
+      return "head";
+    case NetworkType::HEAD_NO_PREV:
+      return "head_no_prev";
+    default:
+      return "unknown";
+  }
+}
+
 // Backbone NetworkIO設定生成関数
 std::vector<autoware::tensorrt_common::NetworkIO> generate_network_io_backbone(const VadConfig& vad_config) {
   int32_t downsampled_image_height = vad_config.target_image_height / vad_config.downsample_factor;
@@ -174,6 +188,21 @@ Net::Net(
   }
 }
 
+Net::Net(
+  const VadConfig& vad_config,
+  const autoware::tensorrt_common::TrtCommonConfig& trt_common_config,
+  NetworkType network_type,
+  const std::string& plugins_path,
+  std::shared_ptr<VadLogger> logger
+) : logger_(logger)
+{
+  std::string engine_name = toString(network_type);
+  trt_common = init_tensorrt(vad_config, trt_common_config, engine_name, plugins_path, logger_);
+  if (!trt_common) {
+    logger_->error("Failed to initialize TensorRT engine: " + engine_name);
+  }
+}
+
 void Net::set_input_tensor_backbone(TensorMap& ext) {
   int32_t nb = trt_common->getNbIOTensors();
 
@@ -229,6 +258,53 @@ Net::~Net() {
         pair.second.reset();
     }
     bindings.clear();
+}
+
+// Backbone class implementation
+
+Backbone::Backbone(
+  const VadConfig& vad_config,
+  const autoware::tensorrt_common::TrtCommonConfig& trt_common_config,
+  const std::string& plugins_path,
+  std::shared_ptr<VadLogger> logger
+) : Net(vad_config, trt_common_config, NetworkType::BACKBONE, plugins_path, logger)
+{
+}
+
+std::vector<autoware::tensorrt_common::NetworkIO> Backbone::generate_network_io(const VadConfig& vad_config) {
+  return generate_network_io_backbone(vad_config);
+}
+
+void Backbone::set_input_tensor(TensorMap& ext) {
+  set_input_tensor_backbone(ext);
+}
+
+// Head class implementation
+
+Head::Head(
+  const VadConfig& vad_config,
+  const autoware::tensorrt_common::TrtCommonConfig& trt_common_config,
+  NetworkType network_type,
+  const std::string& plugins_path,
+  std::shared_ptr<VadLogger> logger
+) : Net(vad_config, trt_common_config, network_type, plugins_path, logger), network_type_(network_type)
+{
+}
+
+std::vector<autoware::tensorrt_common::NetworkIO> Head::generate_network_io(const VadConfig& vad_config) {
+  switch (network_type_) {
+    case NetworkType::HEAD:
+      return generate_network_io_head(vad_config);
+    case NetworkType::HEAD_NO_PREV:
+      return generate_network_io_head_no_prev(vad_config);
+    default:
+      logger_->error("Unknown network type");
+      return {};
+  }
+}
+
+void Head::set_input_tensor(TensorMap& ext) {
+  set_input_tensor_head(ext);
 }
 
 } // namespace autoware::tensorrt_vad
