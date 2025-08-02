@@ -49,7 +49,7 @@
 #include <utility>
 
 #include <cuOSD/cuosd.h>
-#include "tensor.h"
+#include "autoware/tensorrt_vad/networks/tensor.hpp"
 #include "visualize.hpp"
 
 namespace nv {

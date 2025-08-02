@@ -24,8 +24,6 @@ protected:
         
         NetConfig backbone_config;
         backbone_config.name = "backbone";
-        backbone_config.engine_file = "/tmp/test_backbone.engine";
-        backbone_config.use_graph = false; // グラフはインテグレーションテストで検証
         
         config_.nets_config.push_back(backbone_config);
     }
@@ -93,22 +91,6 @@ TEST_F(VadModelTest, VadModelConfigStructure)
     // ネットワーク設定の検証
     const auto& net_conf = config_.nets_config[0];
     EXPECT_EQ(net_conf.name, "backbone");
-    EXPECT_EQ(net_conf.engine_file, "/tmp/test_backbone.engine");
-    EXPECT_FALSE(net_conf.use_graph);
-}
-
-// 4. NetworkParamクラスの基本的な振る舞いをテスト
-TEST_F(VadModelTest, NetworkParamClass)
-{
-    std::string onnx_path = "model.onnx";
-    std::string engine_path = "model.engine";
-    std::string trt_precision = "fp16";
-
-    NetworkParam param(onnx_path, engine_path, trt_precision);
-
-    EXPECT_EQ(param.onnx_path(), onnx_path);
-    EXPECT_EQ(param.engine_path(), engine_path);
-    EXPECT_EQ(param.trt_precision(), trt_precision);
 }
 
 }  // namespace autoware::tensorrt_vad

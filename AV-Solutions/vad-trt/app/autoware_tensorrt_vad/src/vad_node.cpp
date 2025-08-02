@@ -85,7 +85,7 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
       declare_parameter<std::vector<int64_t>>("interface_params.autoware_to_vad_camera_mapping")
     ),
     front_camera_id_(declare_parameter<int32_t>("sync_params.front_camera_id")),
-    trajectory_timestep_(declare_parameter<double>("interface_params.trajectory_timestep", 1.0)),
+    trajectory_timestep_(declare_parameter<double>("interface_params.trajectory_timestep")),
     vad_input_topic_data_current_frame_(num_cameras_)
 {
   // Publishers
@@ -130,18 +130,12 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
       "/tf_static", tf_static_qos,
       std::bind(&VadNode::tf_static_callback, this, std::placeholders::_1));
 
-  // Load VadModelConfig
-  load_vad_model_config();
-
   // Initialize synchronization strategy
   double sync_tolerance_ms = declare_parameter<double>("sync_params.sync_tolerance_ms");
   sync_strategy_ = std::make_unique<FrontCriticalSynchronizationStrategy>(front_camera_id_, sync_tolerance_ms);
 
   // Initialize VAD model on first complete frame
-  if (!vad_model_ptr_) {
-    RCLCPP_INFO(this->get_logger(), "Initializing VAD model with first complete frame");
-    initialize_vad_model();
-  }
+  initialize_vad_model();
 
   RCLCPP_INFO(this->get_logger(), "VAD Node has been initialized - VAD model will be initialized after first callback");
 }
@@ -237,83 +231,114 @@ std::optional<VadOutputTopicData> VadNode::trigger_inference(VadInputTopicData v
 
 void VadNode::initialize_vad_model()
 {
+  // load configs
+  VadConfig vad_config = load_vad_config();
+  auto [backbone_trt_config, head_trt_config, head_no_prev_trt_config] = load_trt_common_configs();
+
   // Initialize VAD interface and model
   auto tf_buffer_shared = std::shared_ptr<tf2_ros::Buffer>(&tf_buffer_, [](tf2_ros::Buffer*){});
   vad_interface_ptr_ = std::make_unique<VadInterface>(vad_interface_config_, tf_buffer_shared);
 
   // Create RosVadLogger using the logger
   auto ros_logger = std::make_shared<RosVadLogger>(this->get_logger());
-  vad_model_ptr_ = std::make_unique<VadModel<RosVadLogger>>(vad_model_config_, ros_logger);
+  vad_model_ptr_ = std::make_unique<VadModel<RosVadLogger>>(
+    vad_config,
+    backbone_trt_config,
+    head_trt_config,
+    head_no_prev_trt_config,
+    ros_logger
+  );
 
   RCLCPP_INFO(this->get_logger(), "VAD model and interface initialized successfully");
 }
 
-void VadNode::load_vad_model_config()
+VadConfig VadNode::load_vad_config()
 {
-  // Load VAD config parameters
-  vad_model_config_.plugins_path =
-      this->declare_parameter<std::string>("model_params.plugins_path", "");
-  vad_model_config_.warm_up_num =
-      this->declare_parameter<int>("model_params.warm_up_num", 20);
+  VadConfig vad_config;
+  vad_config.num_cameras = this->declare_parameter<int32_t>("model_params.network_io_params.num_cameras");
+  vad_config.bev_h = this->declare_parameter<int32_t>("model_params.network_io_params.bev_h");
+  vad_config.bev_w = this->declare_parameter<int32_t>("model_params.network_io_params.bev_w");
+  vad_config.bev_feature_dim = this->declare_parameter<int32_t>("model_params.network_io_params.bev_feature_dim");
+  vad_config.target_image_width = this->declare_parameter<int32_t>("model_params.network_io_params.target_image_width");
+  vad_config.target_image_height = this->declare_parameter<int32_t>("model_params.network_io_params.target_image_height");
+  vad_config.downsample_factor = this->declare_parameter<int32_t>("model_params.network_io_params.downsample_factor");
+  vad_config.num_decoder_layers = this->declare_parameter<int32_t>("model_params.network_io_params.num_decoder_layers");
+  vad_config.prediction_num_queries = this->declare_parameter<int32_t>("model_params.network_io_params.prediction_num_queries");
+  vad_config.prediction_num_classes = this->declare_parameter<int32_t>("model_params.network_io_params.prediction_num_classes");
+  vad_config.prediction_bbox_pred_dim = this->declare_parameter<int32_t>("model_params.network_io_params.prediction_bbox_pred_dim");
+  vad_config.prediction_trajectory_modes = this->declare_parameter<int32_t>("model_params.network_io_params.prediction_trajectory_modes");
+  vad_config.prediction_timesteps = this->declare_parameter<int32_t>("model_params.network_io_params.prediction_timesteps");
+  vad_config.planning_ego_commands = this->declare_parameter<int32_t>("model_params.network_io_params.planning_ego_commands");
+  vad_config.planning_timesteps = this->declare_parameter<int32_t>("model_params.network_io_params.planning_timesteps");
+  vad_config.map_num_queries = this->declare_parameter<int32_t>("model_params.network_io_params.map_num_queries");
+  vad_config.map_num_class = this->declare_parameter<int32_t>("model_params.network_io_params.map_num_class");
+  vad_config.map_points_per_polylines = this->declare_parameter<int32_t>("model_params.network_io_params.map_points_per_polylines");
+  vad_config.can_bus_dim = this->declare_parameter<int32_t>("model_params.network_io_params.can_bus_dim");
+  vad_config.plugins_path = this->declare_parameter<std::string>("model_params.plugins_path");
 
-  // Load network configurations
-  load_net_configs();
-}
-
-void VadNode::load_net_configs()
-{
-  // Load network configurations
-  
   // backbone configuration
   NetConfig backbone_config;
-  backbone_config.name = this->declare_parameter<std::string>(
-      "model_params.nets.backbone.name", "backbone");
-  backbone_config.engine_file = this->declare_parameter<std::string>(
-      "model_params.nets.backbone.engine_file", "");
-  backbone_config.use_graph = this->declare_parameter<bool>(
-      "model_params.nets.backbone.use_graph", true);
+  backbone_config.name = this->declare_parameter<std::string>("model_params.nets.backbone.name");
 
   // head configuration
   NetConfig head_config;
-  head_config.name = this->declare_parameter<std::string>(
-      "model_params.nets.head.name", "head");
-  head_config.engine_file = this->declare_parameter<std::string>(
-      "model_params.nets.head.engine_file", "");
-  head_config.use_graph = this->declare_parameter<bool>(
-      "model_params.nets.head.use_graph", true);
+  head_config.name = this->declare_parameter<std::string>("model_params.nets.head.name");
 
   // head inputs
-  std::string input_feature = this->declare_parameter<std::string>(
-      "model_params.nets.head.inputs.input_feature", "mlvl_feats.0");
-  std::string net_param = this->declare_parameter<std::string>(
-      "model_params.nets.head.inputs.net", "backbone");
-  std::string name_param = this->declare_parameter<std::string>(
-      "model_params.nets.head.inputs.name", "out.0");
+  std::string input_feature = this->declare_parameter<std::string>("model_params.nets.head.inputs.input_feature");
+  std::string net_param = this->declare_parameter<std::string>("model_params.nets.head.inputs.net");
+  std::string name_param = this->declare_parameter<std::string>("model_params.nets.head.inputs.name");
   head_config.inputs[input_feature]["net"] = net_param;
   head_config.inputs[input_feature]["name"] = name_param;
 
   // head_no_prev configuration
   NetConfig head_no_prev_config;
-  head_no_prev_config.name = this->declare_parameter<std::string>(
-      "model_params.nets.head_no_prev.name", "head_no_prev");
-  head_no_prev_config.engine_file = this->declare_parameter<std::string>(
-      "model_params.nets.head_no_prev.engine_file", "");
-  head_no_prev_config.use_graph = this->declare_parameter<bool>(
-      "model_params.nets.head_no_prev.use_graph", true);
+  head_no_prev_config.name = this->declare_parameter<std::string>("model_params.nets.head_no_prev.name");
 
   // head_no_prev inputs
-  std::string input_feature_no_prev = this->declare_parameter<std::string>(
-      "model_params.nets.head_no_prev.inputs.input_feature", "mlvl_feats.0");
-  std::string net_param_no_prev = this->declare_parameter<std::string>(
-      "model_params.nets.head_no_prev.inputs.net", "backbone");
-  std::string name_param_no_prev = this->declare_parameter<std::string>(
-      "model_params.nets.head_no_prev.inputs.name", "out.0");
+  std::string input_feature_no_prev = this->declare_parameter<std::string>("model_params.nets.head_no_prev.inputs.input_feature");
+  std::string net_param_no_prev = this->declare_parameter<std::string>("model_params.nets.head_no_prev.inputs.net");
+  std::string name_param_no_prev = this->declare_parameter<std::string>("model_params.nets.head_no_prev.inputs.name");
   head_no_prev_config.inputs[input_feature_no_prev]["net"] = net_param_no_prev;
   head_no_prev_config.inputs[input_feature_no_prev]["name"] = name_param_no_prev;
 
-  vad_model_config_.nets_config.push_back(backbone_config);
-  vad_model_config_.nets_config.push_back(head_config);
-  vad_model_config_.nets_config.push_back(head_no_prev_config);
+  vad_config.nets_config.push_back(backbone_config);
+  vad_config.nets_config.push_back(head_config);
+  vad_config.nets_config.push_back(head_no_prev_config);
+  
+  return vad_config;
+}
+
+std::tuple<
+    autoware::tensorrt_common::TrtCommonConfig,
+    autoware::tensorrt_common::TrtCommonConfig,
+    autoware::tensorrt_common::TrtCommonConfig
+> VadNode::load_trt_common_configs()
+{
+  std::string backbone_onnx_path = this->declare_parameter<std::string>("model_params.nets.backbone.onnx_path");
+  std::string backbone_precision = this->declare_parameter<std::string>("model_params.nets.backbone.precision");
+  std::string backbone_engine_path = this->declare_parameter<std::string>("model_params.nets.backbone.engine_path");
+  autoware::tensorrt_common::TrtCommonConfig backbone_trt_config(
+      backbone_onnx_path, backbone_precision, backbone_engine_path, 5ULL << 30U);
+
+  std::string head_onnx_path = this->declare_parameter<std::string>("model_params.nets.head.onnx_path");
+  std::string head_precision = this->declare_parameter<std::string>("model_params.nets.head.precision");
+  std::string head_engine_path = this->declare_parameter<std::string>("model_params.nets.head.engine_path");
+  autoware::tensorrt_common::TrtCommonConfig head_trt_config(
+      head_onnx_path, head_precision, head_engine_path, 5ULL << 30U);
+
+  std::string head_no_prev_onnx_path = this->declare_parameter<std::string>("model_params.nets.head_no_prev.onnx_path");
+  std::string head_no_prev_precision = this->declare_parameter<std::string>("model_params.nets.head_no_prev.precision");
+  std::string head_no_prev_engine_path = this->declare_parameter<std::string>("model_params.nets.head_no_prev.engine_path");
+  autoware::tensorrt_common::TrtCommonConfig head_no_prev_trt_config(
+      head_no_prev_onnx_path, head_no_prev_precision, head_no_prev_engine_path, 5ULL << 30U);
+
+  RCLCPP_INFO(this->get_logger(), "TrtCommon configurations loaded (5GB workspace):");
+  RCLCPP_INFO(this->get_logger(), "  Backbone - ONNX: %s, Precision: %s", backbone_onnx_path.c_str(), backbone_precision.c_str());
+  RCLCPP_INFO(this->get_logger(), "  Head - ONNX: %s, Precision: %s", head_onnx_path.c_str(), head_precision.c_str());
+  RCLCPP_INFO(this->get_logger(), "  Head No Prev - ONNX: %s, Precision: %s", head_no_prev_onnx_path.c_str(), head_no_prev_precision.c_str());
+
+  return {backbone_trt_config, head_trt_config, head_no_prev_trt_config};
 }
 
 void VadNode::publish_trajectories(const autoware_internal_planning_msgs::msg::CandidateTrajectories & candidate_trajectories)
@@ -368,7 +393,7 @@ void VadNode::publish(const VadOutputTopicData & vad_output_topic_data)
 void VadNode::create_camera_image_subscribers(const rclcpp::QoS& sensor_qos)
 {
   camera_image_subs_.resize(num_cameras_);
-  std::vector<bool> use_raw_cameras = this->declare_parameter<std::vector<bool>>("node_params.use_raw", std::vector<bool>(num_cameras_, false));
+  std::vector<bool> use_raw_cameras = this->declare_parameter<std::vector<bool>>("node_params.use_raw");
   auto resolve_topic_name = [this](const std::string & query) {
     return this->get_node_topics_interface()->resolve_topic_name(query);
   };

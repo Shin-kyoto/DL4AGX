@@ -4,7 +4,6 @@
       use_raw: [false, false, false, false, false, false] # per camera: if true, use raw image data, otherwise use compressed images
     model_params:
       plugins_path: "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/libplugins.so"
-      warm_up_num: 20
       default_command: 2  # 0: TURN RIGHT, 1: TURN LEFT, 2: KEEP FORWARD
     sync_params:
       front_camera_id: 0  # ID of the front camera (anchor camera) for synchronization

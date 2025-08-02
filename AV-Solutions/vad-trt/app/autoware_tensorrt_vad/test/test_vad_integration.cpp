@@ -35,27 +35,24 @@ struct TestConfig {
 };
 
 /**
- * @brief load VadModelConfig and TestConfig from a YAML file
+ * @brief load VadConfig and TestConfig from a YAML file
  * 
  * @param config_path path to the YAML file
- * @return pair of VadModelConfig and TestConfig
+ * @return pair of VadConfig and TestConfig
  * @throws std::runtime_error if YAML loading fails
  */
-std::pair<VadModelConfig, TestConfig> load_config_from_yaml(const std::string& config_path) {
+std::pair<VadConfig, TestConfig> load_config_from_yaml(const std::string& config_path) {
     try {
         YAML::Node yaml_config = YAML::LoadFile(config_path);
         const auto& test_config_node = yaml_config["test_config"];
         
-        VadModelConfig vad_model_config;
-        vad_model_config.plugins_path = test_config_node["plugins_path"].as<std::string>();
-        vad_model_config.warm_up_num = test_config_node["warm_up_num"].as<int>();
+        VadConfig vad_config;
+        vad_config.plugins_path = test_config_node["plugins_path"].as<std::string>();
         
         const auto& nets = test_config_node["nets"];
         for (const auto& net : nets) {
             NetConfig net_config;
             net_config.name = net.second["name"].as<std::string>();
-            net_config.engine_file = net.second["engine_file"].as<std::string>();
-            net_config.use_graph = net.second["use_graph"].as<bool>();
             
             if (net.second["inputs"]) {
                 const auto& inputs = net.second["inputs"];
@@ -67,7 +64,7 @@ std::pair<VadModelConfig, TestConfig> load_config_from_yaml(const std::string& c
                     net_config.inputs[input.first.as<std::string>()] = input_map;
                 }
             }
-            vad_model_config.nets_config.push_back(net_config);
+            vad_config.nets_config.push_back(net_config);
         }
 
         TestConfig test_config;
@@ -84,7 +81,7 @@ std::pair<VadModelConfig, TestConfig> load_config_from_yaml(const std::string& c
         const auto& expected_output = test_data["expected_output"];
         test_config.expected_output.trajectory = expected_output["trajectory"].as<std::vector<float>>();
 
-        return {vad_model_config, test_config};
+        return {vad_config, test_config};
     } catch (const YAML::Exception& e) {
         throw std::runtime_error("Failed to load config from YAML: " + std::string(e.what()));
     }
@@ -97,13 +94,13 @@ class VadIntegrationTest : public ::testing::Test {
 protected:
     void SetUp() override {
         mock_logger_ = std::make_shared<MockVadLogger>();
-        auto [vad_model_config, test_config] = test::load_config_from_yaml(autoware::tensorrt_vad::test::getTestConfigPath());
-        config_ = vad_model_config;
+        auto [vad_config, test_config] = test::load_config_from_yaml(autoware::tensorrt_vad::test::getTestConfigPath());
+        config_ = vad_config;
         test_config_ = test_config;
     }
 
     std::shared_ptr<MockVadLogger> mock_logger_;
-    VadModelConfig config_;
+    VadConfig config_;
     test::TestConfig test_config_;
 };
 
@@ -118,35 +115,37 @@ TEST_F(VadIntegrationTest, ModelInitializationWithRealEngines)
     // VadModelのコンストラクタが例外を投げずに完了すればテスト成功
     // これにより、プラグインのロード、エンジンのデシリアライズ、CUDAコンテキストの初期化が
     // 正常に行われることを検証する
+    autoware::tensorrt_common::TrtCommonConfig dummy_backbone_config{"", "", "", 1};
+    autoware::tensorrt_common::TrtCommonConfig dummy_head_config{"", "", "", 1};
+    autoware::tensorrt_common::TrtCommonConfig dummy_head_no_prev_config{"", "", "", 1};
     std::unique_ptr<VadModel<MockVadLogger>> model;
     ASSERT_NO_THROW({
-        model = std::make_unique<VadModel<MockVadLogger>>(config_, mock_logger_);
+        model = std::make_unique<VadModel<MockVadLogger>>(
+            config_,
+            dummy_backbone_config,
+            dummy_head_config,
+            dummy_head_no_prev_config,
+            mock_logger_);
     }) << "VadModel initialization failed with real engine files. "
        << "Check if paths are correct and files are not corrupted.";
-    
-    ASSERT_TRUE(model->initialized_) << "Model should be marked as initialized.";
 }
 
 class VadInferIntegrationTest : public ::testing::Test {
 protected:
     void SetUp() override {
         logger_ = std::make_shared<MockVadLogger>();
-        auto [vad_model_config, test_config] = test::load_config_from_yaml(autoware::tensorrt_vad::test::getTestConfigPath());
-        config_ = vad_model_config;
+        auto [vad_config, test_config] = test::load_config_from_yaml(autoware::tensorrt_vad::test::getTestConfigPath());
+        config_ = vad_config;
         test_config_ = test_config;
         
         // 前提条件のチェック
-        bool engines_exist = 
-            std::filesystem::exists(config_.nets_config[0].engine_file) &&
-            std::filesystem::exists(config_.nets_config[1].engine_file) &&
-            std::filesystem::exists(config_.nets_config[2].engine_file);
         bool plugin_exists = std::filesystem::exists(config_.plugins_path);
         
         int device_count = 0;
         cudaError_t cuda_status = cudaGetDeviceCount(&device_count);
         bool cuda_available = (cuda_status == cudaSuccess && device_count > 0);
         
-        integration_test_enabled_ = engines_exist && plugin_exists && cuda_available;
+        integration_test_enabled_ =  plugin_exists && cuda_available;
 
         if (!integration_test_enabled_) {
             GTEST_SKIP() << "Integration test requirements not met.";
@@ -162,26 +161,19 @@ protected:
         }
     }
 
-    VadModelConfig createRealConfig() {
-        VadModelConfig config;
+    VadConfig createRealConfig() {
+        VadConfig config;
         config.plugins_path = config_.plugins_path;
-        config.warm_up_num = config_.warm_up_num;
         
         NetConfig backbone_config;
         backbone_config.name = config_.nets_config[0].name;
-        backbone_config.engine_file = config_.nets_config[0].engine_file;
-        backbone_config.use_graph = config_.nets_config[0].use_graph;
         
         NetConfig head_no_prev_config;
         head_no_prev_config.name = config_.nets_config[1].name;
-        head_no_prev_config.engine_file = config_.nets_config[1].engine_file;
-        head_no_prev_config.use_graph = config_.nets_config[1].use_graph;
         head_no_prev_config.inputs["img_feats"] = config_.nets_config[1].inputs["img_feats"];
         
         NetConfig head_config;
         head_config.name = config_.nets_config[2].name;
-        head_config.engine_file = config_.nets_config[2].engine_file;
-        head_config.use_graph = config_.nets_config[2].use_graph;
         head_config.inputs["img_feats"] = config_.nets_config[2].inputs["img_feats"];
         
         config.nets_config = {backbone_config, head_no_prev_config, head_config};
@@ -237,24 +229,40 @@ protected:
     }
 
     std::shared_ptr<MockVadLogger> logger_;
-    VadModelConfig config_;
+    VadConfig config_;
     test::TestConfig test_config_;
     bool integration_test_enabled_ = false;
 };
 
 // 1. モデルが例外を投げずに初期化できることを確認
 TEST_F(VadInferIntegrationTest, ModelInitialization) {
-    VadModelConfig config = createRealConfig();
+    VadConfig config = createRealConfig();
+    autoware::tensorrt_common::TrtCommonConfig dummy_backbone_config{"", "", "", 1};
+    autoware::tensorrt_common::TrtCommonConfig dummy_head_config{"", "", "", 1};
+    autoware::tensorrt_common::TrtCommonConfig dummy_head_no_prev_config{"", "", "", 1};
     std::unique_ptr<VadModel<MockVadLogger>> model;
-    
     ASSERT_NO_THROW({
-        model = std::make_unique<VadModel<MockVadLogger>>(config, logger_);
+        model = std::make_unique<VadModel<MockVadLogger>>(
+            config,
+            dummy_backbone_config,
+            dummy_head_config,
+            dummy_head_no_prev_config,
+            logger_);
     }) << "Model initialization failed. Check paths and permissions.";
 }
 
 // 2. 実際のinfer実行テスト
 TEST_F(VadInferIntegrationTest, RealInferExecution) {
-    auto model = std::make_unique<VadModel<MockVadLogger>>(createRealConfig(), logger_);
+    VadConfig config = createRealConfig();
+    autoware::tensorrt_common::TrtCommonConfig dummy_backbone_config{"", "", "", 1};
+    autoware::tensorrt_common::TrtCommonConfig dummy_head_config{"", "", "", 1};
+    autoware::tensorrt_common::TrtCommonConfig dummy_head_no_prev_config{"", "", "", 1};
+    auto model = std::make_unique<VadModel<MockVadLogger>>(
+        config,
+        dummy_backbone_config,
+        dummy_head_config,
+        dummy_head_no_prev_config,
+        logger_);
     
     auto prev_bev_data = loadBevEmbedFromFile("bev_embed_frame1.bin");
     
