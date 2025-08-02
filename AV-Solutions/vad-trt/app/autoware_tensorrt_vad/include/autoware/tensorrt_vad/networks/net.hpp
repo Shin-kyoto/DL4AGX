@@ -27,9 +27,9 @@
 #include <cuda_fp16.h>
 #include <cuda_runtime_api.h>
 
-#include "tensor.hpp"
-#include "ros_vad_logger.hpp"
-#include "vad_config.hpp"
+#include "autoware/tensorrt_vad/networks/tensor.hpp"
+#include "autoware/tensorrt_vad/ros_vad_logger.hpp"
+#include "autoware/tensorrt_vad/vad_config.hpp"
 
 #include <autoware/tensorrt_common/tensorrt_common.hpp>
 

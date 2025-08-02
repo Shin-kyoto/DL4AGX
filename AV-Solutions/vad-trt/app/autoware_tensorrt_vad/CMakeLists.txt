@@ -61,8 +61,8 @@ ament_auto_add_library(${PROJECT_NAME}_lib SHARED
     lib/vad_interface.cpp
     lib/vad_model.cpp
     lib/synchronization_strategy.cpp
-    lib/net.cpp
-    lib/tensor.cpp
+    lib/networks/net.cpp
+    lib/networks/tensor.cpp
 )
 
 # ライブラリのリンク設定
@@ -107,8 +107,8 @@ function(add_testcase filepath)
   target_sources(${test_name} PRIVATE
       ${CMAKE_CURRENT_SOURCE_DIR}/lib/vad_interface.cpp
       ${CMAKE_CURRENT_SOURCE_DIR}/lib/vad_model.cpp
-      ${CMAKE_CURRENT_SOURCE_DIR}/lib/tensor.cpp
-      ${CMAKE_CURRENT_SOURCE_DIR}/lib/net.cpp
+      ${CMAKE_CURRENT_SOURCE_DIR}/lib/networks/tensor.cpp
+      ${CMAKE_CURRENT_SOURCE_DIR}/lib/networks/net.cpp
   )
   target_link_libraries(${test_name}
       ${PROJECT_NAME}_lib

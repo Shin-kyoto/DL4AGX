@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-#include "autoware/tensorrt_vad/net.hpp"
+#include "autoware/tensorrt_vad/networks/net.hpp"
 
 namespace autoware::tensorrt_vad {
 

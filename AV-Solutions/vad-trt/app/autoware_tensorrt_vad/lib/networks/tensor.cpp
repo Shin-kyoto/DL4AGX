@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-#include "autoware/tensorrt_vad/tensor.hpp"
+#include "autoware/tensorrt_vad/networks/tensor.hpp"
 
 #include <iostream>
 
