@@ -94,6 +94,12 @@ struct NetConfig
   std::map<std::string, std::map<std::string, std::string>> inputs;
 };
 
+// Helper function to parse external input configuration
+inline std::pair<std::string, std::string> parse_external_inputs(const std::pair<std::string, std::map<std::string, std::string>>& input_pair) {
+  const auto& ext_map = input_pair.second;
+  return {ext_map.at("net"), ext_map.at("name")};
+}
+
 // config for VadModel class
 struct VadModelConfig
 {
@@ -201,11 +207,9 @@ private:
       // reuse memory
       for (const auto& input_pair : engine.inputs) {
         const std::string& k = input_pair.first;
-        const auto& ext_map = input_pair.second;      
-        std::string ext_net = ext_map.at("net");
-        std::string ext_name = ext_map.at("name");
-        logger_->info(k + " <- " + ext_net + "[" + ext_name + "]");
-        external_bindings[k] = nets[ext_net]->bindings[ext_name];
+        auto [external_network, external_input_name] = parse_external_inputs(input_pair);
+        logger_->info(k + " <- " + external_network + "[" + external_input_name + "]");
+        external_bindings[k] = nets[external_network]->bindings[external_input_name];
       }
 
       if (engine.name == "backbone") {
@@ -276,11 +280,9 @@ private:
     std::unordered_map<std::string, std::shared_ptr<Tensor>> external_bindings;
     for (const auto& input_pair : head_engine->inputs) {
       const std::string& k = input_pair.first;
-      const auto& ext_map = input_pair.second;      
-      std::string ext_net = ext_map.at("net");
-      std::string ext_name = ext_map.at("name");
-      logger_->info(k + " <- " + ext_net + "[" + ext_name + "]");
-      external_bindings[k] = nets_[ext_net]->bindings[ext_name];
+      auto [external_network, external_input_name] = parse_external_inputs(input_pair);
+      logger_->info(k + " <- " + external_network + "[" + external_input_name + "]");
+      external_bindings[k] = nets_[external_network]->bindings[external_input_name];
     }
 
     nets_["head"]->set_input_tensor(external_bindings);
