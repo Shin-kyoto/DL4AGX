@@ -68,7 +68,10 @@ struct VadOutputData
 
   // マップポイント（フィルタリングされた2Dポイント）
   // [N, 2] shape: N個のポイント、各ポイントは(x, y)座標
-  std::vector<std::vector<float>> map_points_{};
+  std::vector<std::vector<std::vector<float>>> map_points_{};
+  // マップポイントのタイプ（クラス名）
+  // map_points_と同じ順序で対応する各ポイントのタイプ
+  std::vector<std::string> map_types_{};
 
   // // 検出されたオブジェクト
   // std::vector<std::vector<float>> detected_objects_{};
@@ -88,9 +91,19 @@ std::vector<std::vector<float>> postprocess_traj_cls_scores(
 std::vector<std::vector<float>> postprocess_bbox_preds(
     const std::vector<float>& all_bbox_preds_flat);
 
-std::vector<std::vector<std::vector<float>>> postprocess_map_preds(
+// Helper functions for map prediction processing
+std::vector<std::vector<float>> process_class_scores(const std::vector<float>& cls_preds_flat);
+std::vector<std::vector<std::vector<float>>> process_points(const std::vector<float>& pts_preds_flat);
+std::pair<std::vector<std::vector<std::vector<float>>>, std::vector<std::string>>
+select_most_confident_predictions(
+    const std::vector<std::vector<float>>& cls_scores,
+    const std::vector<std::vector<std::vector<float>>>& pts_preds,
+    float confidence_threshold);
+
+std::pair<std::vector<std::vector<std::vector<float>>>, std::vector<std::string>> postprocess_map_preds(
     const std::vector<float>& all_map_cls_preds_flat,
-    const std::vector<float>& all_map_pts_preds_flat);
+    const std::vector<float>& all_map_pts_preds_flat,
+    float confidence_threshold);
 
 // Helper function to parse external input configuration
 inline std::pair<std::string, std::string> parse_external_inputs(const std::pair<std::string, std::map<std::string, std::string>>& input_pair) {
@@ -289,18 +302,15 @@ private:
     auto traj_preds = postprocess_traj_preds(all_traj_preds_flat);
     auto traj_cls_scores = postprocess_traj_cls_scores(all_traj_cls_scores_flat);
     auto bbox_preds = postprocess_bbox_preds(all_bbox_preds_flat);
-    auto map_pts_preds = postprocess_map_preds(
-        map_all_cls_preds_flat, map_all_pts_preds_flat);
+    auto map_result = postprocess_map_preds(
+        map_all_cls_preds_flat, map_all_pts_preds_flat, vad_config_.map_confidence_threshold);
+    auto map_pts_preds = map_result.first;   // Extract points data from pair
+    auto map_types = map_result.second;      // Extract types data from pair
     
-    // Convert map_pts_preds (3D) to map_points (2D) for VadOutputData
-    std::vector<std::vector<float>> map_points;
-    for (const auto& query_pts : map_pts_preds) {
-      for (const auto& pt : query_pts) {
-        if (pt.size() >= 2) {
-          map_points.push_back({pt[0], pt[1]});  // Extract x, y coordinates
-        }
-      }
-    }
+    // map_pts_preds is already in the correct format: std::vector<std::vector<std::vector<float>>>
+    // Each element is a polyline (vector of points), where each point is [x, y]
+    std::vector<std::vector<std::vector<float>>> map_points = map_pts_preds;
+    std::vector<std::string> map_point_types = map_types;
     
     // Extract planning for the given command
     std::vector<float> planning(
@@ -331,7 +341,7 @@ private:
       all_trajectories[command_idx] = trajectory;
     }
     
-    return VadOutputData{planning, all_trajectories, map_points};
+    return VadOutputData{planning, all_trajectories, map_points, map_point_types};
   }
 };
 

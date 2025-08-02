@@ -121,69 +121,120 @@ std::vector<std::vector<float>> postprocess_bbox_preds(
   return bbox_preds;
 }
 
-std::vector<std::vector<std::vector<float>>> postprocess_map_preds(
-  const std::vector<float>& map_all_cls_preds_flat,
-  const std::vector<float>& map_all_pts_preds_flat) {
-
-  // Assume num_query = 300, cls_out_channels = 3 ('divider', 'ped_crossing', 'boundary'), fixed_num_pts = 20, pts_coords = 2
-  const int32_t num_query = 300;
-  const int32_t cls_out_channels = 3;
-  const int32_t fixed_num_pts = 20;
-  const int32_t pts_coords = 2;
-
-  std::vector<std::vector<float>> cls_scores(num_query, std::vector<float>(cls_out_channels));
-  std::vector<std::vector<std::vector<float>>> pts_preds(num_query, std::vector<std::vector<float>>(fixed_num_pts, std::vector<float>(pts_coords)));
-
-  // Fill cls_scores
-  for (int32_t q = 0; q < num_query; ++q) {
-  for (int32_t c = 0; c < cls_out_channels; ++c) {
-    int32_t idx = q * cls_out_channels + c;
-    cls_scores[q][c] = sigmoid(map_all_cls_preds_flat[idx]);
-  }
-  }
-
-  // Fill pts_preds
-  for (int32_t q = 0; q < num_query; ++q) {
-    for (int32_t p = 0; p < fixed_num_pts; ++p) {
-      std::vector<float> pt(2);
-      for (int32_t d = 0; d < pts_coords; ++d) {
-        int32_t idx = q * fixed_num_pts * pts_coords + p * pts_coords + d;
-        pt[d] = map_all_pts_preds_flat[idx];
-      }
-      
-      // Denormalize the 2D point
-      std::vector<float> denormalized_pt = denormalize_2d_pts(pt);
-      
-      // Store the denormalized point
-      for (int32_t d = 0; d < pts_coords; ++d) {
-        pts_preds[q][p][d] = denormalized_pt[d];
-      }
-    }
-  }
-
-  // Filter pts_preds based on cls_scores threshold (0.6)
-  std::vector<std::vector<std::vector<float>>> filtered_pts_preds;
-  std::vector<std::vector<float>> filtered_cls_scores;
-  
-  for (int32_t q = 0; q < num_query; ++q) {
-    // Check if any class score is >= 0.6
-    bool has_high_confidence = false;
-    for (int32_t c = 0; c < cls_out_channels; ++c) {
-      if (cls_scores[q][c] >= 0.3f) {
-        has_high_confidence = true;
-        break;
-      }
-    }
+/**
+ * @brief クラス予測のフラットな配列を解析し、スコアの2次元配列に変換する
+ * 推論時は最終層（-1番目のlayer）のみを使用
+ */
+std::vector<std::vector<float>> 
+process_class_scores(const std::vector<float>& cls_preds_flat) 
+{
+    const int32_t num_layers = 3; // 3レイヤーのポイント予測
+    const int32_t num_query = 100;
+    const int32_t cls_out_channels = 3;
     
-    // If this query has high confidence, keep it
-    if (has_high_confidence) {
-      filtered_pts_preds.push_back(pts_preds[q]);
-      filtered_cls_scores.push_back(cls_scores[q]);
-    }
-  }
+    // 最終層（インデックス2）のデータのみを使用
+    const int32_t final_layer_idx = num_layers - 1; // = 2
+    const int32_t layer_size = num_query * cls_out_channels;
+    const int32_t final_layer_offset = final_layer_idx * layer_size;
+    
+    std::vector<std::vector<float>> cls_scores(num_query, std::vector<float>(cls_out_channels));
 
-  // Return filtered map points predictions
-  return filtered_pts_preds;
+    for (int32_t q = 0; q < num_query; ++q) {
+        for (int32_t c = 0; c < cls_out_channels; ++c) {
+            int32_t flat_idx = final_layer_offset + q * cls_out_channels + c;
+            cls_scores[q][c] = sigmoid(cls_preds_flat[flat_idx]);
+        }
+    }
+    return cls_scores;
+}
+
+/**
+ * @brief 座標予測のフラットな配列を解析し、非正規化された座標の3次元配列に変換する
+ * 推論時は最終層（-1番目のlayer）のみを使用
+ */
+std::vector<std::vector<std::vector<float>>> 
+process_points(const std::vector<float>& pts_preds_flat) 
+{
+    const int32_t num_layers = 3; // 3レイヤーのポイント予測
+    const int32_t num_query = 100;
+    const int32_t fixed_num_pts = 20;
+    const int32_t pts_coords = 2;
+    
+    // 最終層（インデックス2）のデータのみを使用
+    const int32_t final_layer_idx = num_layers - 1; // = 2
+    const int32_t layer_size = num_query * fixed_num_pts * pts_coords;
+    const int32_t final_layer_offset = final_layer_idx * layer_size;
+    
+    std::vector<std::vector<std::vector<float>>> pts_preds(num_query, std::vector<std::vector<float>>(fixed_num_pts, std::vector<float>(pts_coords)));
+
+    for (int32_t q = 0; q < num_query; ++q) {
+        for (int32_t p = 0; p < fixed_num_pts; ++p) {
+            std::vector<float> pt(pts_coords);
+            for (int32_t d = 0; d < pts_coords; ++d) {
+                int32_t flat_idx = final_layer_offset + q * fixed_num_pts * pts_coords + p * pts_coords + d;
+                pt[d] = pts_preds_flat[flat_idx];
+            }
+            std::vector<float> denormalized_pt = denormalize_2d_pts(pt);
+            for (int32_t d = 0; d < pts_coords; ++d) {
+                pts_preds[q][p][d] = denormalized_pt[d];
+            }
+        }
+    }
+    return pts_preds;
+}
+
+/**
+ * @brief スコアが最も高い予測を選択し、信頼度の閾値でフィルタリングする
+ * @param cls_scores クラススコア [num_query, num_classes]
+ * @param pts_preds 座標予測 [num_query, num_points, 2]
+ * @param confidence_threshold 信頼度閾値（全クラス共通）
+ * @note 将来的にクラスごとの閾値設定に対応可能
+ */
+std::pair<std::vector<std::vector<std::vector<float>>>, std::vector<std::string>>
+select_most_confident_predictions(
+    const std::vector<std::vector<float>>& cls_scores,
+    const std::vector<std::vector<std::vector<float>>>& pts_preds,
+    float confidence_threshold)
+{
+    const std::vector<std::string> class_names = {"divider", "ped_crossing", "boundary"};
+    const int32_t num_query = cls_scores.size();
+
+    std::vector<std::vector<std::vector<float>>> filtered_polylines;
+    std::vector<std::string> filtered_types;
+    
+    for (int32_t q = 0; q < num_query; ++q) {
+        auto max_it = std::max_element(cls_scores[q].begin(), cls_scores[q].end());
+        float max_score = *max_it;
+        int32_t max_class_idx = std::distance(cls_scores[q].begin(), max_it);
+
+        // 現在は全クラス共通の閾値を使用
+        // 将来的にはクラスごとの閾値配列を受け取ることで対応可能
+        if (max_score >= confidence_threshold) {
+            filtered_polylines.push_back(pts_preds[q]);
+            filtered_types.push_back(class_names[max_class_idx]);
+        }
+    }
+
+    return {filtered_polylines, filtered_types};
+}
+
+/**
+ * @brief モデルの推論結果全体の後処理を行う
+ */
+std::pair<std::vector<std::vector<std::vector<float>>>, std::vector<std::string>>
+postprocess_map_preds(
+    const std::vector<float>& map_all_cls_preds_flat,
+    const std::vector<float>& map_all_pts_preds_flat,
+    float confidence_threshold) 
+{
+    // 1. クラススコアを計算する
+    auto cls_scores = process_class_scores(map_all_cls_preds_flat);
+    
+    // 2. 座標を計算する
+    auto pts_preds = process_points(map_all_pts_preds_flat);
+    
+    // 3. 計算結果を基に、信頼度の高い予測を選択する
+    return select_most_confident_predictions(cls_scores, pts_preds, confidence_threshold);
 }
 
 } // namespace autoware::tensorrt_vad
