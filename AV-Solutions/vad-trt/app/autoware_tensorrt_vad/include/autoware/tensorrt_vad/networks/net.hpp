@@ -45,17 +45,6 @@ enum class NetworkType {
 // Helper function to convert NetworkType to string (for backward compatibility)
 std::string toString(NetworkType type);
 
-// Standalone functions for NetworkIO generation and engine building
-
-// Backbone NetworkIO設定生成関数
-std::vector<autoware::tensorrt_common::NetworkIO> generate_network_io_backbone(const VadConfig& vad_config);
-
-// Head NetworkIO設定生成関数
-std::vector<autoware::tensorrt_common::NetworkIO> generate_network_io_head(const VadConfig& vad_config);
-
-// Head No Previous NetworkIO設定生成関数
-std::vector<autoware::tensorrt_common::NetworkIO> generate_network_io_head_no_prev(const VadConfig& vad_config);
-
 // エンジンビルド専用関数
 std::unique_ptr<autoware::tensorrt_common::TrtCommon> build_engine(
     const autoware::tensorrt_common::TrtCommonConfig& trt_common_config,
@@ -64,29 +53,14 @@ std::unique_ptr<autoware::tensorrt_common::TrtCommon> build_engine(
     const std::string& plugins_path,
     std::shared_ptr<VadLogger> logger);
 
-// TensorRT初期化API
-std::unique_ptr<autoware::tensorrt_common::TrtCommon> init_tensorrt(
-    const VadConfig& vad_config,
-    const autoware::tensorrt_common::TrtCommonConfig& trt_common_config,
-    const std::string& name,
-    const std::string& plugins_path,
-    std::shared_ptr<VadLogger> logger);
-
 class Net {
 public:
   TensorMap bindings;
   std::unique_ptr<autoware::tensorrt_common::TrtCommon> trt_common;
   std::shared_ptr<VadLogger> logger_;
+  NetworkType network_type_;
 
 public:
-  Net(
-    const VadConfig& vad_config,
-    const autoware::tensorrt_common::TrtCommonConfig& trt_common_config,
-    const std::string& name,
-    const std::string& plugins_path,
-    std::shared_ptr<VadLogger> logger
-  );
-
   Net(
     const VadConfig& vad_config,
     const autoware::tensorrt_common::TrtCommonConfig& trt_common_config,
@@ -97,6 +71,11 @@ public:
 
   virtual std::vector<autoware::tensorrt_common::NetworkIO> generate_network_io(const VadConfig& vad_config) = 0;
   virtual void set_input_tensor(TensorMap& ext) = 0;
+  
+  std::unique_ptr<autoware::tensorrt_common::TrtCommon> init_tensorrt(
+    const VadConfig& vad_config,
+    const autoware::tensorrt_common::TrtCommonConfig& trt_common_config,
+    const std::string& plugins_path);
     
   void Enqueue(cudaStream_t stream);
 
