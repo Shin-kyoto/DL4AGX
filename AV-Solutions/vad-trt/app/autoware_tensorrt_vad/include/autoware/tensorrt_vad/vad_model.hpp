@@ -98,12 +98,12 @@ std::pair<std::vector<std::vector<std::vector<float>>>, std::vector<std::string>
 select_most_confident_predictions(
     const std::vector<std::vector<float>>& cls_scores,
     const std::vector<std::vector<std::vector<float>>>& pts_preds,
-    float confidence_threshold);
+    const std::map<std::string, float>& class_thresholds);
 
 std::pair<std::vector<std::vector<std::vector<float>>>, std::vector<std::string>> postprocess_map_preds(
     const std::vector<float>& all_map_cls_preds_flat,
     const std::vector<float>& all_map_pts_preds_flat,
-    float confidence_threshold);
+    const std::map<std::string, float>& class_thresholds);
 
 // Helper function to parse external input configuration
 inline std::pair<std::string, std::string> parse_external_inputs(const std::pair<std::string, std::map<std::string, std::string>>& input_pair) {
@@ -303,7 +303,7 @@ private:
     auto traj_cls_scores = postprocess_traj_cls_scores(all_traj_cls_scores_flat);
     auto bbox_preds = postprocess_bbox_preds(all_bbox_preds_flat);
     auto map_result = postprocess_map_preds(
-        map_all_cls_preds_flat, map_all_pts_preds_flat, vad_config_.map_confidence_threshold);
+        map_all_cls_preds_flat, map_all_pts_preds_flat, vad_config_.map_confidence_thresholds);
     auto map_pts_preds = map_result.first;   // Extract points data from pair
     auto map_types = map_result.second;      // Extract types data from pair
     

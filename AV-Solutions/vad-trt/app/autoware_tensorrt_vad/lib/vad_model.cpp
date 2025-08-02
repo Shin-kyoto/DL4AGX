@@ -184,17 +184,16 @@ process_points(const std::vector<float>& pts_preds_flat)
 }
 
 /**
- * @brief スコアが最も高い予測を選択し、信頼度の閾値でフィルタリングする
+ * @brief スコアが最も高い予測を選択し、クラスごとの信頼度閾値でフィルタリングする
  * @param cls_scores クラススコア [num_query, num_classes]
  * @param pts_preds 座標予測 [num_query, num_points, 2]
- * @param confidence_threshold 信頼度閾値（全クラス共通）
- * @note 将来的にクラスごとの閾値設定に対応可能
+ * @param class_thresholds クラスごとの信頼度閾値マップ
  */
 std::pair<std::vector<std::vector<std::vector<float>>>, std::vector<std::string>>
 select_most_confident_predictions(
     const std::vector<std::vector<float>>& cls_scores,
     const std::vector<std::vector<std::vector<float>>>& pts_preds,
-    float confidence_threshold)
+    const std::map<std::string, float>& class_thresholds)
 {
     const std::vector<std::string> class_names = {"divider", "ped_crossing", "boundary"};
     const int32_t num_query = cls_scores.size();
@@ -207,11 +206,12 @@ select_most_confident_predictions(
         float max_score = *max_it;
         int32_t max_class_idx = std::distance(cls_scores[q].begin(), max_it);
 
-        // 現在は全クラス共通の閾値を使用
-        // 将来的にはクラスごとの閾値配列を受け取ることで対応可能
-        if (max_score >= confidence_threshold) {
+        // クラスごとの閾値を適用
+        std::string class_name = class_names[max_class_idx];
+        auto threshold_it = class_thresholds.find(class_name);
+        if (threshold_it != class_thresholds.end() && max_score >= threshold_it->second) {
             filtered_polylines.push_back(pts_preds[q]);
-            filtered_types.push_back(class_names[max_class_idx]);
+            filtered_types.push_back(class_name);
         }
     }
 
@@ -225,7 +225,7 @@ std::pair<std::vector<std::vector<std::vector<float>>>, std::vector<std::string>
 postprocess_map_preds(
     const std::vector<float>& map_all_cls_preds_flat,
     const std::vector<float>& map_all_pts_preds_flat,
-    float confidence_threshold) 
+    const std::map<std::string, float>& class_thresholds) 
 {
     // 1. クラススコアを計算する
     auto cls_scores = process_class_scores(map_all_cls_preds_flat);
@@ -233,8 +233,8 @@ postprocess_map_preds(
     // 2. 座標を計算する
     auto pts_preds = process_points(map_all_pts_preds_flat);
     
-    // 3. 計算結果を基に、信頼度の高い予測を選択する
-    return select_most_confident_predictions(cls_scores, pts_preds, confidence_threshold);
+    // 3. 計算結果を基に、クラスごとの信頼度閾値で予測を選択する
+    return select_most_confident_predictions(cls_scores, pts_preds, class_thresholds);
 }
 
 } // namespace autoware::tensorrt_vad

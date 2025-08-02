@@ -278,7 +278,12 @@ VadConfig VadNode::load_vad_config()
   vad_config.map_num_queries = this->declare_parameter<int32_t>("model_params.network_io_params.map_num_queries");
   vad_config.map_num_class = this->declare_parameter<int32_t>("model_params.network_io_params.map_num_class");
   vad_config.map_points_per_polylines = this->declare_parameter<int32_t>("model_params.network_io_params.map_points_per_polylines");
-  vad_config.map_confidence_threshold = this->declare_parameter<float>("model_params.map_confidence_threshold");
+  
+  // クラスごとの信頼度閾値を読み込み
+  vad_config.map_confidence_thresholds["divider"] = this->declare_parameter<float>("model_params.map_confidence_thresholds.divider");
+  vad_config.map_confidence_thresholds["ped_crossing"] = this->declare_parameter<float>("model_params.map_confidence_thresholds.ped_crossing");
+  vad_config.map_confidence_thresholds["boundary"] = this->declare_parameter<float>("model_params.map_confidence_thresholds.boundary");
+  
   vad_config.can_bus_dim = this->declare_parameter<int32_t>("model_params.network_io_params.can_bus_dim");
   vad_config.plugins_path = this->declare_parameter<std::string>("model_params.plugins_path");
 

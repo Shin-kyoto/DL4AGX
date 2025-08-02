@@ -51,7 +51,7 @@ struct VadConfig
   int32_t map_num_queries;
   int32_t map_num_class;
   int32_t map_points_per_polylines;
-  float map_confidence_threshold;
+  std::map<std::string, float> map_confidence_thresholds;  // クラスごとの信頼度閾値
   std::string plugins_path;
   std::vector<NetConfig> nets_config;
 };
