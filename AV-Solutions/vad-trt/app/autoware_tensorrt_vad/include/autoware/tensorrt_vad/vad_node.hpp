@@ -105,8 +105,6 @@ private:
   // VAD model
   std::unique_ptr<VadModel<RosVadLogger>> vad_model_ptr_{};
 
-
-
   // VAD interface
   std::unique_ptr<VadInterface> vad_interface_ptr_{};
   VadInterfaceConfig vad_interface_config_;
