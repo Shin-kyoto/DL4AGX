@@ -1,25 +1,6 @@
 #include <gtest/gtest.h>
 #include <gmock/gmock.h>
-#include        // Initialize all numeric parameters with default values that match the engine files
-        vad_config.num_cameras = 6;
-        vad_config.bev_h = 100;
-        vad_config.bev_w = 100;
-        vad_config.bev_feature_dim = 256;
-        vad_config.num_decoder_layers = 6;
-        vad_config.prediction_num_queries = 300;  // Changed from 900 to match engine
-        vad_config.prediction_num_classes = 10;
-        vad_config.prediction_bbox_pred_dim = 10;
-        vad_config.prediction_trajectory_modes = 6;
-        vad_config.prediction_timesteps = 6;
-        vad_config.planning_ego_commands = 3;
-        vad_config.planning_timesteps = 6;
-        vad_config.can_bus_dim = 18;
-        vad_config.target_image_width = 640;
-        vad_config.target_image_height = 384;
-        vad_config.downsample_factor = 32;
-        vad_config.map_num_queries = 100;  // Changed from 50 to match engine
-        vad_config.map_num_class = 3;
-        vad_config.map_points_per_polylines = 20;vector>
+#include <vector>
 #include <filesystem>
 #include <fstream>
 #include <stdexcept>
