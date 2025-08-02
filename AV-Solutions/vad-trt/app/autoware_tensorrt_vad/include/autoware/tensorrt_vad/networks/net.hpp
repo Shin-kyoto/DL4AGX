@@ -98,10 +98,6 @@ public:
   virtual std::vector<autoware::tensorrt_common::NetworkIO> generate_network_io(const VadConfig& vad_config) = 0;
   virtual void set_input_tensor(TensorMap& ext) = 0;
     
-  // 既存のメソッドは残すが、deprecatedとして扱う
-  void set_input_tensor_backbone(TensorMap& ext);
-  void set_input_tensor_head(TensorMap& ext);
-  void set_input_tensor(TensorMap& ext, const std::string& name);
   void Enqueue(cudaStream_t stream);
 
   virtual ~Net();
