@@ -41,21 +41,17 @@ std::unique_ptr<autoware::tensorrt_common::TrtCommon> build_engine(
     const std::string& plugins_path,
     std::shared_ptr<VadLogger> logger) {
   logger->info("Building " + engine_name + " engine...");
-  try {
-    auto trt_common = std::make_unique<autoware::tensorrt_common::TrtCommon>(
-      trt_common_config, std::make_shared<autoware::tensorrt_common::Profiler>(),
-      std::vector<std::string>{plugins_path});
-    auto network_io_ptr = std::make_unique<std::vector<autoware::tensorrt_common::NetworkIO>>(network_io);
-    if (!trt_common->setup(nullptr, std::move(network_io_ptr))) {
-      logger->error("Failed to setup " + engine_name + " TrtCommon");
-      return nullptr;
-    }
-    logger->info(engine_name + " engine built successfully");
-    return trt_common;
-  } catch (const std::exception& e) {
-    logger->error("Exception building " + engine_name + " engine: " + std::string(e.what()));
+  
+  auto trt_common = std::make_unique<autoware::tensorrt_common::TrtCommon>(
+    trt_common_config, std::make_shared<autoware::tensorrt_common::Profiler>(),
+    std::vector<std::string>{plugins_path});
+  auto network_io_ptr = std::make_unique<std::vector<autoware::tensorrt_common::NetworkIO>>(network_io);
+  if (!trt_common->setup(nullptr, std::move(network_io_ptr))) {
+    logger->error("Failed to setup " + engine_name + " TrtCommon");
     return nullptr;
   }
+  logger->info(engine_name + " engine built successfully");
+  return trt_common;
 }
 
 std::unique_ptr<autoware::tensorrt_common::TrtCommon> Net::init_tensorrt(
