@@ -62,6 +62,8 @@ ament_auto_add_library(${PROJECT_NAME}_lib SHARED
     lib/vad_model.cpp
     lib/synchronization_strategy.cpp
     lib/networks/net.cpp
+    lib/networks/backbone.cpp
+    lib/networks/head.cpp
     lib/networks/tensor.cpp
 )
 
@@ -109,6 +111,8 @@ function(add_testcase filepath)
       ${CMAKE_CURRENT_SOURCE_DIR}/lib/vad_model.cpp
       ${CMAKE_CURRENT_SOURCE_DIR}/lib/networks/tensor.cpp
       ${CMAKE_CURRENT_SOURCE_DIR}/lib/networks/net.cpp
+      ${CMAKE_CURRENT_SOURCE_DIR}/lib/networks/backbone.cpp
+      ${CMAKE_CURRENT_SOURCE_DIR}/lib/networks/head.cpp
   )
   target_link_libraries(${test_name}
       ${PROJECT_NAME}_lib

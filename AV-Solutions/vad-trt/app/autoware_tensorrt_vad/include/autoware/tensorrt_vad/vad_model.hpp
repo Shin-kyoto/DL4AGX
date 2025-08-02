@@ -25,6 +25,8 @@
 #include <NvInfer.h>
 #include <dlfcn.h>
 #include "networks/net.hpp"
+#include "networks/backbone.hpp"
+#include "networks/head.hpp"
 #include <map>
 
 #include <autoware/tensorrt_common/tensorrt_common.hpp>
