@@ -194,15 +194,7 @@ public:
               rclcpp::QoS(1), callback));
     }
 
-    // VadModelConfigを読み込み
-    load_vad_model_config();
-
     RCLCPP_INFO(this->get_logger(), "VAD Node has been initialized");
-  }
-
-  // VadModelConfigを取得する関数
-  const autoware::tensorrt_vad::VadModelConfig &getVadModelConfig() const {
-    return vad_model_config_;
   }
 
   // TrtCommonConfigを取得する関数
@@ -211,21 +203,21 @@ public:
     autoware::tensorrt_common::TrtCommonConfig,
     autoware::tensorrt_common::TrtCommonConfig
   > load_trt_common_configs() {
-    std::string backbone_onnx_path = this->declare_parameter<std::string>("model_params.nets.backbone.onnx_path", "");
+    std::string backbone_onnx_path = "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX_ns_rosbag/DL4AGX/AV-Solutions/vad-trt/app/autoware_tensorrt_vad/data/sim_vadv1.extract_img_feat.onnx";
     std::string backbone_precision = this->declare_parameter<std::string>("model_params.nets.backbone.precision", "fp16");
-    std::string backbone_engine_path = this->declare_parameter<std::string>("model_params.nets.backbone.engine_path", "");
+    std::string backbone_engine_path = "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX_ns_rosbag/DL4AGX/AV-Solutions/vad-trt/app/autoware_tensorrt_vad/data/vad-tiny_backbone.engine";
     autoware::tensorrt_common::TrtCommonConfig backbone_trt_config(
         backbone_onnx_path, backbone_precision, backbone_engine_path, 5ULL << 30U);
 
-    std::string head_onnx_path = this->declare_parameter<std::string>("model_params.nets.head.onnx_path", "");
+    std::string head_onnx_path = "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX_ns_rosbag/DL4AGX/AV-Solutions/vad-trt/app/autoware_tensorrt_vad/data/sim_vadv1_prev.pts_bbox_head.forward.onnx";
     std::string head_precision = this->declare_parameter<std::string>("model_params.nets.head.precision", "fp16");
-    std::string head_engine_path = this->declare_parameter<std::string>("model_params.nets.head.engine_path", "");
+    std::string head_engine_path = "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX_ns_rosbag/DL4AGX/AV-Solutions/vad-trt/app/autoware_tensorrt_vad/data/vad-tiny_head.engine";
     autoware::tensorrt_common::TrtCommonConfig head_trt_config(
         head_onnx_path, head_precision, head_engine_path, 5ULL << 30U);
 
-    std::string head_no_prev_onnx_path = this->declare_parameter<std::string>("model_params.nets.head_no_prev.onnx_path", "");
+    std::string head_no_prev_onnx_path = "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX_ns_rosbag/DL4AGX/AV-Solutions/vad-trt/app/autoware_tensorrt_vad/data/sim_vadv1.pts_bbox_head.forward.onnx";
     std::string head_no_prev_precision = this->declare_parameter<std::string>("model_params.nets.head_no_prev.precision", "fp16");
-    std::string head_no_prev_engine_path = this->declare_parameter<std::string>("model_params.nets.head_no_prev.engine_path", "");
+    std::string head_no_prev_engine_path = "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX_ns_rosbag/DL4AGX/AV-Solutions/vad-trt/app/autoware_tensorrt_vad/data/vad-tiny_head_no_prev.engine";
     autoware::tensorrt_common::TrtCommonConfig head_no_prev_trt_config(
         head_no_prev_onnx_path, head_no_prev_precision, head_no_prev_engine_path, 5ULL << 30U);
 
@@ -253,6 +245,52 @@ public:
     vad_config.map_num_class = this->declare_parameter<int32_t>("model_params.network_io_params.map_num_class");
     vad_config.map_points_per_polylines = this->declare_parameter<int32_t>("model_params.network_io_params.map_points_per_polylines");
     vad_config.can_bus_dim = this->declare_parameter<int32_t>("model_params.network_io_params.can_bus_dim");
+    
+    // plugins_pathの設定
+    vad_config.plugins_path = this->declare_parameter<std::string>("model_params.plugins_path", "");
+    
+    // ネットワーク設定の読み込み
+    // backbone設定
+    autoware::tensorrt_vad::NetConfig backbone_config;
+    backbone_config.name = this->declare_parameter<std::string>(
+        "model_params.nets.backbone.name", "backbone");
+
+    // head設定
+    autoware::tensorrt_vad::NetConfig head_config;
+    head_config.name = this->declare_parameter<std::string>(
+        "model_params.nets.head.name", "head");
+
+    // head inputsの読み込み
+    std::string input_feature = this->declare_parameter<std::string>(
+        "model_params.nets.head.inputs.input_feature", "mlvl_feats.0");
+    std::string net_param = this->declare_parameter<std::string>(
+        "model_params.nets.head.inputs.net", "backbone");
+    std::string name_param = this->declare_parameter<std::string>(
+        "model_params.nets.head.inputs.name", "out.0");
+    head_config.inputs[input_feature]["net"] = net_param;
+    head_config.inputs[input_feature]["name"] = name_param;
+
+    // head_no_prev設定
+    autoware::tensorrt_vad::NetConfig head_no_prev_config;
+    head_no_prev_config.name = this->declare_parameter<std::string>(
+        "model_params.nets.head_no_prev.name", "head_no_prev");
+
+    // head_no_prev inputsの読み込み
+    std::string input_feature_no_prev = this->declare_parameter<std::string>(
+        "model_params.nets.head_no_prev.inputs.input_feature", "mlvl_feats.0");
+    std::string net_param_no_prev = this->declare_parameter<std::string>(
+        "model_params.nets.head_no_prev.inputs.net", "backbone");
+    std::string name_param_no_prev = this->declare_parameter<std::string>(
+        "model_params.nets.head_no_prev.inputs.name", "out.0");
+    head_no_prev_config.inputs[input_feature_no_prev]["net"] =
+        net_param_no_prev;
+    head_no_prev_config.inputs[input_feature_no_prev]["name"] =
+        name_param_no_prev;
+
+    vad_config.nets_config.push_back(backbone_config);
+    vad_config.nets_config.push_back(head_config);
+    vad_config.nets_config.push_back(head_no_prev_config);
+    
     return vad_config;
   }
 
@@ -429,9 +467,6 @@ private:
       rclcpp::Subscription<sensor_msgs::msg::CompressedImage>::SharedPtr>
       camera_subscribers_;
 
-  // VadModelConfig
-  autoware::tensorrt_vad::VadModelConfig vad_model_config_;
-
   // trajectory_timestep parameter
   double trajectory_timestep_;
 
@@ -446,60 +481,6 @@ private:
     }
     node_options.arguments(ros_args);
     return node_options;
-  }
-
-  void load_vad_model_config() {
-    // このノード自体からパラメータを読み込み
-    vad_model_config_.plugins_path =
-        this->declare_parameter<std::string>("model_params.plugins_path", "");
-
-    // ネットワーク設定の読み込み
-    load_net_configs();
-  }
-
-  void load_net_configs() {
-    // 階層構造でネットワーク設定を読み込み
-
-    // backbone設定
-    autoware::tensorrt_vad::NetConfig backbone_config;
-    backbone_config.name = this->declare_parameter<std::string>(
-        "model_params.nets.backbone.name", "backbone");
-
-    // head設定
-    autoware::tensorrt_vad::NetConfig head_config;
-    head_config.name = this->declare_parameter<std::string>(
-        "model_params.nets.head.name", "head");
-
-    // head inputsの読み込み
-    std::string input_feature = this->declare_parameter<std::string>(
-        "model_params.nets.head.inputs.input_feature", "mlvl_feats.0");
-    std::string net_param = this->declare_parameter<std::string>(
-        "model_params.nets.head.inputs.net", "backbone");
-    std::string name_param = this->declare_parameter<std::string>(
-        "model_params.nets.head.inputs.name", "out.0");
-    head_config.inputs[input_feature]["net"] = net_param;
-    head_config.inputs[input_feature]["name"] = name_param;
-
-    // head_no_prev設定
-    autoware::tensorrt_vad::NetConfig head_no_prev_config;
-    head_no_prev_config.name = this->declare_parameter<std::string>(
-        "model_params.nets.head_no_prev.name", "head_no_prev");
-
-    // head_no_prev inputsの読み込み
-    std::string input_feature_no_prev = this->declare_parameter<std::string>(
-        "model_params.nets.head_no_prev.inputs.input_feature", "mlvl_feats.0");
-    std::string net_param_no_prev = this->declare_parameter<std::string>(
-        "model_params.nets.head_no_prev.inputs.net", "backbone");
-    std::string name_param_no_prev = this->declare_parameter<std::string>(
-        "model_params.nets.head_no_prev.inputs.name", "out.0");
-    head_no_prev_config.inputs[input_feature_no_prev]["net"] =
-        net_param_no_prev;
-    head_no_prev_config.inputs[input_feature_no_prev]["name"] =
-        name_param_no_prev;
-
-    vad_model_config_.nets_config.push_back(backbone_config);
-    vad_model_config_.nets_config.push_back(head_config);
-    vad_model_config_.nets_config.push_back(head_no_prev_config);
   }
 
   void onImageReceived(const sensor_msgs::msg::CompressedImage::SharedPtr msg,
@@ -743,13 +724,11 @@ int main(int argc, char **argv) {
   // VADNodeを作成（yamlパスを渡す）
   auto node = std::make_shared<VADNode>(yaml_config_paths);
 
-  // VADNodeからVadModelConfigとTrtCommonConfigを取得
-  const auto &vad_model_config = node->getVadModelConfig();
+  // VADNodeからVadConfigとTrtCommonConfigを取得
   auto ros_logger = std::make_shared<autoware::tensorrt_vad::RosVadLogger>(node);
   autoware::tensorrt_vad::VadConfig vad_config = node->load_vad_config();
   auto [backbone_trt_config, head_trt_config, head_no_prev_trt_config] = node->load_trt_common_configs();
   autoware::tensorrt_vad::VadModel<autoware::tensorrt_vad::RosVadLogger> vad_model(
-    vad_model_config,
     vad_config,
     backbone_trt_config,
     head_trt_config,
