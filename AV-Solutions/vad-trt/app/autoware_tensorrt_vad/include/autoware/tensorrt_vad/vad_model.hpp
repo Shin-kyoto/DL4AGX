@@ -107,29 +107,11 @@ struct VadOutputData
   // map_points_と同じ順序で対応する各ポイントのタイプ
   std::vector<std::string> map_types_{};
 
-  // 検出されたオブジェクト
-  std::vector<BBox> predicted_objects_{};
+  // // 検出されたオブジェクト
+  // std::vector<BBox> predicted_objects_{};
 };
 
 // 後処理関数
-
-std::vector<std::vector<float>> postprocess_class_scores(const std::vector<float>& all_cls_scores_flat);
-
-std::vector<std::vector<std::vector<std::vector<float>>>> postprocess_traj_preds(
-    const std::vector<float>& all_traj_preds_flat);
-
-std::vector<std::vector<float>> postprocess_traj_cls_scores(
-    const std::vector<float>& all_traj_cls_scores_flat);
-
-std::vector<std::vector<float>> postprocess_bbox_preds(
-    const std::vector<float>& all_bbox_preds_flat);
-
-std::vector<BBox> postprocess_bboxes(
-    const std::vector<float>& all_cls_scores_flat,
-    const std::vector<float>& all_traj_preds_flat,
-    const std::vector<float>& all_traj_cls_scores_flat,
-    const std::vector<float>& all_bbox_preds_flat,
-    const std::map<std::string, float>& object_confidence_thresholds);
 
 // Helper functions for map prediction processing
 std::vector<std::vector<float>> process_class_scores(const std::vector<float>& cls_preds_flat);
@@ -338,11 +320,7 @@ private:
     std::vector<float> all_traj_cls_scores_flat = nets_[head_name]->bindings["out.all_traj_cls_scores"]->cpu<float>();
     std::vector<float> all_bbox_preds_flat = nets_[head_name]->bindings["out.all_bbox_preds"]->cpu<float>();
     std::vector<float> all_cls_scores_flat = nets_[head_name]->bindings["out.all_cls_scores"]->cpu<float>();
-    
-    // Process detected objects using postprocess_bboxes and apply confidence thresholding
-    auto filtered_bboxes = postprocess_bboxes(
-        all_cls_scores_flat, all_traj_preds_flat, all_traj_cls_scores_flat, all_bbox_preds_flat, vad_config_.object_confidence_thresholds);
-    
+        
     auto [map_pts_preds, map_types] = postprocess_map_preds(
         map_all_cls_preds_flat, map_all_pts_preds_flat, vad_config_.map_confidence_thresholds);
     
@@ -380,55 +358,7 @@ private:
       all_trajectories[command_idx] = trajectory;
     }
     
-    return VadOutputData{planning, all_trajectories, map_points, map_point_types, filtered_bboxes};
-  }
-
-  // 信頼度閾値でBBoxをフィルタリングする関数
-  std::vector<BBox> filter_bboxes_by_confidence(const std::vector<BBox>& bboxes) const {
-    std::vector<BBox> filtered_bboxes;
-    
-    // ラベルIDとクラス名のマッピング（NuScenes標準クラス）
-    std::unordered_map<int32_t, std::string> label_to_class = {
-      {0, "car"},
-      {1, "truck"}, 
-      {2, "construction_vehicle"},
-      {3, "bus"},
-      {4, "trailer"},
-      {5, "barrier"},
-      {6, "motorcycle"},  
-      {7, "bicycle"},
-      {8, "pedestrian"},
-      {9, "traffic_cone"}
-    };
-    
-    for (const auto& bbox : bboxes) {
-      // BBoxのconfidenceフィールドとobject_classフィールドを使用
-      float max_confidence = bbox.confidence;
-      int32_t max_class_id = bbox.object_class;
-      
-      // クラス名を取得
-      auto class_it = label_to_class.find(max_class_id);
-      if (class_it == label_to_class.end()) {
-        continue; // 未知のクラスはスキップ
-      }
-      
-      std::string class_name = class_it->second;
-      
-      // 対応する閾値を取得
-      auto threshold_it = vad_config_.object_confidence_thresholds.find(class_name);
-      if (threshold_it == vad_config_.object_confidence_thresholds.end()) {
-        continue; // 閾値が設定されていないクラスはスキップ
-      }
-      
-      float threshold = threshold_it->second;
-      
-      // 閾値を満たす場合のみ追加
-      if (max_confidence >= threshold) {
-        filtered_bboxes.push_back(bbox);
-      }
-    }
-    
-    return filtered_bboxes;
+    return VadOutputData{planning, all_trajectories, map_points, map_point_types};
   }
 };
 
