@@ -423,16 +423,6 @@ Eigen::Quaternionf VadInterface::aw2vad_quaternion(const Eigen::Quaternionf & q_
   return q_v2a * q_aw * q_v2a_inv;
 }
 
-Eigen::Quaternionf VadInterface::vad2aw_quaternion(const Eigen::Quaternionf & q_vad) const
-{
-  // vad2base_の回転部分をクォータニオンに変換
-  Eigen::Matrix3f rot = vad2base_.block<3,3>(0,0);
-  Eigen::Quaternionf q_a2v(rot); // vad→base_linkの回転
-  Eigen::Quaternionf q_a2v_inv = q_a2v.conjugate(); // 単位クオータニオンなので逆=共役
-  // q_aw = q_a2v * q_vad * q_a2v_inv
-  return q_a2v * q_vad * q_a2v_inv;
-}
-
 geometry_msgs::msg::Quaternion VadInterface::create_quaternion_from_yaw(double yaw) const
 {
   geometry_msgs::msg::Quaternion q{};
