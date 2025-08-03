@@ -21,6 +21,7 @@
 #include <memory>
 #include <functional>
 #include <unordered_map>
+#include <array>
 #include <cuda_runtime.h>
 #include <NvInfer.h>
 #include <dlfcn.h>
@@ -35,6 +36,52 @@
 
 namespace autoware::tensorrt_vad
 {
+
+/**
+ * @brief 予測軌道を表現する構造体
+ */
+struct PredictedTrajectory {
+    std::array<std::array<float, 2>, 6> trajectory;  // 6タイムステップ × 2座標（x, y）
+    float confidence;                                 // この軌道の信頼度
+    
+    PredictedTrajectory() : confidence(0.0f) {
+        // 軌道座標を0で初期化
+        for (int32_t i = 0; i < 6; ++i) {
+            trajectory[i][0] = 0.0f;
+            trajectory[i][1] = 0.0f;
+        }
+    }
+};
+
+/**
+ * @brief each map polyline type and its points
+ */
+struct MapPolyline {
+    std::string type;                               // polyline type（"divider", "ped_crossing", "boundary"）
+    std::vector<std::vector<float>> points;         // polyline points（each point has [x, y]）
+
+    MapPolyline() = default;
+    
+    MapPolyline(const std::string& map_type, const std::vector<std::vector<float>>& map_points)
+        : type(map_type), points(map_points) {}
+};
+
+/**
+ * @brief バウンディングボックスとその予測軌道を表現する構造体
+ */
+struct BBox {
+    std::array<float, 10> bbox;                      // [c_x, c_y, w, l, c_z, h, sin(theta), cos(theta), v_x, v_y]
+    float confidence;                                // オブジェクトの信頼度
+    int32_t object_class;                           // オブジェクトクラス（0-9）
+    std::array<PredictedTrajectory, 6> trajectories; // 6つの予測軌道
+    
+    BBox() : confidence(0.0f), object_class(-1) {
+        // bbox座標を0で初期化
+        for (int32_t i = 0; i < 10; ++i) {
+            bbox[i] = 0.0f;
+        }
+    }
+};
 
 // VAD推論の入力データ構造
 struct VadInputData
@@ -66,23 +113,28 @@ struct VadOutputData
   // key: command index (int32_t), value: trajectory (std::vector<float>)
   std::map<int32_t, std::vector<float>> predicted_trajectories_{};
 
-  // // 検出されたオブジェクト
-  // std::vector<std::vector<float>> detected_objects_{};
+  // map polylines (each polyline has map_type and points)
+  std::vector<MapPolyline> map_polylines_{};
 
-  // // コマンドインデックス（選択された軌道のインデックス）
-  // int32_t selected_command_index_{2};
+  // // 検出されたオブジェクト
+  // std::vector<BBox> predicted_objects_{};
 };
 
 // 後処理関数
 
-std::vector<std::vector<std::vector<std::vector<float>>>> postprocess_traj_preds(
-    const std::vector<float>& all_traj_preds_flat);
+// Helper functions for map prediction processing
+std::vector<std::vector<float>> process_map_class_scores(const std::vector<float>& cls_preds_flat, const VadConfig& vad_config);
+std::vector<std::vector<std::vector<float>>> process_map_points(const std::vector<float>& pts_preds_flat, const VadConfig& vad_config);
+std::vector<MapPolyline>
+select_confident_map_polylines(
+    const std::vector<std::vector<float>>& cls_scores,
+    const std::vector<std::vector<std::vector<float>>>& pts_preds,
+    const VadConfig& vad_config);
 
-std::vector<std::vector<float>> postprocess_traj_cls_scores(
-    const std::vector<float>& all_traj_cls_scores_flat);
-
-std::vector<std::vector<float>> postprocess_bbox_preds(
-    const std::vector<float>& all_bbox_preds_flat);
+std::vector<MapPolyline> postprocess_map_preds(
+    const std::vector<float>& all_map_cls_preds_flat,
+    const std::vector<float>& all_map_pts_preds_flat,
+    const VadConfig& vad_config);
 
 // Helper function to parse external input configuration
 inline std::pair<std::string, std::string> parse_external_inputs(const std::pair<std::string, std::map<std::string, std::string>>& input_pair) {
@@ -271,15 +323,15 @@ private:
 
   VadOutputData postprocess(const std::string& head_name, int32_t cmd) {
     std::vector<float> ego_fut_preds = nets_[head_name]->bindings["out.ego_fut_preds"]->cpu<float>();
+    std::vector<float> map_all_cls_preds_flat = nets_[head_name]->bindings["out.map_all_cls_scores"]->cpu<float>();
     std::vector<float> map_all_pts_preds_flat = nets_[head_name]->bindings["out.map_all_pts_preds"]->cpu<float>();
     std::vector<float> all_traj_preds_flat = nets_[head_name]->bindings["out.all_traj_preds"]->cpu<float>();
     std::vector<float> all_traj_cls_scores_flat = nets_[head_name]->bindings["out.all_traj_cls_scores"]->cpu<float>();
     std::vector<float> all_bbox_preds_flat = nets_[head_name]->bindings["out.all_bbox_preds"]->cpu<float>();
-    
-    // flat -> structured
-    auto traj_preds = postprocess_traj_preds(all_traj_preds_flat);
-    auto traj_cls_scores = postprocess_traj_cls_scores(all_traj_cls_scores_flat);
-    auto bbox_preds = postprocess_bbox_preds(all_bbox_preds_flat);
+    std::vector<float> all_cls_scores_flat = nets_[head_name]->bindings["out.all_cls_scores"]->cpu<float>();
+        
+    std::vector<MapPolyline> map_polylines = postprocess_map_preds(
+        map_all_cls_preds_flat, map_all_pts_preds_flat, vad_config_);
     
     // Extract planning for the given command
     std::vector<float> planning(
@@ -310,7 +362,7 @@ private:
       all_trajectories[command_idx] = trajectory;
     }
     
-    return VadOutputData{planning, all_trajectories};
+    return VadOutputData{planning, all_trajectories, map_polylines};
   }
 };
 

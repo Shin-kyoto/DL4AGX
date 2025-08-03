@@ -18,6 +18,7 @@ find_package(tf2_eigen REQUIRED)
 find_package(eigen3_cmake_module REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
 find_package(autoware_perception_msgs REQUIRED)
 find_package(autoware_internal_planning_msgs REQUIRED)
 find_package(autoware_planning_msgs REQUIRED)
@@ -120,6 +121,7 @@ target_include_directories(${APP}_cu PUBLIC
     ${autoware_tensorrt_common_INCLUDE_DIRS}
     ${geometry_msgs_INCLUDE_DIRS}
     ${rosbag2_cpp_INCLUDE_DIRS}
+    ${visualization_msgs_INCLUDE_DIRS}
 )
 
 # Main application
@@ -147,6 +149,7 @@ target_link_libraries(${APP}_app
     rclcpp::rclcpp
     ${OpenCV_LIBS}
     ${sensor_msgs_LIBRARIES}
+    ${visualization_msgs_LIBRARIES}
     ${tf2_ros_LIBRARIES}
     ${tf2_eigen_LIBRARIES}
     ${eigen3_cmake_module_LIBRARIES}
@@ -163,6 +166,7 @@ target_link_libraries(${APP}_app
 target_include_directories(${APP}_app PUBLIC
     ${rclcpp_INCLUDE_DIRS}
     ${sensor_msgs_INCLUDE_DIRS}
+    ${visualization_msgs_INCLUDE_DIRS}
     ${tf2_ros_INCLUDE_DIRS}
     ${tf2_eigen_INCLUDE_DIRS}
     ${eigen3_cmake_module_INCLUDE_DIRS}
@@ -188,6 +192,7 @@ ament_target_dependencies(${APP}_app
     eigen3_cmake_module
     Eigen3
     sensor_msgs
+    visualization_msgs
     autoware_perception_msgs
     autoware_internal_planning_msgs
     autoware_planning_msgs

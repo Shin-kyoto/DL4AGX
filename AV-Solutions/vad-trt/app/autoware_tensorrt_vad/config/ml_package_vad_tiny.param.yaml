@@ -14,7 +14,7 @@
       # input_image_height: 940
       target_image_width: 640
       target_image_height: 384
-      point_cloud_range: [-15.0, -30.0, -2.0, 15.0, 30.0, 2.0]
+      detection_range: [-15.0, -30.0, -2.0, 15.0, 30.0, 2.0]
       bev_h: 100
       bev_w: 100
       default_patch_angle: 0.0
