@@ -89,6 +89,10 @@ TEST(VadLidar2ImgTest, DummyInputOutput)
                                                            3, 4, // BACK_LEFT
                                                            5, 5  // BACK_RIGHT
                                                            };
+    std::vector<std::string> map_classes = {"divider", "ped_crossing", "boundary"};
+    std::vector<double> map_colors = {0.3922, 0.5843, 0.9294,  // divider: cornflowerblue
+                                      1.0, 0.0, 0.0,           // ped_crossing: red  
+                                      0.4392, 0.5020, 0.5647}; // boundary: slategrey
     autoware::tensorrt_vad::VadInterfaceConfig vad_interface_config(
         input_image_width, input_image_height,
         target_image_width, target_image_height,
@@ -101,7 +105,9 @@ TEST(VadLidar2ImgTest, DummyInputOutput)
         image_normalization_param_mean,
         image_normalization_param_std,
         vad2base,
-        autoware_to_vad_camera_mapping);
+        autoware_to_vad_camera_mapping,
+        map_classes,
+        map_colors);
     VadInterface vad_interface(vad_interface_config, tf_buffer);
     float scale_width = static_cast<float>(target_image_width) / static_cast<float>(input_image_width);
     float scale_height = static_cast<float>(target_image_height) / static_cast<float>(input_image_height);

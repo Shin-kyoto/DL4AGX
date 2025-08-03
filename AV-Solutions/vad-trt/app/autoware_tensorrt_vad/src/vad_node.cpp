@@ -82,7 +82,9 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
       declare_parameter<std::vector<double>>("interface_params.image_normalization_param_mean"),
       declare_parameter<std::vector<double>>("interface_params.image_normalization_param_std"),
       declare_parameter<std::vector<double>>("interface_params.vad2base"),
-      declare_parameter<std::vector<int64_t>>("interface_params.autoware_to_vad_camera_mapping")
+      declare_parameter<std::vector<int64_t>>("interface_params.autoware_to_vad_camera_mapping"),
+      declare_parameter<std::vector<std::string>>("model_params.map_classes"),
+      declare_parameter<std::vector<double>>("interface_params.map_colors")
     ),
     front_camera_id_(declare_parameter<int32_t>("sync_params.front_camera_id")),
     trajectory_timestep_(declare_parameter<double>("interface_params.trajectory_timestep")),
@@ -286,8 +288,8 @@ VadConfig VadNode::load_vad_config()
   for (double val : detection_range) {
     vad_config.detection_range.push_back(static_cast<float>(val));
   }
-  
-  auto map_classes = this->declare_parameter<std::vector<std::string>>("model_params.map_classes");
+
+  auto map_classes = this->get_parameter("model_params.map_classes").as_string_array();
   auto map_thresholds = this->declare_parameter<std::vector<double>>("model_params.map_confidence_thresholds");
   
   if (map_classes.size() != map_thresholds.size()) {

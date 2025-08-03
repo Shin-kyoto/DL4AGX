@@ -188,6 +188,7 @@ private:
   Eigen::Matrix4f vad2base_;
   Eigen::Matrix4f base2vad_;
   std::unordered_map<int32_t, int32_t> autoware_to_vad_camera_mapping_;
+  std::map<std::string, std::array<float, 3>> map_colors_;  // Map type to RGB color
   
   // Current longitudinal velocity for trajectory initial point
   float current_longitudinal_velocity_mps_;

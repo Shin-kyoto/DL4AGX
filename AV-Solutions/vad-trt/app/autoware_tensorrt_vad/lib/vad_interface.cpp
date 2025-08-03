@@ -23,6 +23,7 @@ VadInterface::VadInterface(const VadInterfaceConfig& config, std::shared_ptr<tf2
     image_normalization_param_std_(config.image_normalization_param_std),
     vad2base_(config.vad2base),
     base2vad_(config.base2vad),
+    map_colors_(config.map_colors),
     current_longitudinal_velocity_mps_(0.0f),
     prev_can_bus_(config.default_can_bus)
 {
@@ -604,19 +605,14 @@ visualization_msgs::msg::MarkerArray VadInterface::process_map_points(
         marker.pose.orientation.w = 1.0;
 
         // Set color based on type
-        if (type == "divider") { // cornflowerblue
-            marker.color.r = 0.3922f;
-            marker.color.g = 0.5843f;
-            marker.color.b = 0.9294f;
-        } else if (type == "ped_crossing") { // red
-            marker.color.r = 1.0f;
-            marker.color.g = 0.0f;
-            marker.color.b = 0.0f;
-        } else if (type == "boundary") { // slategrey
-            marker.color.r = 0.4392f;
-            marker.color.g = 0.5020f;
-            marker.color.b = 0.5647f;
-        } else { // デフォルトは白
+        auto color_it = map_colors_.find(type);
+        if (color_it != map_colors_.end()) {
+            const auto& color = color_it->second;
+            marker.color.r = color[0];
+            marker.color.g = color[1];
+            marker.color.b = color[2];
+        } else {
+            // use white color as default
             marker.color.r = 1.0f;
             marker.color.g = 1.0f;
             marker.color.b = 1.0f;
