@@ -364,24 +364,6 @@ std::tuple<
   return {backbone_trt_config, head_trt_config, head_no_prev_trt_config};
 }
 
-void VadNode::publish_trajectories(const autoware_internal_planning_msgs::msg::CandidateTrajectories & candidate_trajectories)
-{
-  auto candidate_trajectories_msg = std::make_unique<autoware_internal_planning_msgs::msg::CandidateTrajectories>(candidate_trajectories);
-  candidate_trajectories_publisher_->publish(std::move(candidate_trajectories_msg));
-}
-
-void VadNode::publish_trajectory(const autoware_planning_msgs::msg::Trajectory & trajectory)
-{
-  auto trajectory_msg = std::make_unique<autoware_planning_msgs::msg::Trajectory>(trajectory);
-  trajectory_publisher_->publish(std::move(trajectory_msg));
-}
-
-void VadNode::publish_predicted_objects(const autoware_perception_msgs::msg::PredictedObjects & predicted_objects)
-{
-  auto predicted_objects_msg = std::make_unique<autoware_perception_msgs::msg::PredictedObjects>(predicted_objects);
-  predicted_objects_publisher_->publish(std::move(predicted_objects_msg));
-}
-
 std::optional<VadOutputTopicData> VadNode::execute_inference(const VadInputTopicData & vad_input_topic_data)
 {
   if (!vad_interface_ptr_ || !vad_model_ptr_) {
@@ -411,13 +393,13 @@ std::optional<VadOutputTopicData> VadNode::execute_inference(const VadInputTopic
 void VadNode::publish(const VadOutputTopicData & vad_output_topic_data)
 {
   // Publish selected trajectory
-  publish_trajectory(vad_output_topic_data.trajectory);
+  trajectory_publisher_->publish(vad_output_topic_data.trajectory);
 
   // Publish candidate trajectories
-  publish_trajectories(vad_output_topic_data.candidate_trajectories);
+  candidate_trajectories_publisher_->publish(vad_output_topic_data.candidate_trajectories);
 
-  // Publish predicted objects
-  publish_predicted_objects(vad_output_topic_data.objects);
+  // // Publish predicted objects
+  // predicted_objects_publisher_->publish(vad_output_topic_data.objects);
 
   // Publish map points
   map_points_publisher_->publish(vad_output_topic_data.map_points);

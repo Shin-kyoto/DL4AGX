@@ -75,11 +75,6 @@ private:
   void create_camera_image_subscribers(const rclcpp::QoS& sensor_qos);
   void create_camera_info_subscribers(const rclcpp::QoS& camera_info_qos);
 
-  // Publisher methods
-  void publish_trajectory(const autoware_planning_msgs::msg::Trajectory & trajectory);
-  void publish_trajectories(const autoware_internal_planning_msgs::msg::CandidateTrajectories & candidate_trajectories);
-  void publish_predicted_objects(const autoware_perception_msgs::msg::PredictedObjects & predicted_objects);
-
   // Callback methods
   void image_callback(const sensor_msgs::msg::Image::ConstSharedPtr msg, std::size_t camera_id);
   void camera_info_callback(const sensor_msgs::msg::CameraInfo::ConstSharedPtr msg, std::size_t camera_id);
