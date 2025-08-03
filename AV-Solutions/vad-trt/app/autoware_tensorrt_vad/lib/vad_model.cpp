@@ -47,15 +47,17 @@ inline std::vector<float> denormalize_2d_pts(const std::vector<float>& pts,
 }
 
 std::vector<std::vector<std::vector<std::vector<float>>>> postprocess_traj_preds(
-    const std::vector<float>& all_traj_preds_flat) {
-  const int32_t num_layers = 3;  // 3レイヤーの軌道予測
-  const int32_t num_objects = 300;
-  const int32_t num_fut_modes = 6;
-  const int32_t num_fut_ts = 6;
-  const int32_t traj_coords = 2;
-  
-  // 最終層（インデックス2）のデータのみを使用
-  const int32_t final_layer_idx = num_layers - 1; // = 2
+    const std::vector<float>& all_traj_preds_flat,
+    const VadConfig& vad_config) {
+  // VAD outputs trajectories in each decoder layers
+  const int32_t num_layers = vad_config.num_decoder_layers;
+  const int32_t num_objects = vad_config.prediction_num_queries;
+  const int32_t num_fut_modes = vad_config.prediction_trajectory_modes;
+  const int32_t num_fut_ts = vad_config.prediction_timesteps;
+  const int32_t traj_coords = 2;  // x, y coordinates
+
+  // Use output from last layer (index = num_layers - 1) only
+  const int32_t final_layer_idx = num_layers - 1;
   const int32_t layer_size = num_objects * num_fut_modes * num_fut_ts * traj_coords;
   const int32_t final_layer_offset = final_layer_idx * layer_size;
   
@@ -86,13 +88,14 @@ std::vector<std::vector<std::vector<std::vector<float>>>> postprocess_traj_preds
 }
 
 std::vector<std::vector<float>> postprocess_traj_cls_scores(
-    const std::vector<float>& all_traj_cls_scores_flat) {
-  const int32_t num_layers = 3;  // 3レイヤーの軌道分類スコア
-  const int32_t num_objects = 300;
-  const int32_t num_fut_modes = 6; // 6種類の将来軌道
+    const std::vector<float>& all_traj_cls_scores_flat,
+    const VadConfig& vad_config) {
+  const int32_t num_layers = vad_config.num_decoder_layers;
+  const int32_t num_objects = vad_config.prediction_num_queries;
+  const int32_t num_fut_modes = vad_config.prediction_trajectory_modes;
   
-  // 最終層（インデックス2）のデータのみを使用
-  const int32_t final_layer_idx = num_layers - 1; // = 2
+  // Use output from last layer (index = num_layers - 1) only
+  const int32_t final_layer_idx = num_layers - 1;
   const int32_t layer_size = num_objects * num_fut_modes;
   const int32_t final_layer_offset = final_layer_idx * layer_size;
   
@@ -110,13 +113,14 @@ std::vector<std::vector<float>> postprocess_traj_cls_scores(
 }
 
 std::vector<std::vector<float>> postprocess_bbox_preds(
-    const std::vector<float>& all_bbox_preds_flat) {
-  const int32_t num_layers = 3;  // 3レイヤーのbbox予測
-  const int32_t num_objects = 300;
+    const std::vector<float>& all_bbox_preds_flat,
+    const VadConfig& vad_config) {
   const int32_t bbox_features = 10; // c_x,c_y,w,l,c_z,h,sin(theta),cos(theta),v_x,v_y
+  const int32_t num_layers = vad_config.num_decoder_layers;
+  const int32_t num_objects = vad_config.prediction_num_queries;
   
-  // 最終層（インデックス2）のデータのみを使用
-  const int32_t final_layer_idx = num_layers - 1; // = 2
+  // Use output from last layer (index = num_layers - 1) only
+  const int32_t final_layer_idx = num_layers - 1;
   const int32_t layer_size = num_objects * bbox_features;
   const int32_t final_layer_offset = final_layer_idx * layer_size;
   
@@ -138,14 +142,15 @@ std::vector<std::vector<float>> postprocess_bbox_preds(
  * 推論時は最終層（-1番目のlayer）のみを使用
  */
 std::vector<std::vector<float>> 
-postprocess_class_scores(const std::vector<float>& all_cls_scores_flat) 
+postprocess_class_scores(const std::vector<float>& all_cls_scores_flat,
+                        const VadConfig& vad_config) 
 {
-    const int32_t num_layers = 3; // 3レイヤーのオブジェクト分類予測
-    const int32_t num_objects = 300;
     const int32_t num_classes = 10; // オブジェクトクラス数　'car', 'truck', 'construction_vehicle', 'bus', 'trailer', 'barrier',　'motorcycle', 'bicycle', 'pedestrian', 'traffic_cone'
-    
-    // 最終層（インデックス2）のデータのみを使用
-    const int32_t final_layer_idx = num_layers - 1; // = 2
+    const int32_t num_layers = vad_config.num_decoder_layers;
+    const int32_t num_objects = vad_config.prediction_num_queries;
+
+    // Use output from last layer (index = num_layers - 1) only
+    const int32_t final_layer_idx = num_layers - 1;
     const int32_t layer_size = num_objects * num_classes;
     const int32_t final_layer_offset = final_layer_idx * layer_size;
     
@@ -166,14 +171,15 @@ postprocess_class_scores(const std::vector<float>& all_cls_scores_flat)
  * 推論時は最終層（-1番目のlayer）のみを使用
  */
 std::vector<std::vector<float>> 
-process_class_scores(const std::vector<float>& cls_preds_flat) 
+process_class_scores(const std::vector<float>& cls_preds_flat,
+                    const VadConfig& vad_config) 
 {
-    const int32_t num_layers = 3; // 3レイヤーのポイント予測
-    const int32_t num_query = 100;
-    const int32_t cls_out_channels = 3;
+    const int32_t num_query = vad_config.map_num_queries;
+    const int32_t cls_out_channels = vad_config.map_num_classes;
+    const int32_t num_layers = vad_config.num_decoder_layers;
     
-    // 最終層（インデックス2）のデータのみを使用
-    const int32_t final_layer_idx = num_layers - 1; // = 2
+    // Use output from last layer (index = num_layers - 1) only
+    const int32_t final_layer_idx = num_layers - 1;
     const int32_t layer_size = num_query * cls_out_channels;
     const int32_t final_layer_offset = final_layer_idx * layer_size;
     
@@ -201,17 +207,15 @@ std::vector<BBox> postprocess_bboxes(
     const std::vector<float>& all_traj_preds_flat,
     const std::vector<float>& all_traj_cls_scores_flat,
     const std::vector<float>& all_bbox_preds_flat,
-    const std::map<std::string, float>& object_confidence_thresholds)
+    const VadConfig& vad_config)
 {
     // 各種予測結果を構造化
-    auto obj_cls_scores = postprocess_class_scores(all_cls_scores_flat);
-    auto traj_preds = postprocess_traj_preds(all_traj_preds_flat);
-    auto traj_cls_scores = postprocess_traj_cls_scores(all_traj_cls_scores_flat);
-    auto bbox_preds = postprocess_bbox_preds(all_bbox_preds_flat);
-
-    const int32_t num_objects = 300;
+    auto obj_cls_scores = postprocess_class_scores(all_cls_scores_flat, vad_config);
+    auto traj_preds = postprocess_traj_preds(all_traj_preds_flat, vad_config);
+    auto traj_cls_scores = postprocess_traj_cls_scores(all_traj_cls_scores_flat, vad_config);
+    auto bbox_preds = postprocess_bbox_preds(all_bbox_preds_flat, vad_config);
     std::vector<BBox> bboxes;
-    bboxes.reserve(num_objects);
+    bboxes.reserve(vad_config.prediction_num_queries);
 
     // ラベルIDとクラス名のマッピング（NuScenes標準クラス）
     std::unordered_map<int32_t, std::string> label_to_class = {
@@ -227,7 +231,7 @@ std::vector<BBox> postprocess_bboxes(
       {9, "traffic_cone"}
     };
 
-    for (int32_t obj = 0; obj < num_objects; ++obj) {
+    for (int32_t obj = 0; obj < vad_config.prediction_num_queries; ++obj) {
         BBox bbox;
         
         // Bounding box parameters [c_x, c_y, w, l, c_z, h, sin(theta), cos(theta), v_x, v_y]
@@ -249,8 +253,8 @@ std::vector<BBox> postprocess_bboxes(
         auto class_it = label_to_class.find(bbox.object_class);
         if (class_it != label_to_class.end()) {
             std::string class_name = class_it->second;
-            auto threshold_it = object_confidence_thresholds.find(class_name);
-            if (threshold_it != object_confidence_thresholds.end()) {
+            auto threshold_it = vad_config.object_confidence_thresholds.find(class_name);
+            if (threshold_it != vad_config.object_confidence_thresholds.end()) {
                 float threshold = threshold_it->second;
                 // 閾値を満たさない場合はスキップ
                 if (bbox.confidence < threshold) {
@@ -266,12 +270,12 @@ std::vector<BBox> postprocess_bboxes(
         }
         
         // 6本の予測軌道を構造化
-        for (int32_t mode = 0; mode < 6; ++mode) {
+        for (int32_t mode = 0; mode < vad_config.prediction_trajectory_modes; ++mode) {
             PredictedTrajectory pred_traj;
             pred_traj.confidence = traj_cls_scores[obj][mode];
             
             // 6タイムステップの軌道データを設定
-            for (int32_t ts = 0; ts < 6; ++ts) {
+            for (int32_t ts = 0; ts < vad_config.prediction_timesteps; ++ts) {
                 pred_traj.trajectory[ts][0] = traj_preds[obj][mode][ts][0]; // x座標
                 pred_traj.trajectory[ts][1] = traj_preds[obj][mode][ts][1]; // y座標
             }
@@ -290,15 +294,16 @@ std::vector<BBox> postprocess_bboxes(
  * 推論時は最終層（-1番目のlayer）のみを使用
  */
 std::vector<std::vector<std::vector<float>>> 
-process_points(const std::vector<float>& pts_preds_flat) 
+process_points(const std::vector<float>& pts_preds_flat,
+               const VadConfig& vad_config) 
 {
-    const int32_t num_layers = 3; // 3レイヤーのポイント予測
-    const int32_t num_query = 100;
-    const int32_t fixed_num_pts = 20;
+    const int32_t num_query = vad_config.map_num_queries;
+    const int32_t fixed_num_pts = vad_config.map_points_per_polylines;
     const int32_t pts_coords = 2;
+    const int32_t num_layers = vad_config.num_decoder_layers;
     
-    // 最終層（インデックス2）のデータのみを使用
-    const int32_t final_layer_idx = num_layers - 1; // = 2
+    // Use output from last layer (index = num_layers - 1) only
+    const int32_t final_layer_idx = num_layers - 1;
     const int32_t layer_size = num_query * fixed_num_pts * pts_coords;
     const int32_t final_layer_offset = final_layer_idx * layer_size;
     
@@ -362,10 +367,10 @@ postprocess_map_preds(
     const VadConfig& vad_config) 
 {
     // 1. get confidence scores for each polyline
-    auto cls_scores = process_class_scores(map_all_cls_preds_flat);
+    auto cls_scores = process_class_scores(map_all_cls_preds_flat, vad_config);
 
     // 2. get points in each polyline
-    auto pts_preds = process_points(map_all_pts_preds_flat);
+    auto pts_preds = process_points(map_all_pts_preds_flat, vad_config);
     
     // 3. filter polylines based on confidence scores and create MapPolyline objects
     auto map_polylines = select_most_confident_predictions(cls_scores, pts_preds, vad_config);
