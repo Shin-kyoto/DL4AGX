@@ -48,11 +48,11 @@ inline std::vector<float> denormalize_2d_pts(const std::vector<float>& pts,
 
 
 /**
- * @brief マップのクラス予測のフラットな配列を解析し、スコアの2次元配列に変換する
- * 推論時は最終層（-1番目のlayer）のみを使用
+ * @brief Process confidence scores for map polylines from flat to 2D array
+ * Uses only the final decoder layer output
  */
 std::vector<std::vector<float>> 
-process_class_scores(const std::vector<float>& cls_preds_flat,
+process_map_class_scores(const std::vector<float>& cls_preds_flat,
                     const VadConfig& vad_config) 
 {
     const int32_t num_query = vad_config.map_num_queries;
@@ -76,11 +76,11 @@ process_class_scores(const std::vector<float>& cls_preds_flat,
 }
 
 /**
- * @brief 座標予測のフラットな配列を解析し、非正規化された座標の3次元配列に変換する
- * 推論時は最終層（-1番目のlayer）のみを使用
+ * @brief Process map polylines from flat array to denormalized 3D array
+ * Uses only the final decoder layer output
  */
 std::vector<std::vector<std::vector<float>>> 
-process_points(const std::vector<float>& pts_preds_flat,
+process_map_points(const std::vector<float>& pts_preds_flat,
                const VadConfig& vad_config) 
 {
     const int32_t num_query = vad_config.map_num_queries;
@@ -112,14 +112,14 @@ process_points(const std::vector<float>& pts_preds_flat,
 }
 
 /**
- * @brief select the most confident predictions and filter them by class-specific confidence thresholds
+ * @brief Select confident predictions and filter by class-specific thresholds
  * @param cls_scores confidence scores [num_query, num_classes]
  * @param pts_preds predicted map polylines [num_query, num_points, 2]
  * @param vad_config VAD configuration containing class names and thresholds
  * @return vector of MapPolyline objects filtered by confidence scores
  */
 std::vector<MapPolyline>
-select_most_confident_predictions(
+select_confident_map_polylines(
     const std::vector<std::vector<float>>& cls_scores,
     const std::vector<std::vector<std::vector<float>>>& pts_preds,
     const VadConfig& vad_config)
@@ -144,7 +144,7 @@ select_most_confident_predictions(
 }
 
 /**
- * @brief モデルの推論結果全体の後処理を行う
+ * @brief Postprocess model inference results for map predictions
  */
 std::vector<MapPolyline>
 postprocess_map_preds(
@@ -153,13 +153,13 @@ postprocess_map_preds(
     const VadConfig& vad_config) 
 {
     // 1. get confidence scores for each polyline
-    auto cls_scores = process_class_scores(map_all_cls_preds_flat, vad_config);
+    auto cls_scores = process_map_class_scores(map_all_cls_preds_flat, vad_config);
 
     // 2. get points in each polyline
-    auto pts_preds = process_points(map_all_pts_preds_flat, vad_config);
+    auto pts_preds = process_map_points(map_all_pts_preds_flat, vad_config);
     
     // 3. filter polylines based on confidence scores and create MapPolyline objects
-    auto map_polylines = select_most_confident_predictions(cls_scores, pts_preds, vad_config);
+    auto map_polylines = select_confident_map_polylines(cls_scores, pts_preds, vad_config);
     
     return map_polylines;
 }

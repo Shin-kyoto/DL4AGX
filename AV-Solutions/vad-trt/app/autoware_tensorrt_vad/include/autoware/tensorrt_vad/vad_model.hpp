@@ -123,10 +123,10 @@ struct VadOutputData
 // 後処理関数
 
 // Helper functions for map prediction processing
-std::vector<std::vector<float>> process_class_scores(const std::vector<float>& cls_preds_flat, const VadConfig& vad_config);
-std::vector<std::vector<std::vector<float>>> process_points(const std::vector<float>& pts_preds_flat, const VadConfig& vad_config);
+std::vector<std::vector<float>> process_map_class_scores(const std::vector<float>& cls_preds_flat, const VadConfig& vad_config);
+std::vector<std::vector<std::vector<float>>> process_map_points(const std::vector<float>& pts_preds_flat, const VadConfig& vad_config);
 std::vector<MapPolyline>
-select_most_confident_predictions(
+select_confident_map_polylines(
     const std::vector<std::vector<float>>& cls_scores,
     const std::vector<std::vector<std::vector<float>>>& pts_preds,
     const VadConfig& vad_config);
