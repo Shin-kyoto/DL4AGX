@@ -279,10 +279,19 @@ VadConfig VadNode::load_vad_config()
   vad_config.map_num_class = this->declare_parameter<int32_t>("model_params.network_io_params.map_num_class");
   vad_config.map_points_per_polylines = this->declare_parameter<int32_t>("model_params.network_io_params.map_points_per_polylines");
   
-  // クラスごとの信頼度閾値を読み込み
-  vad_config.map_confidence_thresholds["divider"] = this->declare_parameter<float>("model_params.map_confidence_thresholds.divider");
-  vad_config.map_confidence_thresholds["ped_crossing"] = this->declare_parameter<float>("model_params.map_confidence_thresholds.ped_crossing");
-  vad_config.map_confidence_thresholds["boundary"] = this->declare_parameter<float>("model_params.map_confidence_thresholds.boundary");
+  auto map_classes = this->declare_parameter<std::vector<std::string>>("model_params.map_classes");
+  auto map_thresholds = this->declare_parameter<std::vector<double>>("model_params.map_confidence_thresholds");
+  
+  if (map_classes.size() != map_thresholds.size()) {
+    RCLCPP_ERROR(this->get_logger(), "map_classes and map_confidence_thresholds must have the same size");
+  }
+  vad_config.map_class_names = map_classes;
+  vad_config.map_num_classes = static_cast<int32_t>(map_classes.size());
+  
+  vad_config.map_confidence_thresholds.clear();
+  for (size_t i = 0; i < map_classes.size(); ++i) {
+    vad_config.map_confidence_thresholds[map_classes[i]] = static_cast<float>(map_thresholds[i]);
+  }
   
   // オブジェクトクラスごとの信頼度閾値を読み込み
   vad_config.object_confidence_thresholds["car"] = this->declare_parameter<float>("model_params.object_confidence_thresholds.car");

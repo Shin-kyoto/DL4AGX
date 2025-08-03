@@ -85,7 +85,7 @@ VadOutputTopicData VadInterface::convert_output(
     vad_output_data.predicted_trajectory_, stamp, trajectory_timestep, base2map_transform);
 
   // Convert map_points from VAD coordinate system to Autoware coordinate system
-  output_topic_data.map_points = process_map_points(vad_output_data.map_points_, vad_output_data.map_types_, stamp, base2map_transform);
+  output_topic_data.map_points = process_map_points(vad_output_data.map_polylines_, stamp, base2map_transform);
 
   return output_topic_data;
 }
@@ -570,31 +570,32 @@ autoware_planning_msgs::msg::Trajectory VadInterface::process_trajectory(
 
 
 /**
- * @brief 複数のポリラインを種類ごとに色分けしてMarkerArrayとして生成する
- * * @param polylines ポリラインのリスト。各ポリラインは点のリストで、各点は[x, y]のリスト。
- * @param polyline_types 各ポリラインの種類を示す文字列のリスト。
- * @param stamp タイムスタンプ
- * @param base2map_transform 座標変換行列
+ * @brief Process map points from VAD to Autoware coordinate system.
+ * @param vad_map_polylines vector of MapPolyline
+ * @param stamp timestamp in this frame
+ * @param base2map_transform base_link to map transformation matrix
  * @return visualization_msgs::msg::MarkerArray 
  */
 visualization_msgs::msg::MarkerArray VadInterface::process_map_points(
-    const std::vector<std::vector<std::vector<float>>>& vad_map_points,
-    const std::vector<std::string>& polyline_types,
+    const std::vector<MapPolyline>& vad_map_polylines,
     const rclcpp::Time& stamp,
     const Eigen::Matrix4f& base2map_transform) const
 {
     visualization_msgs::msg::MarkerArray marker_array;
 
-    // --- 各ポリラインを個別のマーカーとして作成 ---
-    for (size_t i = 0; i < vad_map_points.size(); ++i) {
-        const auto& polyline = vad_map_points[i];  // ポリライン（点の集合）
-        const std::string& type = polyline_types[i];
+    int32_t marker_id = 0;
+    for (const auto& map_polyline : vad_map_polylines) {
+        const std::string& type = map_polyline.type;
+        const auto& polyline = map_polyline.points;
 
-        if (polyline.empty()) continue;  // 空のポリラインはスキップ
+        if (polyline.empty()) {
+            ++marker_id;
+            continue;  // if polyline is empty, skip
+        }
 
         visualization_msgs::msg::Marker marker;
-        marker.ns = type;  // タイプごとに異なるnamespaceを設定
-        marker.id = static_cast<int32_t>(i);  // 各ポリラインにユニークなIDを設定
+        marker.ns = type;  // namespace shows the type of the polyline
+        marker.id = marker_id++;  // set unique ID for each marker
         marker.header.frame_id = "map";
         marker.header.stamp = stamp;
         marker.action = visualization_msgs::msg::Marker::ADD;

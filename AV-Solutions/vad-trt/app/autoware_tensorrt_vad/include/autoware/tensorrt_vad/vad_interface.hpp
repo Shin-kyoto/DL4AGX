@@ -153,8 +153,7 @@ public:
 
   // Convert map_points from VAD coordinate system to Autoware coordinate system
   visualization_msgs::msg::MarkerArray process_map_points(
-    const std::vector<std::vector<std::vector<float>>> & vad_map_points,
-    const std::vector<std::string>& polyline_types,
+    const std::vector<MapPolyline> & vad_map_polylines,
     const rclcpp::Time & stamp,
     const Eigen::Matrix4f & base2map_transform) const;
 

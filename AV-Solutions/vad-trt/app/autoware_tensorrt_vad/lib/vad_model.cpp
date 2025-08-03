@@ -340,57 +340,56 @@ process_points(const std::vector<float>& pts_preds_flat)
 }
 
 /**
- * @brief スコアが最も高い予測を選択し、クラスごとの信頼度閾値でフィルタリングする
- * @param cls_scores クラススコア [num_query, num_classes]
- * @param pts_preds 座標予測 [num_query, num_points, 2]
- * @param class_thresholds クラスごとの信頼度閾値マップ
+ * @brief select the most confident predictions and filter them by class-specific confidence thresholds
+ * @param cls_scores confidence scores [num_query, num_classes]
+ * @param pts_preds predicted map polylines [num_query, num_points, 2]
+ * @param vad_config VAD configuration containing class names and thresholds
+ * @return vector of MapPolyline objects filtered by confidence scores
  */
-std::pair<std::vector<std::vector<std::vector<float>>>, std::vector<std::string>>
+std::vector<MapPolyline>
 select_most_confident_predictions(
     const std::vector<std::vector<float>>& cls_scores,
     const std::vector<std::vector<std::vector<float>>>& pts_preds,
-    const std::map<std::string, float>& class_thresholds)
+    const VadConfig& vad_config)
 {
-    const std::vector<std::string> class_names = {"divider", "ped_crossing", "boundary"};
-    const int32_t num_query = cls_scores.size();
+  std::vector<MapPolyline> map_polylines;
+    map_polylines.reserve(cls_scores.size());
 
-    std::vector<std::vector<std::vector<float>>> filtered_polylines;
-    std::vector<std::string> filtered_types;
-    
-    for (int32_t q = 0; q < num_query; ++q) {
-        auto max_it = std::max_element(cls_scores[q].begin(), cls_scores[q].end());
+    for (size_t polyline_index = 0; polyline_index < cls_scores.size(); ++polyline_index) {
+        auto max_it = std::max_element(cls_scores[polyline_index].begin(), cls_scores[polyline_index].begin() + vad_config.map_num_classes);
         float max_score = *max_it;
-        int32_t max_class_idx = std::distance(cls_scores[q].begin(), max_it);
+        int32_t max_class_idx = std::distance(cls_scores[polyline_index].begin(), max_it);
 
-        // クラスごとの閾値を適用
-        std::string class_name = class_names[max_class_idx];
-        auto threshold_it = class_thresholds.find(class_name);
-        if (threshold_it != class_thresholds.end() && max_score >= threshold_it->second) {
-            filtered_polylines.push_back(pts_preds[q]);
-            filtered_types.push_back(class_name);
+        // If max confidence score is greater than or equal to the threshold for the class, add the polyline
+        std::string class_name = vad_config.map_class_names.at(max_class_idx);
+        auto threshold = vad_config.map_confidence_thresholds.at(class_name);
+        if (max_score >= threshold) {
+            map_polylines.emplace_back(class_name, pts_preds[polyline_index]);
         }
     }
 
-    return {filtered_polylines, filtered_types};
+    return map_polylines;
 }
 
 /**
  * @brief モデルの推論結果全体の後処理を行う
  */
-std::pair<std::vector<std::vector<std::vector<float>>>, std::vector<std::string>>
+std::vector<MapPolyline>
 postprocess_map_preds(
     const std::vector<float>& map_all_cls_preds_flat,
     const std::vector<float>& map_all_pts_preds_flat,
-    const std::map<std::string, float>& class_thresholds) 
+    const VadConfig& vad_config) 
 {
-    // 1. クラススコアを計算する
+    // 1. get confidence scores for each polyline
     auto cls_scores = process_class_scores(map_all_cls_preds_flat);
-    
-    // 2. 座標を計算する
+
+    // 2. get points in each polyline
     auto pts_preds = process_points(map_all_pts_preds_flat);
     
-    // 3. 計算結果を基に、クラスごとの信頼度閾値で予測を選択する
-    return select_most_confident_predictions(cls_scores, pts_preds, class_thresholds);
+    // 3. filter polylines based on confidence scores and create MapPolyline objects
+    auto map_polylines = select_most_confident_predictions(cls_scores, pts_preds, vad_config);
+    
+    return map_polylines;
 }
 
 } // namespace autoware::tensorrt_vad

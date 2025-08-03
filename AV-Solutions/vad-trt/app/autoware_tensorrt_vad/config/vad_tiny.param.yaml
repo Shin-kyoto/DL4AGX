@@ -5,10 +5,8 @@
     model_params:
       plugins_path: "/home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/libplugins.so"
       default_command: 2  # 0: TURN RIGHT, 1: TURN LEFT, 2: KEEP FORWARD
-      map_confidence_thresholds:
-        divider: 0.9        # Confidence threshold for divider predictions
-        ped_crossing: 0.9   # Confidence threshold for ped_crossing predictions  
-        boundary: 0.9       # Confidence threshold for boundary predictions
+      map_classes: ["divider", "ped_crossing", "boundary"]
+      map_confidence_thresholds: [0.9, 0.9, 0.9]
       object_confidence_thresholds:
         car: 0.3
         truck: 0.3
