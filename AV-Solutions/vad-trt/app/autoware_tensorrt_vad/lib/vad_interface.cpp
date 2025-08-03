@@ -600,10 +600,10 @@ visualization_msgs::msg::MarkerArray VadInterface::process_map_points(
         marker.header.stamp = stamp;
         marker.action = visualization_msgs::msg::Marker::ADD;
         
-        // オリエンテーションは固定
+        // orientation is fixed.
         marker.pose.orientation.w = 1.0;
-        
-        // 種類に応じて色を設定
+
+        // Set color based on type
         if (type == "divider") { // cornflowerblue
             marker.color.r = 0.3922f;
             marker.color.g = 0.5843f;
@@ -623,7 +623,7 @@ visualization_msgs::msg::MarkerArray VadInterface::process_map_points(
         }
         marker.color.a = 0.8;
 
-        // ポリライン内の各点を座標変換してマーカーに追加
+        // Transform each point in the polyline and add to the marker
         for (const auto& point : polyline) {
             if (point.size() >= 2) {
                 float vad_x = point[0];
@@ -643,18 +643,13 @@ visualization_msgs::msg::MarkerArray VadInterface::process_map_points(
             }
         }
 
-        // マーカーの表示方法を決定
+        // Decide how to display the marker
         if (marker.points.size() >= 2) {
-            // 2点以上の場合は線で繋げて表示
+            // If there are 2 or more points, display as a line
             marker.type = visualization_msgs::msg::Marker::LINE_STRIP;
-            marker.scale.x = 0.1; // 線の太さ
-        } else if (marker.points.size() == 1) {
-            // 1点の場合は点として表示
-            marker.type = visualization_msgs::msg::Marker::POINTS;
-            marker.scale.x = 0.2; // 点のサイズ
-            marker.scale.y = 0.2;
+            marker.scale.x = 0.1; // Line thickness
         } else {
-            // 点がない場合はスキップ
+            // If polyline does not have 2 or more points, skip
             continue;
         }
 
