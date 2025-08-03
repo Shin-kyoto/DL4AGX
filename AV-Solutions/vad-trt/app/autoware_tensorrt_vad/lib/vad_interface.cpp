@@ -13,7 +13,7 @@ VadInterface::VadInterface(const VadInterfaceConfig& config, std::shared_ptr<tf2
     target_image_height_(config.target_image_height),
     input_image_width_(config.input_image_width),
     input_image_height_(config.input_image_height),
-    point_cloud_range_(config.point_cloud_range),
+    detection_range_(config.detection_range),
     bev_h_(config.bev_h),
     bev_w_(config.bev_w),
     default_patch_angle_(config.default_patch_angle),
@@ -377,8 +377,8 @@ ShiftData VadInterface::process_shift(
   float delta_y = can_bus[1] - prev_can_bus[1];  // translation difference
   float patch_angle_rad = can_bus[16];  // current patch_angle[rad]
 
-  float real_w = point_cloud_range_[3] - point_cloud_range_[0];
-  float real_h = point_cloud_range_[4] - point_cloud_range_[1];
+  float real_w = detection_range_[3] - detection_range_[0];
+  float real_h = detection_range_[4] - detection_range_[1];
   float grid_length[] = {real_h / bev_h_, real_w / bev_w_};
 
   float ego_angle = patch_angle_rad / M_PI * 180.0;

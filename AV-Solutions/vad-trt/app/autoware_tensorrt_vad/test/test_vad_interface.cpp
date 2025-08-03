@@ -67,7 +67,7 @@ TEST(VadLidar2ImgTest, DummyInputOutput)
     int32_t input_image_height = 1080;
     int32_t target_image_width = 640;
     int32_t target_image_height = 384;
-    std::vector<double> point_cloud_range = {-15.0, -30.0, -2.0, 15.0, 30.0, 2.0};
+    std::vector<double> detection_range = {-15.0, -30.0, -2.0, 15.0, 30.0, 2.0};
     int32_t bev_h = 100;
     int32_t bev_w = 100;
     double default_patch_angle = -1.0353195667266846;
@@ -92,7 +92,7 @@ TEST(VadLidar2ImgTest, DummyInputOutput)
     autoware::tensorrt_vad::VadInterfaceConfig vad_interface_config(
         input_image_width, input_image_height,
         target_image_width, target_image_height,
-        point_cloud_range,
+        detection_range,
         bev_h, bev_w,
         default_patch_angle,
         default_command,

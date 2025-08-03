@@ -72,7 +72,7 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
       declare_parameter<int32_t>("interface_params.input_image_height"),
       declare_parameter<int32_t>("interface_params.target_image_width"),
       declare_parameter<int32_t>("interface_params.target_image_height"),
-      declare_parameter<std::vector<double>>("interface_params.point_cloud_range"),
+      declare_parameter<std::vector<double>>("interface_params.detection_range"),
       declare_parameter<int32_t>("interface_params.bev_h"),
       declare_parameter<int32_t>("interface_params.bev_w"),
       declare_parameter<double>("interface_params.default_patch_angle"),
@@ -278,6 +278,14 @@ VadConfig VadNode::load_vad_config()
   vad_config.map_num_queries = this->declare_parameter<int32_t>("model_params.network_io_params.map_num_queries");
   vad_config.map_num_class = this->declare_parameter<int32_t>("model_params.network_io_params.map_num_class");
   vad_config.map_points_per_polylines = this->declare_parameter<int32_t>("model_params.network_io_params.map_points_per_polylines");
+  
+  // Load detection range from interface_params (already declared in VadInterfaceConfig)
+  auto detection_range = this->get_parameter("interface_params.detection_range").as_double_array();
+  vad_config.detection_range.clear();
+  vad_config.detection_range.reserve(detection_range.size());
+  for (double val : detection_range) {
+    vad_config.detection_range.push_back(static_cast<float>(val));
+  }
   
   auto map_classes = this->declare_parameter<std::vector<std::string>>("model_params.map_classes");
   auto map_thresholds = this->declare_parameter<std::vector<double>>("model_params.map_confidence_thresholds");

@@ -17,7 +17,7 @@ public:
   int32_t input_image_height;
   int32_t target_image_width;
   int32_t target_image_height;
-  std::array<float, 6> point_cloud_range;
+  std::array<float, 6> detection_range;
   int32_t bev_h;
   int32_t bev_w;
   float default_patch_angle;
@@ -34,7 +34,7 @@ public:
   VadInterfaceConfig(
     int32_t input_image_width_, int32_t input_image_height_,
     int32_t target_image_width_, int32_t target_image_height_,
-    const std::vector<double>& point_cloud_range_,
+    const std::vector<double>& detection_range_,
     int32_t bev_h_, int32_t bev_w_,
     double default_patch_angle_,
     int32_t default_command_,
@@ -53,9 +53,9 @@ public:
       default_patch_angle(static_cast<float>(default_patch_angle_)),
       default_command(default_command_)
   {
-    // point_cloud_range: 6 elements
+    // detection_range: 6 elements
     for (int i = 0; i < 6; ++i) {
-      point_cloud_range[i] = static_cast<float>(point_cloud_range_[i]);
+      detection_range[i] = static_cast<float>(detection_range_[i]);
     }
     // default_shift: copy and convert
     default_shift.clear();

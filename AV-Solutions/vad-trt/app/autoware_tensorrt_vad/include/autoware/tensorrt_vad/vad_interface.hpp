@@ -178,7 +178,7 @@ private:
   std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
   int32_t target_image_width_, target_image_height_;
   int32_t input_image_width_, input_image_height_;
-  std::array<float, 6> point_cloud_range_;
+  std::array<float, 6> detection_range_;
   int32_t bev_h_, bev_w_;
   float default_patch_angle_;
   int32_t default_command_;
