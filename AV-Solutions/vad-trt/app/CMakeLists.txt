@@ -121,6 +121,7 @@ target_include_directories(${APP}_cu PUBLIC
     ${autoware_tensorrt_common_INCLUDE_DIRS}
     ${geometry_msgs_INCLUDE_DIRS}
     ${rosbag2_cpp_INCLUDE_DIRS}
+    ${visualization_msgs_INCLUDE_DIRS}
 )
 
 # Main application

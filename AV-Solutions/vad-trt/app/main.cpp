@@ -152,7 +152,7 @@ public:
           declare_parameter<int32_t>("interface_params.input_image_height"),
           declare_parameter<int32_t>("interface_params.target_image_width"),
           declare_parameter<int32_t>("interface_params.target_image_height"),
-          declare_parameter<std::vector<double>>("interface_params.point_cloud_range"),
+          declare_parameter<std::vector<double>>("interface_params.detection_range"),
           declare_parameter<int32_t>("interface_params.bev_h"),
           declare_parameter<int32_t>("interface_params.bev_w"),
           declare_parameter<double>("interface_params.default_patch_angle"),
@@ -162,7 +162,9 @@ public:
           declare_parameter<std::vector<double>>("interface_params.image_normalization_param_mean"),
           declare_parameter<std::vector<double>>("interface_params.image_normalization_param_std"),
           declare_parameter<std::vector<double>>("interface_params.vad2base"),
-          declare_parameter<std::vector<int64_t>>("interface_params.autoware_to_vad_camera_mapping")
+          declare_parameter<std::vector<int64_t>>("interface_params.autoware_to_vad_camera_mapping"),
+          declare_parameter<std::vector<std::string>>("model_params.map_classes"),
+          declare_parameter<std::vector<double>>("interface_params.map_colors")
         ),
         trajectory_timestep_(declare_parameter<double>("interface_params.trajectory_timestep", 1.0))
   {
@@ -245,52 +247,64 @@ public:
     vad_config.map_num_class = this->declare_parameter<int32_t>("model_params.network_io_params.map_num_class");
     vad_config.map_points_per_polylines = this->declare_parameter<int32_t>("model_params.network_io_params.map_points_per_polylines");
     vad_config.can_bus_dim = this->declare_parameter<int32_t>("model_params.network_io_params.can_bus_dim");
-    
+
+    // detection_range
+    auto detection_range = this->get_parameter("interface_params.detection_range").as_double_array();
+    vad_config.detection_range.clear();
+    vad_config.detection_range.reserve(detection_range.size());
+    for (double val : detection_range) {
+      vad_config.detection_range.push_back(static_cast<float>(val));
+    }
+
+    // map_classes, map_confidence_thresholds
+    auto map_classes = this->get_parameter("model_params.map_classes").as_string_array();
+    auto map_thresholds = this->declare_parameter<std::vector<double>>("model_params.map_confidence_thresholds");
+    vad_config.map_class_names = map_classes;
+    vad_config.map_num_classes = static_cast<int32_t>(map_classes.size());
+    vad_config.map_confidence_thresholds.clear();
+    for (size_t i = 0; i < map_classes.size() && i < map_thresholds.size(); ++i) {
+      vad_config.map_confidence_thresholds[map_classes[i]] = static_cast<float>(map_thresholds[i]);
+    }
+
+    // object_confidence_thresholds
+    vad_config.object_confidence_thresholds["car"] = this->declare_parameter<float>("model_params.object_confidence_thresholds.car", 0.3f);
+    vad_config.object_confidence_thresholds["truck"] = this->declare_parameter<float>("model_params.object_confidence_thresholds.truck", 0.3f);
+    vad_config.object_confidence_thresholds["construction_vehicle"] = this->declare_parameter<float>("model_params.object_confidence_thresholds.construction_vehicle", 0.3f);
+    vad_config.object_confidence_thresholds["bus"] = this->declare_parameter<float>("model_params.object_confidence_thresholds.bus", 0.3f);
+    vad_config.object_confidence_thresholds["trailer"] = this->declare_parameter<float>("model_params.object_confidence_thresholds.trailer", 0.3f);
+    vad_config.object_confidence_thresholds["barrier"] = this->declare_parameter<float>("model_params.object_confidence_thresholds.barrier", 0.5f);
+    vad_config.object_confidence_thresholds["motorcycle"] = this->declare_parameter<float>("model_params.object_confidence_thresholds.motorcycle", 0.3f);
+    vad_config.object_confidence_thresholds["bicycle"] = this->declare_parameter<float>("model_params.object_confidence_thresholds.bicycle", 0.3f);
+    vad_config.object_confidence_thresholds["pedestrian"] = this->declare_parameter<float>("model_params.object_confidence_thresholds.pedestrian", 0.3f);
+    vad_config.object_confidence_thresholds["traffic_cone"] = this->declare_parameter<float>("model_params.object_confidence_thresholds.traffic_cone", 0.3f);
+
     // plugins_pathの設定
     vad_config.plugins_path = this->declare_parameter<std::string>("model_params.plugins_path", "");
-    
+
     // ネットワーク設定の読み込み
-    // backbone設定
     autoware::tensorrt_vad::NetConfig backbone_config;
-    backbone_config.name = this->declare_parameter<std::string>(
-        "model_params.nets.backbone.name", "backbone");
+    backbone_config.name = this->declare_parameter<std::string>("model_params.nets.backbone.name", "backbone");
 
-    // head設定
     autoware::tensorrt_vad::NetConfig head_config;
-    head_config.name = this->declare_parameter<std::string>(
-        "model_params.nets.head.name", "head");
-
-    // head inputsの読み込み
-    std::string input_feature = this->declare_parameter<std::string>(
-        "model_params.nets.head.inputs.input_feature", "mlvl_feats.0");
-    std::string net_param = this->declare_parameter<std::string>(
-        "model_params.nets.head.inputs.net", "backbone");
-    std::string name_param = this->declare_parameter<std::string>(
-        "model_params.nets.head.inputs.name", "out.0");
+    head_config.name = this->declare_parameter<std::string>("model_params.nets.head.name", "head");
+    std::string input_feature = this->declare_parameter<std::string>("model_params.nets.head.inputs.input_feature", "mlvl_feats.0");
+    std::string net_param = this->declare_parameter<std::string>("model_params.nets.head.inputs.net", "backbone");
+    std::string name_param = this->declare_parameter<std::string>("model_params.nets.head.inputs.name", "out.0");
     head_config.inputs[input_feature]["net"] = net_param;
     head_config.inputs[input_feature]["name"] = name_param;
 
-    // head_no_prev設定
     autoware::tensorrt_vad::NetConfig head_no_prev_config;
-    head_no_prev_config.name = this->declare_parameter<std::string>(
-        "model_params.nets.head_no_prev.name", "head_no_prev");
-
-    // head_no_prev inputsの読み込み
-    std::string input_feature_no_prev = this->declare_parameter<std::string>(
-        "model_params.nets.head_no_prev.inputs.input_feature", "mlvl_feats.0");
-    std::string net_param_no_prev = this->declare_parameter<std::string>(
-        "model_params.nets.head_no_prev.inputs.net", "backbone");
-    std::string name_param_no_prev = this->declare_parameter<std::string>(
-        "model_params.nets.head_no_prev.inputs.name", "out.0");
-    head_no_prev_config.inputs[input_feature_no_prev]["net"] =
-        net_param_no_prev;
-    head_no_prev_config.inputs[input_feature_no_prev]["name"] =
-        name_param_no_prev;
+    head_no_prev_config.name = this->declare_parameter<std::string>("model_params.nets.head_no_prev.name", "head_no_prev");
+    std::string input_feature_no_prev = this->declare_parameter<std::string>("model_params.nets.head_no_prev.inputs.input_feature", "mlvl_feats.0");
+    std::string net_param_no_prev = this->declare_parameter<std::string>("model_params.nets.head_no_prev.inputs.net", "backbone");
+    std::string name_param_no_prev = this->declare_parameter<std::string>("model_params.nets.head_no_prev.inputs.name", "out.0");
+    head_no_prev_config.inputs[input_feature_no_prev]["net"] = net_param_no_prev;
+    head_no_prev_config.inputs[input_feature_no_prev]["name"] = name_param_no_prev;
 
     vad_config.nets_config.push_back(backbone_config);
     vad_config.nets_config.push_back(head_config);
     vad_config.nets_config.push_back(head_no_prev_config);
-    
+
     return vad_config;
   }
 
