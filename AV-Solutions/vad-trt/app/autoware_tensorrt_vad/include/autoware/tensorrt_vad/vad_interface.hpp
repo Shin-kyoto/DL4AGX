@@ -45,7 +45,8 @@
 #include "visualization_msgs/msg/marker_array.hpp"
 #include "visualization_msgs/msg/marker.hpp"
 
-#include "vad_model.hpp" 
+#include "vad_model.hpp"
+#include "debug_behind_tracker.hpp" 
 
 namespace autoware::tensorrt_vad
 {
@@ -202,6 +203,9 @@ private:
   // Previous can_bus data for velocity calculation and other processes
   std::vector<float> prev_can_bus_;
 
+  // デバッグ用トラッカー（簡単に削除可能）
+  mutable std::unique_ptr<DebugBehindTracker> debug_behind_tracker_;
+
   // --- 内部処理関数 ---
   std::optional<Eigen::Matrix4f> lookup_base2cam(tf2_ros::Buffer & buffer, int32_t autoware_camera_id) const;
   Eigen::Matrix4f create_viewpad(const sensor_msgs::msg::CameraInfo::ConstSharedPtr & camera_info) const;
@@ -238,6 +242,9 @@ private:
     const std::vector<float> & predicted_trajectory,
     double trajectory_timestep,
     const Eigen::Matrix4f & base2map_transform) const;
+
+  // Helper function for transforming yaw angle from base to map coordinate system
+  float transform_yaw_to_map(float base_yaw, const Eigen::Matrix4f & base2map_transform) const;
 };
 
 }  // namespace autoware::tensorrt_vad

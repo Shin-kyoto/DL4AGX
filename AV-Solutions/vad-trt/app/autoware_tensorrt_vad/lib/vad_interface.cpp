@@ -24,7 +24,8 @@ VadInterface::VadInterface(const VadInterfaceConfig& config, std::shared_ptr<tf2
     vad2base_(config.vad2base),
     base2vad_(config.base2vad),
     current_longitudinal_velocity_mps_(0.0f),
-    prev_can_bus_(config.default_can_bus)
+    prev_can_bus_(config.default_can_bus),
+    debug_behind_tracker_(std::make_unique<DebugBehindTracker>()) // デバッグ用トラッカーを初期化
 {
   // AutowareカメラインデックスからVADカメラインデックスへのマッピング
   autoware_to_vad_camera_mapping_ = config.autoware_to_vad_camera_mapping;
@@ -446,6 +447,14 @@ geometry_msgs::msg::Quaternion VadInterface::create_quaternion_from_yaw(double y
   return q;
 }
 
+float VadInterface::transform_yaw_to_map(float base_yaw, const Eigen::Matrix4f & base2map_transform) const
+{
+  // base座標系の方向ベクトルをmap座標系に変換（predicted trajectoryと同じ方式）
+  Eigen::Vector3f base_direction(std::cos(base_yaw), std::sin(base_yaw), 0.0f);
+  Eigen::Vector3f map_direction = base2map_transform.block<3, 3>(0, 0) * base_direction;
+  return std::atan2(map_direction.y(), map_direction.x());
+}
+
 std::vector<autoware_planning_msgs::msg::TrajectoryPoint> VadInterface::create_trajectory_points(
   const std::vector<float> & predicted_trajectory,
   double trajectory_timestep,
@@ -777,6 +786,11 @@ autoware_perception_msgs::msg::PredictedObjects VadInterface::process_predicted_
     const rclcpp::Time & stamp,
     const Eigen::Matrix4f & base2map_transform) const
 {
+  // デバッグ用トラッキング処理
+  if (debug_behind_tracker_) {
+    debug_behind_tracker_->update_and_track(bboxes, base2map_transform);
+  }
+  
   autoware_perception_msgs::msg::PredictedObjects predicted_objects;
   
   // Set header
@@ -826,9 +840,10 @@ autoware_perception_msgs::msg::PredictedObjects VadInterface::process_predicted_
     
     // Set kinematics (position and orientation)
     // BBox format: [c_x, c_y, w, l, c_z, h, sin(theta), cos(theta), v_x, v_y]
+    float z_offset = +1.9f;
     float vad_x = bbox.bbox[0];
     float vad_y = bbox.bbox[1];
-    float vad_z = bbox.bbox[4];
+    float vad_z = bbox.bbox[4] + z_offset;
     float sin_theta = bbox.bbox[6];
     float cos_theta = bbox.bbox[7];
     
@@ -843,32 +858,75 @@ autoware_perception_msgs::msg::PredictedObjects VadInterface::process_predicted_
     predicted_object.kinematics.initial_pose_with_covariance.pose.position.y = position_map.y();
     predicted_object.kinematics.initial_pose_with_covariance.pose.position.z = position_map.z();
     
-    // VAD座標系での角度をAutoware座標系に変換
+    // VAD座標系での角度
     float vad_yaw = std::atan2(sin_theta, cos_theta);
     
-    // 180度回転して座標系の向きを合わせる
-    vad_yaw += M_PI;
+    // base2map_transformから車両の回転を取得（predicted trajectoryと同じ方式）
+    Eigen::Matrix3f rotation_matrix = base2map_transform.block<3, 3>(0, 0);
+    float transform_yaw = std::atan2(rotation_matrix(1, 0), rotation_matrix(0, 0));
     
-    // yawからクォータニオンを作成してVAD→Autoware座標系変換
-    Eigen::Quaternionf q_vad_yaw(
-        std::cos(vad_yaw * 0.5f),  // w
-        0.0f,                      // x
-        0.0f,                      // y  
-        std::sin(vad_yaw * 0.5f)   // z
-    );
-    // VAD座標系からAutoware base_link座標系へのクォータニオン変換
-    Eigen::Quaternionf q_base = vad2aw_quaternion(q_vad_yaw);
+    // VADのyawをそのまま使用し、transform_yawで補正
+    float map_yaw = vad_yaw + transform_yaw;
     
-    // base_link座標系からmap座標系へのクォータニオン変換
-    Eigen::Matrix3f rotation_base2map = base2map_transform.block<3,3>(0,0);
-    Eigen::Quaternionf q_base2map(rotation_base2map);
-    Eigen::Quaternionf q_map = q_base2map * q_base;
+    // predicted pathから最もconfidenceの高いyawを計算
+    float predicted_path_yaw = map_yaw;  // デフォルトは元の計算値
+    float max_confidence = 0.0f;
+    bool found_valid_path = false;
     
-    // map座標系のクォータニオンをgeometry_msgsに変換
-    predicted_object.kinematics.initial_pose_with_covariance.pose.orientation.x = q_map.x();
-    predicted_object.kinematics.initial_pose_with_covariance.pose.orientation.y = q_map.y();
-    predicted_object.kinematics.initial_pose_with_covariance.pose.orientation.z = q_map.z();
-    predicted_object.kinematics.initial_pose_with_covariance.pose.orientation.w = q_map.w();
+    for (int32_t mode = 0; mode < 6; ++mode) {
+      const auto& pred_traj = bbox.trajectories[mode];
+      
+      // デバッグ: trajectory情報を出力
+      RCLCPP_INFO(rclcpp::get_logger("VadInterface"), 
+                  "Trajectory mode %d: confidence=%.6f, first_point=[%.3f, %.3f], second_point=[%.3f, %.3f]",
+                  mode, pred_traj.confidence,
+                  pred_traj.trajectory[0][0], pred_traj.trajectory[0][1],
+                  pred_traj.trajectory[1][0], pred_traj.trajectory[1][1]);
+      
+      if (pred_traj.confidence > max_confidence) {
+        // 最初の2点から方向を計算
+        float traj_vad_x1 = pred_traj.trajectory[0][0] + vad_x;
+        float traj_vad_y1 = pred_traj.trajectory[0][1] + vad_y;
+        float traj_vad_x2 = pred_traj.trajectory[1][0] + vad_x;
+        float traj_vad_y2 = pred_traj.trajectory[1][1] + vad_y;
+        
+        auto [traj_aw_x1, traj_aw_y1, traj_aw_z1] = vad2aw_xyz(traj_vad_x1, traj_vad_y1, aw_z);
+        auto [traj_aw_x2, traj_aw_y2, traj_aw_z2] = vad2aw_xyz(traj_vad_x2, traj_vad_y2, aw_z);
+        
+        Eigen::Vector4f pos1_base(traj_aw_x1, traj_aw_y1, traj_aw_z1, 1.0f);
+        Eigen::Vector4f pos2_base(traj_aw_x2, traj_aw_y2, traj_aw_z2, 1.0f);
+        Eigen::Vector4f pos1_map = base2map_transform * pos1_base;
+        Eigen::Vector4f pos2_map = base2map_transform * pos2_base;
+        
+        float dx = pos2_map.x() - pos1_map.x();
+        float dy = pos2_map.y() - pos1_map.y();
+        if (std::sqrt(dx*dx + dy*dy) > 0.01) {
+          predicted_path_yaw = std::atan2(dy, dx);
+          max_confidence = pred_traj.confidence;
+          found_valid_path = true;
+        }
+      }
+    }
+    
+    // 最終的なyawを決定（predicted pathから計算できた場合はそれを使用）
+    float final_yaw = found_valid_path ? predicted_path_yaw : map_yaw;
+    
+    // デバッグ用ログ出力
+    RCLCPP_INFO(rclcpp::get_logger("VadInterface"), 
+                "BBox Debug - sin_theta: %.6f, cos_theta: %.6f, vad_yaw (rad): %.6f (deg): %.2f, "
+                "transform_yaw (rad): %.6f (deg): %.2f, map_yaw (rad): %.6f (deg): %.2f, "
+                "predicted_path_yaw (rad): %.6f (deg): %.2f, final_yaw (rad): %.6f (deg): %.2f, "
+                "max_confidence: %.3f, found_valid_path: %s",
+                sin_theta, cos_theta, vad_yaw, vad_yaw * 180.0f / M_PI,
+                transform_yaw, transform_yaw * 180.0f / M_PI,
+                map_yaw, map_yaw * 180.0f / M_PI,
+                predicted_path_yaw, predicted_path_yaw * 180.0f / M_PI,
+                final_yaw, final_yaw * 180.0f / M_PI,
+                max_confidence, found_valid_path ? "true" : "false");
+    
+    // geometry_msgsクォータニオンに直接変換
+    predicted_object.kinematics.initial_pose_with_covariance.pose.orientation = 
+        create_quaternion_from_yaw(final_yaw);
     
     // Set shape
     predicted_object.shape.type = autoware_perception_msgs::msg::Shape::BOUNDING_BOX;
@@ -914,10 +972,8 @@ autoware_perception_msgs::msg::PredictedObjects VadInterface::process_predicted_
         pose.position.z = traj_position_map.z();
         
         // 軌道の向きを計算（次の点への方向）
-        // デフォルトはオブジェクトの向き（map座標系のクォータニオンからyawを取得）
-        float default_yaw = std::atan2(2.0f * (q_map.w() * q_map.z() + q_map.x() * q_map.y()),
-                                      1.0f - 2.0f * (q_map.y() * q_map.y() + q_map.z() * q_map.z()));
-        float traj_yaw = default_yaw;
+        // デフォルトはオブジェクトの向き（修正されたfinal_yawを使用）
+        float traj_yaw = final_yaw;
         
         if (ts < 5) {  // 次の点がある場合
           float next_vad_x = pred_traj.trajectory[ts + 1][0] + vad_x;

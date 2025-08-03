@@ -122,7 +122,7 @@ std::vector<std::vector<float>> postprocess_traj_cls_scores(
     for (int32_t fut_mode = 0; fut_mode < num_fut_modes; ++fut_mode) {
       int32_t idx_within_layer = obj * num_fut_modes + fut_mode;
       int32_t idx_flat = final_layer_offset + idx_within_layer;
-      traj_cls_scores[obj][fut_mode] = all_traj_cls_scores_flat[idx_flat];
+      traj_cls_scores[obj][fut_mode] = sigmoid(all_traj_cls_scores_flat[idx_flat]);
     }
   }
   return traj_cls_scores;

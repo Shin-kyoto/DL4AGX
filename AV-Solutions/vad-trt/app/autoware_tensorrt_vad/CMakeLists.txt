@@ -61,6 +61,7 @@ ament_auto_add_library(${PROJECT_NAME}_lib SHARED
     lib/vad_interface.cpp
     lib/vad_model.cpp
     lib/synchronization_strategy.cpp
+    lib/debug_behind_tracker.cpp
     lib/networks/net.cpp
     lib/networks/backbone.cpp
     lib/networks/head.cpp
@@ -74,6 +75,7 @@ target_link_libraries(${PROJECT_NAME}_lib
     cuda
     cudart
     ${OpenCV_LIBS}
+    stdc++fs  # std::filesystem用
 )
 
 # コンポーネントの追加
