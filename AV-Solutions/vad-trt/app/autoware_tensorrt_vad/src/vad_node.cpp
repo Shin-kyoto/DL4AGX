@@ -97,8 +97,8 @@ VadNode::VadNode(const rclcpp::NodeOptions & options)
       this->create_publisher<autoware_internal_planning_msgs::msg::CandidateTrajectories>(
           "~/output/trajectories", rclcpp::QoS(1));
 
-  objects_publisher_ =
-      this->create_publisher<autoware_perception_msgs::msg::DetectedObjects>(
+  predicted_objects_publisher_ =
+      this->create_publisher<autoware_perception_msgs::msg::PredictedObjects>(
           "~/output/objects",
           rclcpp::QoS(1));
 
@@ -284,6 +284,18 @@ VadConfig VadNode::load_vad_config()
   vad_config.map_confidence_thresholds["ped_crossing"] = this->declare_parameter<float>("model_params.map_confidence_thresholds.ped_crossing");
   vad_config.map_confidence_thresholds["boundary"] = this->declare_parameter<float>("model_params.map_confidence_thresholds.boundary");
   
+  // オブジェクトクラスごとの信頼度閾値を読み込み
+  vad_config.object_confidence_thresholds["car"] = this->declare_parameter<float>("model_params.object_confidence_thresholds.car");
+  vad_config.object_confidence_thresholds["truck"] = this->declare_parameter<float>("model_params.object_confidence_thresholds.truck");
+  vad_config.object_confidence_thresholds["construction_vehicle"] = this->declare_parameter<float>("model_params.object_confidence_thresholds.construction_vehicle");
+  vad_config.object_confidence_thresholds["bus"] = this->declare_parameter<float>("model_params.object_confidence_thresholds.bus");
+  vad_config.object_confidence_thresholds["trailer"] = this->declare_parameter<float>("model_params.object_confidence_thresholds.trailer");
+  vad_config.object_confidence_thresholds["barrier"] = this->declare_parameter<float>("model_params.object_confidence_thresholds.barrier");
+  vad_config.object_confidence_thresholds["motorcycle"] = this->declare_parameter<float>("model_params.object_confidence_thresholds.motorcycle");
+  vad_config.object_confidence_thresholds["bicycle"] = this->declare_parameter<float>("model_params.object_confidence_thresholds.bicycle");
+  vad_config.object_confidence_thresholds["pedestrian"] = this->declare_parameter<float>("model_params.object_confidence_thresholds.pedestrian");
+  vad_config.object_confidence_thresholds["traffic_cone"] = this->declare_parameter<float>("model_params.object_confidence_thresholds.traffic_cone");
+  
   vad_config.can_bus_dim = this->declare_parameter<int32_t>("model_params.network_io_params.can_bus_dim");
   vad_config.plugins_path = this->declare_parameter<std::string>("model_params.plugins_path");
 
@@ -364,6 +376,12 @@ void VadNode::publish_trajectory(const autoware_planning_msgs::msg::Trajectory &
   trajectory_publisher_->publish(std::move(trajectory_msg));
 }
 
+void VadNode::publish_predicted_objects(const autoware_perception_msgs::msg::PredictedObjects & predicted_objects)
+{
+  auto predicted_objects_msg = std::make_unique<autoware_perception_msgs::msg::PredictedObjects>(predicted_objects);
+  predicted_objects_publisher_->publish(std::move(predicted_objects_msg));
+}
+
 std::optional<VadOutputTopicData> VadNode::execute_inference(const VadInputTopicData & vad_input_topic_data)
 {
   if (!vad_interface_ptr_ || !vad_model_ptr_) {
@@ -398,10 +416,13 @@ void VadNode::publish(const VadOutputTopicData & vad_output_topic_data)
   // Publish candidate trajectories
   publish_trajectories(vad_output_topic_data.candidate_trajectories);
 
+  // Publish predicted objects
+  publish_predicted_objects(vad_output_topic_data.objects);
+
   // Publish map points
   map_points_publisher_->publish(vad_output_topic_data.map_points);
 
-  RCLCPP_DEBUG(this->get_logger(), "Published trajectories");
+  RCLCPP_DEBUG(this->get_logger(), "Published trajectories and predicted objects");
 }
 
 void VadNode::create_camera_image_subscribers(const rclcpp::QoS& sensor_qos)

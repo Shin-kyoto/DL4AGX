@@ -23,7 +23,7 @@
   <arg name="kinematic_state" default="/localization/kinematic_state"/>
   <arg name="acceleration" default="/localization/acceleration"/>
 
-  <arg name="output/objects" default="perception/object_recognition/detection/vad/objects"/>
+  <arg name="output/objects" default="perception/object_recognition/vad/objects"/>
   <arg name="output/trajectory" default="planning/vad/trajectory"/>
   <arg name="output/trajectories" default="planning/vad/trajectories"/>
   <arg name="output/map" default="debug/vad/map"/>

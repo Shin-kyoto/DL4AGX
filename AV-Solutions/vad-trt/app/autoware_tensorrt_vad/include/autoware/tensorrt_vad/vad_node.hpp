@@ -78,6 +78,7 @@ private:
   // Publisher methods
   void publish_trajectory(const autoware_planning_msgs::msg::Trajectory & trajectory);
   void publish_trajectories(const autoware_internal_planning_msgs::msg::CandidateTrajectories & candidate_trajectories);
+  void publish_predicted_objects(const autoware_perception_msgs::msg::PredictedObjects & predicted_objects);
 
   // Callback methods
   void image_callback(const sensor_msgs::msg::Image::ConstSharedPtr msg, std::size_t camera_id);
@@ -120,7 +121,7 @@ private:
   // Publishers
   rclcpp::Publisher<autoware_planning_msgs::msg::Trajectory>::SharedPtr trajectory_publisher_;
   rclcpp::Publisher<autoware_internal_planning_msgs::msg::CandidateTrajectories>::SharedPtr candidate_trajectories_publisher_;
-  rclcpp::Publisher<autoware_perception_msgs::msg::DetectedObjects>::SharedPtr objects_publisher_;
+  rclcpp::Publisher<autoware_perception_msgs::msg::PredictedObjects>::SharedPtr predicted_objects_publisher_;
   rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr map_points_publisher_;
 
   // Current frame data accumulation

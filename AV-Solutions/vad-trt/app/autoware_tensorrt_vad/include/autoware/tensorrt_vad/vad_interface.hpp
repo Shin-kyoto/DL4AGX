@@ -37,6 +37,7 @@
 #include "autoware_internal_planning_msgs/msg/candidate_trajectories.hpp"
 #include "autoware_internal_planning_msgs/msg/candidate_trajectory.hpp"
 #include "autoware_internal_planning_msgs/msg/generator_info.hpp"
+#include "autoware_perception_msgs/msg/predicted_objects.hpp"
 #include "autoware_planning_msgs/msg/trajectory.hpp"
 #include "autoware_planning_msgs/msg/trajectory_point.hpp"
 #include "autoware_utils_uuid/uuid_helper.hpp"
@@ -111,7 +112,7 @@ struct VadOutputTopicData
   autoware_internal_planning_msgs::msg::CandidateTrajectories candidate_trajectories;
   autoware_planning_msgs::msg::Trajectory trajectory;
   visualization_msgs::msg::MarkerArray map_points;  // Transformed map points in Autoware coordinate system
-  // autoware_perception_msgs::msg::DetectedObjects objects;
+  autoware_perception_msgs::msg::PredictedObjects objects;
 };
 
 // 各process_*メソッドの戻り値となるデータ構造
@@ -154,6 +155,12 @@ public:
   visualization_msgs::msg::MarkerArray process_map_points(
     const std::vector<std::vector<std::vector<float>>> & vad_map_points,
     const std::vector<std::string>& polyline_types,
+    const rclcpp::Time & stamp,
+    const Eigen::Matrix4f & base2map_transform) const;
+
+  // Convert BBox objects to PredictedObjects
+  autoware_perception_msgs::msg::PredictedObjects process_predicted_objects(
+    const std::vector<BBox> & bboxes,
     const rclcpp::Time & stamp,
     const Eigen::Matrix4f & base2map_transform) const;
 
@@ -215,6 +222,7 @@ private:
   std::tuple<float, float, float> aw2vad_xyz(float aw_x, float aw_y, float aw_z) const;
   std::tuple<float, float, float> vad2aw_xyz(float vad_x, float vad_y, float vad_z) const;
   Eigen::Quaternionf aw2vad_quaternion(const Eigen::Quaternionf & q_aw) const;
+  Eigen::Quaternionf vad2aw_quaternion(const Eigen::Quaternionf & q_vad) const;
 
   // Calculate current longitudinal velocity from can_bus data
   float calculate_current_longitudinal_velocity(
