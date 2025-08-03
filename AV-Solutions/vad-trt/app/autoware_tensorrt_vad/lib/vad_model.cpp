@@ -25,25 +25,6 @@ inline float sigmoid(float x) {
   return 1.0f / (1.0f + std::exp(-x));
 }
 
-// Convert bbox coordinates from (cx, cy, w, h) to (x1, y1, x2, y2)
-inline std::vector<float> bbox_cxcywh_to_xyxy(const std::vector<float>& bbox) {
-  if (bbox.size() != 4) {
-    throw std::invalid_argument("bbox must have 4 elements: cx, cy, w, h");
-  }
-  
-  float cx = bbox[0];
-  float cy = bbox[1]; 
-  float w = bbox[2];
-  float h = bbox[3];
-  
-  float x1 = cx - 0.5f * w;
-  float y1 = cy - 0.5f * h;
-  float x2 = cx + 0.5f * w;
-  float y2 = cy + 0.5f * h;
-  
-  return {x1, y1, x2, y2};
-}
-
 // Denormalize 2D points using PC range
 inline std::vector<float> denormalize_2d_pts(const std::vector<float>& pts, 
                                             const std::vector<float>& pc_range = {-15.0f, -30.0f, -2.0f, 15.0f, 30.0f, 2.0f}) {
