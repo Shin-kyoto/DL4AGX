@@ -35,15 +35,15 @@ inline std::vector<float> denormalize_2d_pts(const std::vector<float>& pts,
     throw std::invalid_argument("pc_range must have 6 elements");
   }
   
-  std::vector<float> new_pts = pts;  // Clone the input
+  std::vector<float> denormalized_pts = pts;
   
-  // x       = normalized_x * (x_max[3] - x_min[0]) + x_min[0]
-  new_pts[0] = pts[0] * (pc_range[3] - pc_range[0]) + pc_range[0];
+  // x = normalized_x * (x_max[3] - x_min[0]) + x_min[0]
+  denormalized_pts[0] = pts[0] * (pc_range[3] - pc_range[0]) + pc_range[0];
 
-  // y       = normalized_y * (y_max[4] - y_min[1]) + y_min[1]
-  new_pts[1] = pts[1] * (pc_range[4] - pc_range[1]) + pc_range[1];
+  // y = normalized_y * (y_max[4] - y_min[1]) + y_min[1]
+  denormalized_pts[1] = pts[1] * (pc_range[4] - pc_range[1]) + pc_range[1];
   
-  return new_pts;
+  return denormalized_pts;
 }
 
 std::vector<std::vector<std::vector<std::vector<float>>>> postprocess_traj_preds(
