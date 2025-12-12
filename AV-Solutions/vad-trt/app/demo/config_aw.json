@@ -1,0 +1,44 @@
+{
+  "project": "vadv1",
+  "warm_up": 20,
+  "n_frames": 200,
+  "input_image_width": 1920,
+  "input_image_hight": 1280,
+  "plugins": ["home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/libplugins.so"],
+  "font_path": "home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/simhei.ttf",
+  "nets": [
+    {
+      "name": "backbone",
+      "file":"home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/engines/vadv1.extract_img_feat.fp16.engine",
+      "use_graph": true,
+      "inputs": {},
+      "outputs": {}
+    },
+    {
+      "name": "head",
+      "file":"home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/engines/vadv1_prev.pts_bbox_head.forward.engine",
+      "use_graph": true,
+      "inputs": {
+        "mlvl_feats.0": {
+          "net": "backbone",
+          "name": "out.0"
+        }
+      },
+      "outputs": {}
+    },
+    {
+      "name": "head_no_prev",
+      "file": "home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/engines/vadv1.pts_bbox_head.forward.engine",
+      "use_graph": true,
+      "inputs": {
+        "mlvl_feats.0": {
+          "net": "backbone",
+          "name": "out.0"
+        }
+      },
+      "outputs": {}
+    }
+  ],
+  "viz": "home/autoware/ghq/github.com/Shin-kyoto/DL4AGX/AV-Solutions/vad-trt/app/demo/viz",
+  "rosbag_path": "/home/autoware/rosbags/simpl_vs_autoware/complete_bag_base_link"
+}

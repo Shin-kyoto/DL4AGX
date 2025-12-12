@@ -989,9 +989,12 @@ load_lidar2img_from_rosbag(const std::string& bag_path, int32_t n_frames, float 
                 // 各カメラのTF変換を処理
                 for (const auto& transform : msg->transforms) {
                     std::string header_frame_id = transform.header.frame_id;
-                    
+                    std::string child_frame_id = transform.child_frame_id;
+
                     if (header_frame_id.find("camera") != std::string::npos && 
-                        header_frame_id.find("/camera_optical_link") != std::string::npos) {
+                        header_frame_id.find("/camera_optical_link") != std::string::npos){
+                        //     &&
+                        // child_frame_id == "base_link") {
                         // Autowareカメラ名からカメラIDを抽出
                         int32_t autoware_camera_id = std::stoi(header_frame_id.substr(
                             header_frame_id.find("camera") + 6, 1));
@@ -1456,13 +1459,17 @@ int main(int argc, char** argv) {
       std::cout << "]" << std::endl;
     }
     node->publishDetectedObjects(frame.det);
+
     nv::visualize(
       images, 
       frame,
       font_path,
       viz_dir + "/" + std::to_string(frame_id) + ".jpg",
       stream);
-
+    if (frame_id == 2) {
+      std::cout << "Frame 2 data p0x, p0y " << std::endl;
+      throw std::runtime_error("デバッグのために意図的にエラーを発生させました");
+    }
     printf("[INFO] %d, cmd=%d finished\n", frame_id, frame.cmd);
   }
 

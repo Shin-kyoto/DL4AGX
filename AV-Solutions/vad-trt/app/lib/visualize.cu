@@ -221,7 +221,7 @@ class ImageArtistImplement : public ImageArtist {
     nvtype::Float4 row0 = (this->param_.viewport_nx4x4.data() + camera_index * 4)[0];
     nvtype::Float4 row1 = (this->param_.viewport_nx4x4.data() + camera_index * 4)[1];
     nvtype::Float4 row2 = (this->param_.viewport_nx4x4.data() + camera_index * 4)[2];
-    float ground_height = -1.562;
+    float ground_height = -0.1562;
     float init_image_x = ground_height * row0.z + row0.w;
     float init_image_y = ground_height * row1.z + row1.w;
     float init_weight = ground_height * row2.z + row2.w;
@@ -249,6 +249,7 @@ class ImageArtistImplement : public ImageArtist {
         p0x = param_.image_width - p0x - 1;
         p1x = param_.image_width - p1x - 1;
       }
+      printf("Line %zu: p0 = (%.2f, %.2f), p1 = (%.2f, %.2f)\n", i, p0x, p0y, p1x, p1y);
       cuosd_draw_line(cuosd_, p0x, p0y, p1x, p1y, 5, {0, 255, 0, 255});
     }
     return;
