@@ -126,6 +126,9 @@ def main():
                                 print(lidar2cam_rt.T)
                                 lidar2cam_rts[parent_frame.split("/")[0]] = lidar2cam_rt
                                 
+                                # エラーを発生させてコードを停止
+                                raise RuntimeError("意図的にエラーを発生させました。デバッグのために停止します。")
+
                                 break
                         
                         
